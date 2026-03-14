@@ -1,3 +1,9 @@
+import {
+  deriveCanonicalPostUrl,
+  describeMediaHealth,
+  toBrowserMediaHref
+} from './ui_helpers.js';
+
 const state = {
   accounts: [],
   runs: [],
@@ -14,6 +20,7 @@ const state = {
 const el = {
   syncAll: document.getElementById('sync-all'),
   syncStatus: document.getElementById('sync-status'),
+  refreshStatus: document.getElementById('refresh-status'),
   summarySync: document.getElementById('summary-sync'),
   summarySyncMeta: document.getElementById('summary-sync-meta'),
   summaryRun: document.getElementById('summary-run'),
@@ -88,15 +95,18 @@ function renderBadge(label) {
 }
 
 function localMediaHref(localPath) {
-  if (!localPath) return null;
-  return `../${localPath}`;
+  return toBrowserMediaHref(localPath);
 }
 
-function canonicalPostUrl(detail) {
-  if (detail?.post_shortcode) {
-    return `https://www.instagram.com/p/${detail.post_shortcode}/`;
-  }
-  return detail?.post_url || '#';
+function setRefreshStatus(status, message) {
+  el.refreshStatus.className = `status-chip ${
+    status === 'error'
+      ? 'status-chip-error'
+      : status === 'stale'
+        ? 'status-chip-warn'
+        : 'status-chip-ok'
+  }`;
+  el.refreshStatus.textContent = message;
 }
 
 function firstAttentionPost() {
@@ -191,8 +201,9 @@ function renderRuns() {
 function renderPosts() {
   const attention = firstAttentionPost();
   el.posts.innerHTML = state.posts.map((post) => {
+    const health = describeMediaHealth(post);
     const isActive = post.post_id === state.selectedPostId;
-    const needsAttention = String(post.media_sync_status || '').toUpperCase() !== 'COMPLETE';
+    const needsAttention = String(health.status).toUpperCase() !== 'COMPLETE';
     const classes = ['post-item'];
     if (isActive) classes.push('active');
     if (needsAttention) classes.push('needs-attention');
@@ -201,16 +212,16 @@ function renderPosts() {
       <div class="${classes.join(' ')}" data-post-id="${escapeHtml(post.post_id)}">
         <div class="row-head">
           <div><strong>${escapeHtml(post.post_shortcode)}</strong> <span class="muted">@${escapeHtml(post.account_handle)}</span></div>
-          ${renderBadge(post.media_sync_status || 'n/a')}
+          ${renderBadge(health.status)}
         </div>
         <div class="muted">Published: ${fmtDate(post.published_at)}</div>
         <div class="stats-line">
           <span>Media ${post.media_count}</span>
-          <span>Saved ${post.media_saved_count ?? 'n/a'}</span>
-          <span>Failed ${post.media_failed_count ?? 'n/a'}</span>
+          <span>Saved ${health.savedCount}</span>
+          <span>Failed ${health.failedCount}</span>
           <span>Comments ${post.comment_count}</span>
         </div>
-        ${post.media_guard_reason ? `<div class="muted">Guard: ${escapeHtml(post.media_guard_reason)}</div>` : ''}
+        ${health.guardReason ? `<div class="muted">Guard: ${escapeHtml(health.guardReason)}</div>` : ''}
       </div>
     `;
   }).join('') || '<p class="muted">No posts found for current filter.</p>';
@@ -284,8 +295,9 @@ function renderDetail() {
     return;
   }
 
+  const health = describeMediaHealth(detail);
   el.detailTitle.textContent = `${detail.post_shortcode} (@${detail.account_handle})`;
-  const canonicalUrl = canonicalPostUrl(detail);
+  const canonicalUrl = deriveCanonicalPostUrl(detail);
   el.detailLink.href = canonicalUrl;
   el.detailLink.textContent = canonicalUrl;
   el.detailMeta.innerHTML = `
@@ -296,13 +308,13 @@ function renderDetail() {
     </div>
     <div class="stats-line">
       <span>Media count ${detail.media_count}</span>
-      <span>Saved ${detail.media_saved_count ?? 'n/a'}</span>
-      <span>Failed ${detail.media_failed_count ?? 'n/a'}</span>
+      <span>Saved ${health.savedCount}</span>
+      <span>Failed ${health.failedCount}</span>
     </div>
   `;
   el.detailHealth.innerHTML = `
-    ${renderBadge(detail.media_sync_status || 'n/a')}
-    ${detail.media_guard_reason ? `<span class="detail-note">Guard: ${escapeHtml(detail.media_guard_reason)}</span>` : ''}
+    ${renderBadge(health.status)}
+    ${health.guardReason ? `<span class="detail-note">Guard: ${escapeHtml(health.guardReason)}</span>` : ''}
   `;
   el.caption.textContent = detail.caption || '(no caption)';
 
@@ -340,6 +352,7 @@ async function refreshAll(checkSelection = false) {
   state.runs = runsPayload.items || [];
   state.posts = postsPayload.items || [];
   state.sync = runsPayload.sync || null;
+  setRefreshStatus('ok', `Live ${new Date().toLocaleTimeString()}`);
 
   if (state.runs[0]?.run_id && state.runs[0].run_id !== state.lastRunId) {
     state.lastRunId = state.runs[0].run_id;
@@ -367,9 +380,11 @@ function wireEvents() {
       el.syncStatus.textContent = 'Running...';
       await api('/api/sync', { method: 'POST', body: JSON.stringify({}) });
       el.syncStatus.textContent = 'Sync finished';
+      setRefreshStatus('ok', `Live ${new Date().toLocaleTimeString()}`);
       await refreshAll(true);
     } catch (err) {
       el.syncStatus.textContent = `Sync failed: ${err.message}`;
+      setRefreshStatus('error', `Manual sync failed: ${err.message}`);
     }
   });
 
@@ -385,9 +400,11 @@ function wireEvents() {
       });
       el.newAccount.value = '';
       el.syncStatus.textContent = 'Account added';
+      setRefreshStatus('ok', `Live ${new Date().toLocaleTimeString()}`);
       await refreshAll(true);
     } catch (err) {
       el.syncStatus.textContent = `Add failed: ${err.message}`;
+      setRefreshStatus('error', `Account add failed: ${err.message}`);
     }
   });
 
@@ -418,8 +435,8 @@ function wireEvents() {
     setInterval(async () => {
       try {
         await refreshAll(true);
-      } catch {
-        // keep UI stable during polling errors
+      } catch (err) {
+        setRefreshStatus('stale', `Refresh failed ${new Date().toLocaleTimeString()}: ${err.message}`);
       }
     }, state.pollingMs);
   } catch (err) {

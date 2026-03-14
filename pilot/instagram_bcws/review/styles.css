@@ -61,6 +61,32 @@ a { color: var(--accent); }
   gap: 10px;
 }
 
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.status-chip-ok {
+  background: var(--ok-bg);
+  color: var(--ok-ink);
+}
+
+.status-chip-warn {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+.status-chip-error {
+  background: var(--danger-bg);
+  color: var(--danger-ink);
+}
+
 h1, h2, h3 {
   margin: 0 0 8px 0;
 }
