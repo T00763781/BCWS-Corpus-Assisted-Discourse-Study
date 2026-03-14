@@ -7,9 +7,11 @@ import {
   createSyncRun,
   getRecentPostsForRefresh,
   listMonitoredAccounts,
+  reconcileStaleSyncRuns,
   runSchemaMigration,
   setAccountRunCheckpoint,
   updateSyncRunFailure,
+  updateSyncRunPartial,
   updateSyncRunSuccess,
   upsertPostCaptureAndResearch
 } from './lib/db.mjs';
@@ -52,11 +54,15 @@ function makeSummary() {
   return {
     accounts_total: 0,
     accounts_succeeded: 0,
+    stale_runs_reconciled: 0,
     posts_discovered: 0,
     posts_targeted: 0,
     posts_skipped_cutoff: 0,
     posts_processed: 0,
     posts_failed: 0,
+    posts_media_complete: 0,
+    posts_media_partial: 0,
+    posts_media_preserved: 0,
     errors: []
   };
 }
@@ -71,6 +77,7 @@ async function run() {
 
   const pool = createDbPool(cfg.databaseUrl);
   await runSchemaMigration(pool);
+  const reconciledRuns = await reconcileStaleSyncRuns(pool, 180);
 
   const accounts = await resolveAccounts(pool, args);
   if (!accounts.length) {
@@ -81,6 +88,7 @@ async function run() {
   const runMeta = await createSyncRun(pool, triggerMode, accountScope);
   const summary = makeSummary();
   summary.accounts_total = accounts.length;
+  summary.stale_runs_reconciled = reconciledRuns.length;
 
   const session = await createInstagramSession(cfg.storageStatePath, cfg.headless);
 
@@ -111,7 +119,7 @@ async function run() {
               continue;
             }
 
-            await upsertPostCaptureAndResearch(pool, {
+            const persisted = await upsertPostCaptureAndResearch(pool, {
               runId: runMeta.run_id,
               parserVersion: cfg.parserVersion,
               accountHandle: handle,
@@ -121,6 +129,15 @@ async function run() {
               normalizedAccounts: scraped.normalizedAccounts
             });
             summary.posts_processed += 1;
+            if (persisted.mediaSyncStatus === 'COMPLETE') {
+              summary.posts_media_complete += 1;
+            } else if (persisted.mediaSyncStatus.startsWith('PRESERVED_')) {
+              summary.posts_media_preserved += 1;
+              summary.errors.push(`[${handle}:${shortcode}] media preserved from prior good scrape (${persisted.mediaReplacement})`);
+            } else {
+              summary.posts_media_partial += 1;
+              summary.errors.push(`[${handle}:${shortcode}] media saved partially (${persisted.mediaReplacement})`);
+            }
           } catch (err) {
             summary.posts_failed += 1;
             summary.errors.push(`[${handle}:${shortcode}] ${err.message || String(err)}`);
@@ -134,7 +151,11 @@ async function run() {
       }
     }
 
-    await updateSyncRunSuccess(pool, runMeta.run_id, summary);
+    if (summary.posts_failed > 0 || summary.errors.length > 0) {
+      await updateSyncRunPartial(pool, runMeta.run_id, summary);
+    } else {
+      await updateSyncRunSuccess(pool, runMeta.run_id, summary);
+    }
 
     console.log(JSON.stringify({
       message: 'Sync complete',

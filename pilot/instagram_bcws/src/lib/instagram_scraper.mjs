@@ -6,11 +6,13 @@ import path from 'node:path';
 import { toPseudonym } from '../hash_identity.mjs';
 import { normalizePosts } from '../normalize_output.mjs';
 import { OUTPUT_MEDIA_DIR, ROOT_DIR, ensureDir, withRetries } from './config.mjs';
-
-export function extractShortcodeFromUrl(url) {
-  const m = String(url).match(/\/(?:p|reel)\/([^/?#]+)/i);
-  return m ? m[1] : null;
-}
+import {
+  appendUniqueMediaItem,
+  canApplyPostLevelVideoFallback,
+  extractShortcodeFromUrl,
+  normalizeInstagramPostUrl,
+  summarizeMediaManifest
+} from './instagram_common.mjs';
 
 export async function createInstagramSession(storageStatePath, headless) {
   await ensureDir(OUTPUT_MEDIA_DIR);
@@ -51,13 +53,13 @@ export async function discoverAccountPostUrls(context, handle, options) {
       const found = await page.evaluate(() => {
         return Array.from(document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]'))
           .map((a) => a.getAttribute('href') || '')
-          .filter((href) => /\/(p|reel)\/[^/?#]+/.test(href))
-          .map((href) => href.startsWith('http') ? href : `https://www.instagram.com${href}`);
+          .filter(Boolean);
       });
 
       let added = 0;
       for (const u of found) {
-        const normalized = u.split('?')[0].endsWith('/') ? u.split('?')[0] : `${u.split('?')[0]}/`;
+        const normalized = normalizeInstagramPostUrl(u);
+        if (!normalized) continue;
         if (!urls.has(normalized)) {
           urls.add(normalized);
           added += 1;
@@ -162,26 +164,6 @@ async function collectMediaAcrossCarousel(page, postUrl, shortcode) {
   const media = [];
   const seenUrls = new Set();
 
-  function canonicalMediaKey(rawUrl) {
-    try {
-      const u = new URL(rawUrl);
-      return `${u.origin}${u.pathname}`;
-    } catch {
-      return rawUrl;
-    }
-  }
-
-  function isLikelyPostMediaUrl(url, mediaType, expectedShortcode) {
-    if (!url) return false;
-    if (url.startsWith('blob:')) return false;
-    if (mediaType === 'VIDEO') return /^https?:\/\//i.test(url);
-    if (!/^https?:\/\//i.test(url)) return false;
-    if (url.includes('/t51.') && url.includes('-19/')) return false;
-    if (expectedShortcode && !url.includes(expectedShortcode) && url.includes('/t51.2885-19/')) return false;
-    if (url.includes('/t51.') && url.includes('-15/')) return true;
-    return mediaType === 'VIDEO';
-  }
-
   async function detectExpectedSlideCount() {
     const count = await page.evaluate(() => {
       const nodes = Array.from(document.querySelectorAll('main span, main div, article span, article div'));
@@ -224,6 +206,9 @@ async function collectMediaAcrossCarousel(page, postUrl, shortcode) {
 
   async function readVisibleMediaCandidates() {
     const items = await page.evaluate(() => {
+      const ogVideo = document.querySelector('meta[property="og:video"]')?.getAttribute('content')
+        || document.querySelector('meta[property="og:video:secure_url"]')?.getAttribute('content')
+        || null;
       const ogImage = document.querySelector('meta[property="og:image"]')?.getAttribute('content') || null;
 
       const candidates = [];
@@ -269,23 +254,6 @@ async function collectMediaAcrossCarousel(page, postUrl, shortcode) {
     return items || [];
   }
 
-  async function clickNextControl() {
-    return await page.evaluate(() => {
-      const candidates = Array.from(document.querySelectorAll('button, div[role="button"], a'));
-      const next = candidates.find((n) => {
-        const aria = (n.getAttribute('aria-label') || '').toLowerCase();
-        if (aria.includes('next')) return true;
-        const txt = (n.textContent || '').trim().toLowerCase();
-        return txt === 'next';
-      });
-      if (!next) return false;
-      const rect = next.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) return false;
-      next.click();
-      return true;
-    });
-  }
-
   async function hasNextControl() {
     return await page.evaluate(() => {
       const candidates = Array.from(document.querySelectorAll('button, div[role="button"], a'));
@@ -301,29 +269,67 @@ async function collectMediaAcrossCarousel(page, postUrl, shortcode) {
     });
   }
 
+  function mediaIdToken(url) {
+    try {
+      const base = new URL(url).pathname.split('/').pop() || '';
+      const match = base.match(/_(\d{8,})_/);
+      return match ? match[1] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function clickNextControl() {
+    return await page.evaluate(() => {
+      const candidates = Array.from(document.querySelectorAll('button, div[role="button"], a'));
+      const next = candidates.find((node) => {
+        const aria = (node.getAttribute('aria-label') || '').toLowerCase();
+        if (aria.includes('next')) return true;
+        const text = (node.textContent || '').trim().toLowerCase();
+        return text === 'next';
+      });
+      if (!next) return false;
+      const rect = next.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      next.click();
+      return true;
+    });
+  }
+
   async function advanceToNextDistinctSlide(previousMediaKey) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const movedNext = await clickNextControl();
       if (!movedNext) return false;
+
       await page.waitForTimeout(450);
-      const currentTop = await page.evaluate(() => {
-        const candidates = [];
-        const images = Array.from(document.querySelectorAll('img'));
-        for (const img of images) {
-          const src = img.currentSrc || img.getAttribute('src');
-          if (!src || src.startsWith('data:')) continue;
-          const rect = img.getBoundingClientRect();
-          const area = Math.max(0, rect.width * rect.height);
-          if (area < 30000) continue;
-          if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
-          candidates.push({ src, area });
-        }
-        candidates.sort((a, b) => b.area - a.area);
-        return candidates[0]?.src || null;
-      });
-      if (!currentTop) continue;
-      const key = canonicalMediaKey(currentTop);
-      if (key !== previousMediaKey) return true;
+
+      try {
+        await page.waitForFunction((prevKey) => {
+          const candidates = [];
+          const images = Array.from(document.querySelectorAll('img'));
+          for (const img of images) {
+            const src = img.currentSrc || img.getAttribute('src');
+            if (!src || src.startsWith('data:')) continue;
+            const rect = img.getBoundingClientRect();
+            const area = Math.max(0, rect.width * rect.height);
+            if (area < 30000) continue;
+            if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
+            candidates.push({ src, area });
+          }
+          candidates.sort((a, b) => b.area - a.area);
+          const current = candidates[0]?.src || null;
+          if (!current) return false;
+          try {
+            const url = new URL(current);
+            return `${url.origin}${url.pathname}` !== prevKey;
+          } catch {
+            return current !== prevKey;
+          }
+        }, previousMediaKey, { timeout: 2500 });
+        return true;
+      } catch {
+        // try another click
+      }
     }
     return false;
   }
@@ -335,57 +341,93 @@ async function collectMediaAcrossCarousel(page, postUrl, shortcode) {
     return unique[0] || null;
   }
 
-  const expectedSlides = await detectExpectedSlideCount();
-  const carouselMode = await hasNextControl();
-  if (carouselMode && /\/p\//i.test(postUrl)) {
-    const maxSlides = expectedSlides || 40;
-    for (let slideIndex = 1; slideIndex <= maxSlides; slideIndex += 1) {
-      const u = new URL(postUrl);
-      u.searchParams.set('img_index', String(slideIndex));
-      await page.goto(u.toString(), { waitUntil: 'domcontentloaded', timeout: 45000 });
-      await page.waitForTimeout(450);
-
-      let item = await readOgMediaCandidate();
-      if (!item?.media_url) {
-        const visible = await readVisibleMediaCandidates();
-        item = visible[0] || null;
-      }
-      if (!item || !item.media_url) {
-        if (!expectedSlides) break;
-        continue;
-      }
-      if (!isLikelyPostMediaUrl(item.media_url, item.media_type, shortcode)) continue;
-      const key = canonicalMediaKey(item.media_url);
-      if (seenUrls.has(key)) {
-        if (!expectedSlides) break;
-        continue;
-      }
-      seenUrls.add(key);
-      media.push(item);
-      if (expectedSlides && media.length >= expectedSlides) break;
-    }
-  } else {
+  async function readCurrentSlideCandidate() {
+    const visibleItems = await readVisibleMediaCandidates();
+    const videoCandidate = visibleItems.find((item) => item.media_type === 'VIDEO');
+    if (videoCandidate?.media_url) return videoCandidate;
+    if (visibleItems[0]?.media_url) return visibleItems[0];
     const ogItem = await readOgMediaCandidate();
-    if (ogItem?.media_url && isLikelyPostMediaUrl(ogItem.media_url, ogItem.media_type, shortcode)) {
-      seenUrls.add(canonicalMediaKey(ogItem.media_url));
-      media.push(ogItem);
-    } else {
-      const visibleItems = await readVisibleMediaCandidates();
-      const candidate = visibleItems[0];
-      if (candidate?.media_url && isLikelyPostMediaUrl(candidate.media_url, candidate.media_type, shortcode)) {
-        seenUrls.add(canonicalMediaKey(candidate.media_url));
-        media.push(candidate);
+    return ogItem?.media_url ? ogItem : null;
+  }
+
+  async function probeMissingByIndex(expectedCount) {
+    for (let slideIndex = 1; slideIndex <= expectedCount; slideIndex += 1) {
+      const target = new URL(postUrl);
+      target.searchParams.set('img_index', String(slideIndex));
+      try {
+        await page.goto(target.toString(), { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await page.waitForTimeout(600);
+      } catch {
+        continue;
       }
+
+      const item = await readCurrentSlideCandidate();
+      if (!item) continue;
+      appendUniqueMediaItem(media, seenUrls, {
+        ...item,
+        media_index: slideIndex
+      }, shortcode);
     }
   }
 
-  const hasVideo = media.some((m) => m.media_type === 'VIDEO');
-  const posterOnlyIndex = media.findIndex((m) => m.media_type === 'VIDEO_POSTER_ONLY');
-  if (!hasVideo && posterOnlyIndex >= 0) {
+  const expectedSlides = await detectExpectedSlideCount();
+  const carouselMode = await hasNextControl();
+  if (carouselMode && /\/p\//i.test(postUrl)) {
+    const maxIterations = expectedSlides ? Math.max(8, expectedSlides * 2) : 24;
+    let anchorPrefix = null;
+
+    for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+      const visibleItems = await readVisibleMediaCandidates();
+      const candidates = visibleItems.length ? visibleItems : [await readOgMediaCandidate()].filter(Boolean);
+
+      for (const item of candidates) {
+        if (!item?.media_url) continue;
+        if (item.media_type === 'IMAGE') {
+          const token = mediaIdToken(item.media_url);
+          if (!anchorPrefix && token) {
+            anchorPrefix = token.slice(0, 7);
+          } else if (anchorPrefix && token && !token.startsWith(anchorPrefix)) {
+            continue;
+          }
+        }
+
+        appendUniqueMediaItem(media, seenUrls, {
+          ...item,
+          media_index: media.length + 1
+        }, shortcode);
+      }
+
+      if (expectedSlides && media.length >= expectedSlides) break;
+
+      const prevKey = visibleItems[0]?.media_url
+        ? (() => {
+            try {
+              const current = new URL(visibleItems[0].media_url);
+              return `${current.origin}${current.pathname}`;
+            } catch {
+              return visibleItems[0].media_url;
+            }
+          })()
+        : null;
+      const advanced = await advanceToNextDistinctSlide(prevKey);
+      if (!advanced) break;
+    }
+
+    if (expectedSlides && media.length < expectedSlides) {
+      await probeMissingByIndex(expectedSlides);
+    }
+  } else {
+    const candidate = await readCurrentSlideCandidate();
+    if (candidate) {
+      appendUniqueMediaItem(media, seenUrls, { ...candidate, media_index: 1 }, shortcode);
+    }
+  }
+
+  if (canApplyPostLevelVideoFallback(media)) {
     const fallbackMp4 = await extractMp4FromHtml(await page.content());
     if (fallbackMp4) {
-      media[posterOnlyIndex] = {
-        ...media[posterOnlyIndex],
+      media[0] = {
+        ...media[0],
         media_type: 'VIDEO',
         media_url: fallbackMp4
       };
@@ -586,9 +628,14 @@ export async function scrapePostRecord(context, postUrl, accountHandle, config) 
   const page = await context.newPage();
   try {
     await navigateToPost(page, postUrl, config.navMaxRetries);
+    const canonicalPostUrl = normalizeInstagramPostUrl(postUrl) || postUrl;
     await expandCaptionIfCollapsed(page);
-    const shortcode = extractShortcodeFromUrl(postUrl);
+    const shortcode = extractShortcodeFromUrl(canonicalPostUrl);
     const media = await collectMediaAcrossCarousel(page, postUrl, shortcode);
+    if (page.url() !== canonicalPostUrl) {
+      await navigateToPost(page, canonicalPostUrl, config.navMaxRetries);
+      await expandCaptionIfCollapsed(page);
+    }
     await expandAllCommentsAndReplies(page, config.commentExpansionMaxSteps);
 
     const postCore = await collectPostAndCommentData(page, postUrl, config.identitySecret);
@@ -597,7 +644,15 @@ export async function scrapePostRecord(context, postUrl, accountHandle, config) 
     for (let i = 0; i < media.length; i += 1) {
       const item = media[i];
       if (String(item.media_url || '').startsWith('blob:')) {
-        mediaManifest.push({ ...item, local_path: null, byte_size: null, sha256: null, content_type: null });
+        mediaManifest.push({
+          ...item,
+          local_path: null,
+          byte_size: null,
+          sha256: null,
+          content_type: null,
+          download_status: 'FAILED',
+          error_message: 'blob_url_not_downloadable'
+        });
         continue;
       }
       try {
@@ -611,11 +666,21 @@ export async function scrapePostRecord(context, postUrl, accountHandle, config) 
           config.navMaxRetries,
           `download:${postCore.post_shortcode || 'post'}:${i}`
         );
-        mediaManifest.push({ ...item, ...local });
-      } catch {
-        mediaManifest.push({ ...item, local_path: null, byte_size: null, sha256: null, content_type: null });
+        mediaManifest.push({ ...item, ...local, download_status: 'SAVED', error_message: null });
+      } catch (err) {
+        mediaManifest.push({
+          ...item,
+          local_path: null,
+          byte_size: null,
+          sha256: null,
+          content_type: null,
+          download_status: 'FAILED',
+          error_message: err.message || String(err)
+        });
       }
     }
+
+    const mediaSummary = summarizeMediaManifest(mediaManifest);
 
     const postRecord = {
       collected_at: new Date().toISOString(),
@@ -623,6 +688,7 @@ export async function scrapePostRecord(context, postUrl, accountHandle, config) 
       account_handle: accountHandle,
       account_pseudonym: toPseudonym(accountHandle, config.identitySecret),
       ...postCore,
+      media_summary: mediaSummary,
       media: mediaManifest,
       comments: postCore.comments.map((c) => ({
         local_comment_id: c.local_comment_id,

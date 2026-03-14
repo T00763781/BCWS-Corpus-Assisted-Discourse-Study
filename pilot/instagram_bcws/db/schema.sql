@@ -54,8 +54,24 @@ CREATE TABLE IF NOT EXISTS research.posts (
   first_collected_at TIMESTAMPTZ NOT NULL,
   last_collected_at TIMESTAMPTZ NOT NULL,
   media_count INTEGER NOT NULL DEFAULT 0,
-  latest_payload_sha256 TEXT NOT NULL
+  latest_payload_sha256 TEXT NOT NULL,
+  media_sync_status TEXT NOT NULL DEFAULT 'EMPTY',
+  media_saved_count INTEGER NOT NULL DEFAULT 0,
+  media_failed_count INTEGER NOT NULL DEFAULT 0,
+  media_guard_reason TEXT
 );
+
+ALTER TABLE research.posts
+  ADD COLUMN IF NOT EXISTS media_sync_status TEXT NOT NULL DEFAULT 'EMPTY';
+
+ALTER TABLE research.posts
+  ADD COLUMN IF NOT EXISTS media_saved_count INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE research.posts
+  ADD COLUMN IF NOT EXISTS media_failed_count INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE research.posts
+  ADD COLUMN IF NOT EXISTS media_guard_reason TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_research_posts_account_published
   ON research.posts(account_handle, published_at DESC);

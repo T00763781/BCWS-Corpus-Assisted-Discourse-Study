@@ -4,6 +4,7 @@ import path from 'node:path';
 import { Pool } from 'pg';
 
 import { ROOT_DIR } from './config.mjs';
+import { decideMediaReplacement, summarizeMediaManifest } from './instagram_common.mjs';
 
 export function createDbPool(databaseUrl) {
   const url = new URL(databaseUrl);
@@ -70,10 +71,33 @@ export async function createSyncRun(pool, triggerMode, accountScope) {
   return rows[0];
 }
 
+export async function reconcileStaleSyncRuns(pool, staleMinutes = 180) {
+  const { rows } = await pool.query(
+    `UPDATE control.sync_runs
+     SET status = 'FAILED',
+         completed_at = now(),
+         error_text = COALESCE(NULLIF(error_text, ''), 'Recovered stale RUNNING sync during startup reconciliation')
+     WHERE status = 'RUNNING'
+       AND started_at < (now() - make_interval(mins => $1::int))
+     RETURNING run_id`,
+    [staleMinutes]
+  );
+  return rows.map((row) => row.run_id);
+}
+
 export async function updateSyncRunSuccess(pool, runId, stats) {
   await pool.query(
     `UPDATE control.sync_runs
      SET status = 'SUCCEEDED', completed_at = now(), stats = $2::jsonb
+     WHERE run_id = $1`,
+    [runId, JSON.stringify(stats || {})]
+  );
+}
+
+export async function updateSyncRunPartial(pool, runId, stats) {
+  await pool.query(
+    `UPDATE control.sync_runs
+     SET status = 'PARTIAL', completed_at = now(), stats = $2::jsonb
      WHERE run_id = $1`,
     [runId, JSON.stringify(stats || {})]
   );
@@ -122,6 +146,7 @@ export async function upsertPostCaptureAndResearch(pool, args) {
 
   const payload = JSON.stringify(postRecord);
   const payloadSha = createHash('sha256').update(payload).digest('hex');
+  const incomingMediaSummary = summarizeMediaManifest(postRecord.media);
 
   await pool.query(
     `INSERT INTO raw.post_captures(run_id, account_handle, post_shortcode, post_url, parser_version, payload_sha256, payload)
@@ -132,13 +157,25 @@ export async function upsertPostCaptureAndResearch(pool, args) {
 
   const postId = `ig_post_${postRecord.post_shortcode || postRecord.external_item_id || 'unknown'}`;
   const nowIso = postRecord.collected_at || new Date().toISOString();
+  const existingMediaResult = await pool.query(
+    `SELECT media_index, media_type, media_url, local_path, content_type, byte_size, sha256
+     FROM research.post_media
+     WHERE post_id = $1
+     ORDER BY media_index ASC`,
+    [postId]
+  );
+  const replacementDecision = decideMediaReplacement(existingMediaResult.rows, postRecord.media);
+  const storedMediaSummary = replacementDecision.replace ? replacementDecision.incoming : replacementDecision.current;
+
   await pool.query(
     `INSERT INTO research.posts(
       post_id, platform, account_handle, account_pseudonym, post_shortcode, external_item_id, post_url,
-      caption, engagement_hint, published_at, first_collected_at, last_collected_at, media_count, latest_payload_sha256
+      caption, engagement_hint, published_at, first_collected_at, last_collected_at, media_count, latest_payload_sha256,
+      media_sync_status, media_saved_count, media_failed_count, media_guard_reason
     ) VALUES (
       $1, 'INSTAGRAM', $2, $3, $4, $5, $6,
-      $7, $8, $9::timestamptz, $10::timestamptz, $11::timestamptz, $12, $13
+      $7, $8, $9::timestamptz, $10::timestamptz, $11::timestamptz, $12, $13,
+      $14, $15, $16, $17
     )
     ON CONFLICT (post_id)
     DO UPDATE SET
@@ -148,7 +185,11 @@ export async function upsertPostCaptureAndResearch(pool, args) {
       published_at = COALESCE(EXCLUDED.published_at, research.posts.published_at),
       last_collected_at = EXCLUDED.last_collected_at,
       media_count = EXCLUDED.media_count,
-      latest_payload_sha256 = EXCLUDED.latest_payload_sha256`,
+      latest_payload_sha256 = EXCLUDED.latest_payload_sha256,
+      media_sync_status = EXCLUDED.media_sync_status,
+      media_saved_count = EXCLUDED.media_saved_count,
+      media_failed_count = EXCLUDED.media_failed_count,
+      media_guard_reason = EXCLUDED.media_guard_reason`,
     [
       postId,
       accountHandle,
@@ -161,29 +202,35 @@ export async function upsertPostCaptureAndResearch(pool, args) {
       postRecord.post_timestamp_iso || null,
       nowIso,
       nowIso,
-      Array.isArray(postRecord.media) ? postRecord.media.length : 0,
-      payloadSha
+      storedMediaSummary.total_count,
+      payloadSha,
+      replacementDecision.replace ? incomingMediaSummary.status : `PRESERVED_${incomingMediaSummary.status}`,
+      storedMediaSummary.saved_count,
+      replacementDecision.replace ? incomingMediaSummary.failed_count : incomingMediaSummary.failed_count + existingMediaResult.rows.filter((row) => !row.local_path || !row.sha256).length,
+      replacementDecision.reason
     ]
   );
 
-  await pool.query('DELETE FROM research.post_media WHERE post_id = $1', [postId]);
+  if (replacementDecision.replace) {
+    await pool.query('DELETE FROM research.post_media WHERE post_id = $1', [postId]);
 
-  for (let i = 0; i < (postRecord.media || []).length; i += 1) {
-    const m = postRecord.media[i];
-    await pool.query(
-      `INSERT INTO research.post_media(post_id, media_index, media_type, media_url, local_path, content_type, byte_size, sha256)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        postId,
-        i + 1,
-        m.media_type || 'UNKNOWN',
-        m.media_url || '',
-        m.local_path || null,
-        m.content_type || null,
-        Number.isFinite(m.byte_size) ? m.byte_size : null,
-        m.sha256 || null
-      ]
-    );
+    for (let i = 0; i < (postRecord.media || []).length; i += 1) {
+      const m = postRecord.media[i];
+      await pool.query(
+        `INSERT INTO research.post_media(post_id, media_index, media_type, media_url, local_path, content_type, byte_size, sha256)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          postId,
+          i + 1,
+          m.media_type || 'UNKNOWN',
+          m.media_url || '',
+          m.local_path || null,
+          m.content_type || null,
+          Number.isFinite(m.byte_size) ? m.byte_size : null,
+          m.sha256 || null
+        ]
+      );
+    }
   }
 
   for (const account of normalizedAccounts || []) {
@@ -237,7 +284,12 @@ export async function upsertPostCaptureAndResearch(pool, args) {
     );
   }
 
-  return { postId, payloadSha };
+  return {
+    postId,
+    payloadSha,
+    mediaReplacement: replacementDecision.reason,
+    mediaSyncStatus: replacementDecision.replace ? incomingMediaSummary.status : `PRESERVED_${incomingMediaSummary.status}`
+  };
 }
 
 export async function getRuns(pool, limit = 30) {
@@ -271,7 +323,7 @@ export async function getPosts(pool, options = {}) {
   const { rows } = await pool.query(
     `SELECT
       p.post_id, p.account_handle, p.post_shortcode, p.post_url, p.caption, p.published_at,
-      p.last_collected_at, p.media_count,
+      p.last_collected_at, p.media_count, p.media_sync_status, p.media_saved_count, p.media_failed_count, p.media_guard_reason,
       COALESCE(c.comment_count, 0) AS comment_count
     FROM research.posts p
     LEFT JOIN (
@@ -291,7 +343,8 @@ export async function getPosts(pool, options = {}) {
 export async function getPostDetail(pool, postId) {
   const postResult = await pool.query(
     `SELECT post_id, account_handle, post_shortcode, post_url, caption, engagement_hint,
-            published_at, first_collected_at, last_collected_at, media_count
+            published_at, first_collected_at, last_collected_at, media_count,
+            media_sync_status, media_saved_count, media_failed_count, media_guard_reason
      FROM research.posts
      WHERE post_id = $1`,
     [postId]
