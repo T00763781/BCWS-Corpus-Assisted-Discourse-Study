@@ -234,6 +234,138 @@ async function collectMediaAcrossCarousel(page, postUrl, shortcode, retries) {
     return pos;
   }
 
+  async function readVisibleMediaCandidates() {
+    const items = await page.evaluate(() => {
+      const ogVideo = document.querySelector('meta[property="og:video"]')?.getAttribute('content')
+        || document.querySelector('meta[property="og:video:secure_url"]')?.getAttribute('content')
+        || null;
+      const ogImage = document.querySelector('meta[property="og:image"]')?.getAttribute('content') || null;
+
+      const candidates = [];
+
+      const images = Array.from(document.querySelectorAll('img'));
+      for (const img of images) {
+        const src = img.currentSrc || img.getAttribute('src');
+        if (!src || src.startsWith('data:')) continue;
+        const rect = img.getBoundingClientRect();
+        const area = Math.max(0, rect.width * rect.height);
+        if (area < 30000) continue;
+        if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
+        candidates.push({
+          media_type: 'IMAGE',
+          media_url: src,
+          width: img.naturalWidth || null,
+          height: img.naturalHeight || null,
+          alt_text: img.getAttribute('alt') || null,
+          area
+        });
+      }
+
+      const videos = Array.from(document.querySelectorAll('video'));
+      for (const video of videos) {
+        const rect = video.getBoundingClientRect();
+        const area = Math.max(0, rect.width * rect.height);
+        if (area < 30000) continue;
+        if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
+        const src = video.currentSrc || video.getAttribute('src') || null;
+        const poster = video.getAttribute('poster') || ogImage || null;
+        candidates.push({
+          media_type: src && !src.startsWith('blob:') ? 'VIDEO' : 'VIDEO_POSTER_ONLY',
+          media_url: (src && !src.startsWith('blob:')) ? src : (ogVideo || poster),
+          poster_url: poster,
+          width: video.videoWidth || null,
+          height: video.videoHeight || null,
+          area
+        });
+      }
+
+      candidates.sort((a, b) => b.area - a.area);
+      return candidates.slice(0, 3);
+    });
+    return items || [];
+  }
+
+  function mediaIdToken(url) {
+    try {
+      const base = new URL(url).pathname.split('/').pop() || '';
+      const m = base.match(/_(\d{8,})_/);
+      return m ? m[1] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function clickNextControl() {
+    return await page.evaluate(() => {
+      const candidates = Array.from(document.querySelectorAll('button, div[role="button"], a'));
+      const next = candidates.find((n) => {
+        const aria = (n.getAttribute('aria-label') || '').toLowerCase();
+        if (aria.includes('next')) return true;
+        const txt = (n.textContent || '').trim().toLowerCase();
+        return txt === 'next';
+      });
+      if (!next) return false;
+      const rect = next.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      next.click();
+      return true;
+    });
+  }
+
+  async function hasNextControl() {
+    return await page.evaluate(() => {
+      const candidates = Array.from(document.querySelectorAll('button, div[role="button"], a'));
+      const next = candidates.find((n) => {
+        const aria = (n.getAttribute('aria-label') || '').toLowerCase();
+        if (aria.includes('next')) return true;
+        const txt = (n.textContent || '').trim().toLowerCase();
+        return txt === 'next';
+      });
+      if (!next) return false;
+      const rect = next.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+  }
+
+  async function advanceToNextDistinctSlide(previousMediaKey) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const movedNext = await clickNextControl();
+      if (!movedNext) return false;
+
+      await page.waitForTimeout(450);
+
+      try {
+        await page.waitForFunction((prevKey) => {
+          const candidates = [];
+          const images = Array.from(document.querySelectorAll('img'));
+          for (const img of images) {
+            const src = img.currentSrc || img.getAttribute('src');
+            if (!src || src.startsWith('data:')) continue;
+            const rect = img.getBoundingClientRect();
+            const area = Math.max(0, rect.width * rect.height);
+            if (area < 30000) continue;
+            if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
+            candidates.push({ src, area });
+          }
+          candidates.sort((a, b) => b.area - a.area);
+          const top = candidates[0]?.src || null;
+          if (!top) return false;
+          try {
+            const u = new URL(top);
+            const key = u.origin + u.pathname;
+            return key !== prevKey;
+          } catch {
+            return top !== prevKey;
+          }
+        }, previousMediaKey, { timeout: 2500 });
+        return true;
+      } catch {
+        // try another next click
+      }
+    }
+    return false;
+  }
+
   async function probeMissingByIndex(expectedCount) {
     for (let i = 1; i <= expectedCount; i += 1) {
       const target = new URL(postUrl);
@@ -262,101 +394,34 @@ async function collectMediaAcrossCarousel(page, postUrl, shortcode, retries) {
   }
 
   const expectedSlides = await detectExpectedSlideCount();
+  const carouselMode = await hasNextControl();
   const maxIterations = expectedSlides ? Math.max(8, expectedSlides * 2) : 24;
+  let anchorPrefix = null;
   for (let idx = 0; idx < maxIterations; idx += 1) {
-    const item = await page.evaluate(() => {
-      const ogVideo = document.querySelector('meta[property="og:video"]')?.getAttribute('content')
-        || document.querySelector('meta[property="og:video:secure_url"]')?.getAttribute('content')
-        || null;
-      const ogImage = document.querySelector('meta[property="og:image"]')?.getAttribute('content') || null;
-
-      const candidates = [];
-
-      const images = Array.from(document.querySelectorAll('img'));
-      for (const img of images) {
-        const src = img.currentSrc || img.getAttribute('src');
-        if (!src || src.startsWith('data:')) continue;
-        const rect = img.getBoundingClientRect();
-        const area = Math.max(0, rect.width * rect.height);
-        if (area < 50000) continue;
-        if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
-        candidates.push({
-          media_type: 'IMAGE',
-          media_url: src,
-          width: img.naturalWidth || null,
-          height: img.naturalHeight || null,
-          alt_text: img.getAttribute('alt') || null,
-          area
-        });
+    const visibleItems = await readVisibleMediaCandidates();
+    const candidates = carouselMode ? visibleItems : (visibleItems.length ? [visibleItems[0]] : []);
+    for (const item of candidates) {
+      if (!item || !item.media_url) continue;
+      if (!isLikelyPostMediaUrl(item.media_url, item.media_type, shortcode)) continue;
+      if (item.media_type === 'IMAGE') {
+        const token = mediaIdToken(item.media_url);
+        if (!anchorPrefix && token) {
+          anchorPrefix = token.slice(0, 7);
+        } else if (anchorPrefix && token && !token.startsWith(anchorPrefix)) {
+          continue;
+        }
       }
-
-      const videos = Array.from(document.querySelectorAll('video'));
-      for (const video of videos) {
-        const rect = video.getBoundingClientRect();
-        const area = Math.max(0, rect.width * rect.height);
-        if (area < 50000) continue;
-        if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
-        const src = video.currentSrc || video.getAttribute('src') || null;
-        const poster = video.getAttribute('poster') || ogImage || null;
-        candidates.push({
-          media_type: src && !src.startsWith('blob:') ? 'VIDEO' : 'VIDEO_POSTER_ONLY',
-          media_url: (src && !src.startsWith('blob:')) ? src : (ogVideo || poster),
-          poster_url: poster,
-          width: video.videoWidth || null,
-          height: video.videoHeight || null,
-          area
-        });
-      }
-
-      candidates.sort((a, b) => b.area - a.area);
-      return candidates[0] || null;
-    });
-
-    if (item && item.media_url && isLikelyPostMediaUrl(item.media_url, item.media_type, shortcode)) {
       const mediaKey = canonicalMediaKey(item.media_url);
+      if (seenUrls.has(mediaKey)) continue;
       seenUrls.add(mediaKey);
       media.push(item);
     }
 
     if (expectedSlides && media.length >= expectedSlides) break;
-
-    const prevPos = await detectSlidePosition();
-
-    const movedNext = await page.evaluate(() => {
-      const candidates = Array.from(document.querySelectorAll('button, div[role="button"], a'));
-      const next = candidates.find((n) => {
-        const aria = (n.getAttribute('aria-label') || '').toLowerCase();
-        if (aria.includes('next')) return true;
-        const txt = (n.textContent || '').trim().toLowerCase();
-        return txt === 'next';
-      });
-      if (!next) return false;
-      const rect = next.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) return false;
-      next.click();
-      return true;
-    });
-
-    if (!movedNext) break;
-    if (prevPos && Number.isFinite(prevPos.current)) {
-      try {
-        await page.waitForFunction((prevCurrent) => {
-          const nodes = Array.from(document.querySelectorAll('main span, main div, article span, article div'));
-          for (const node of nodes) {
-            const t = (node.textContent || '').trim();
-            const m = t.match(/^(\d+)\s*\/\s*(\d+)$/);
-            if (m) {
-              const c = Number(m[1]);
-              if (Number.isFinite(c) && c !== prevCurrent) return true;
-            }
-          }
-          return false;
-        }, prevPos.current, { timeout: 2500 });
-      } catch {
-        // fall through to static wait
-      }
-    }
-    await page.waitForTimeout(500);
+    if (!carouselMode) break;
+    const prevKey = visibleItems[0]?.media_url ? canonicalMediaKey(visibleItems[0].media_url) : null;
+    const advanced = await advanceToNextDistinctSlide(prevKey);
+    if (!advanced) break;
   }
 
   if (expectedSlides && media.length < expectedSlides) {

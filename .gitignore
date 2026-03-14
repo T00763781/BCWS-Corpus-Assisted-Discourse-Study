@@ -1,3 +1,9 @@
-﻿# Local archives
+# Local archives
 99_Archive/
 99_archive/
+
+# Pilot local runtime artifacts
+pilot/instagram_bcws/.env
+pilot/instagram_bcws/secrets/
+pilot/instagram_bcws/output/
+pilot/instagram_bcws/node_modules/

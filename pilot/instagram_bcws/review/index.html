@@ -1,44 +1,67 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BCWS Instagram Pilot Review</title>
+  <title>Instagram Research Console</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <main class="app">
     <header class="topbar">
-      <h1>BCWS Instagram Pilot Review</h1>
-      <div class="post-nav">
-        <button id="prev-post">Previous Post</button>
-        <span id="post-index">-</span>
-        <button id="next-post">Next Post</button>
+      <h1>Instagram Research Console</h1>
+      <div class="sync-group">
+        <button id="sync-all">Check For New Posts</button>
+        <span id="sync-status">Idle</span>
       </div>
     </header>
 
-    <section class="meta">
-      <a id="post-link" href="#" target="_blank" rel="noreferrer">Open source post</a>
-      <div id="post-stats"></div>
-    </section>
-
-    <section class="media-panel">
-      <div class="media-controls">
-        <button id="prev-media">Previous Media</button>
-        <span id="media-index">-</span>
-        <button id="next-media">Next Media</button>
+    <section class="controls">
+      <div class="card">
+        <h2>Monitored Accounts</h2>
+        <form id="account-form" class="inline-form">
+          <input id="new-account" placeholder="bcgovfireinfo" />
+          <button type="submit">Add + Backfill</button>
+        </form>
+        <div id="accounts"></div>
       </div>
-      <div id="media-view"></div>
+
+      <div class="card">
+        <h2>Recent Runs</h2>
+        <div id="runs"></div>
+      </div>
     </section>
 
-    <section class="caption-panel">
-      <h2>Caption</h2>
-      <pre id="caption"></pre>
-    </section>
+    <section class="content">
+      <aside class="card post-list-wrap">
+        <h2>Posts</h2>
+        <div class="filters">
+          <label for="account-filter">Account</label>
+          <select id="account-filter">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div id="posts" class="post-list"></div>
+      </aside>
 
-    <section class="comments-panel">
-      <h2>Comments</h2>
-      <div id="comments"></div>
+      <article class="card detail-wrap">
+        <h2 id="detail-title">Select a post</h2>
+        <a id="detail-link" href="#" target="_blank" rel="noreferrer">Open source post</a>
+        <div id="detail-meta"></div>
+
+        <div class="media-controls">
+          <button id="prev-media">Previous Media</button>
+          <span id="media-index">0 / 0</span>
+          <button id="next-media">Next Media</button>
+        </div>
+        <div id="media-view" class="media-view"></div>
+
+        <h3>Caption</h3>
+        <pre id="caption"></pre>
+
+        <h3>Comments</h3>
+        <div id="comments"></div>
+      </article>
     </section>
   </main>
 
