@@ -198,11 +198,32 @@ async function collectMediaAcrossCarousel(page, postUrl, shortcode) {
     return count || null;
   }
 
-  async function readVisibleMediaCandidates() {
-    const items = await page.evaluate(() => {
+  async function readOgMediaCandidate() {
+    const item = await page.evaluate(() => {
       const ogVideo = document.querySelector('meta[property="og:video"]')?.getAttribute('content')
         || document.querySelector('meta[property="og:video:secure_url"]')?.getAttribute('content')
         || null;
+      const ogImage = document.querySelector('meta[property="og:image"]')?.getAttribute('content') || null;
+      if (ogVideo) {
+        return {
+          media_type: 'VIDEO',
+          media_url: ogVideo,
+          poster_url: ogImage || null
+        };
+      }
+      if (ogImage) {
+        return {
+          media_type: 'IMAGE',
+          media_url: ogImage
+        };
+      }
+      return null;
+    });
+    return item;
+  }
+
+  async function readVisibleMediaCandidates() {
+    const items = await page.evaluate(() => {
       const ogImage = document.querySelector('meta[property="og:image"]')?.getAttribute('content') || null;
 
       const candidates = [];
@@ -316,26 +337,46 @@ async function collectMediaAcrossCarousel(page, postUrl, shortcode) {
 
   const expectedSlides = await detectExpectedSlideCount();
   const carouselMode = await hasNextControl();
-  const maxIterations = expectedSlides ? Math.max(8, expectedSlides * 2) : 24;
+  if (carouselMode && /\/p\//i.test(postUrl)) {
+    const maxSlides = expectedSlides || 40;
+    for (let slideIndex = 1; slideIndex <= maxSlides; slideIndex += 1) {
+      const u = new URL(postUrl);
+      u.searchParams.set('img_index', String(slideIndex));
+      await page.goto(u.toString(), { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await page.waitForTimeout(450);
 
-  for (let idx = 0; idx < maxIterations; idx += 1) {
-    const visibleItems = await readVisibleMediaCandidates();
-    const candidates = carouselMode ? visibleItems : (visibleItems.length ? [visibleItems[0]] : []);
-    for (const item of candidates) {
-      if (!item || !item.media_url) continue;
+      let item = await readOgMediaCandidate();
+      if (!item?.media_url) {
+        const visible = await readVisibleMediaCandidates();
+        item = visible[0] || null;
+      }
+      if (!item || !item.media_url) {
+        if (!expectedSlides) break;
+        continue;
+      }
       if (!isLikelyPostMediaUrl(item.media_url, item.media_type, shortcode)) continue;
       const key = canonicalMediaKey(item.media_url);
-      if (seenUrls.has(key)) continue;
+      if (seenUrls.has(key)) {
+        if (!expectedSlides) break;
+        continue;
+      }
       seenUrls.add(key);
       media.push(item);
+      if (expectedSlides && media.length >= expectedSlides) break;
     }
-
-    if (expectedSlides && media.length >= expectedSlides) break;
-    if (!carouselMode) break;
-
-    const topMedia = visibleItems[0]?.media_url ? canonicalMediaKey(visibleItems[0].media_url) : null;
-    const advanced = await advanceToNextDistinctSlide(topMedia);
-    if (!advanced) break;
+  } else {
+    const ogItem = await readOgMediaCandidate();
+    if (ogItem?.media_url && isLikelyPostMediaUrl(ogItem.media_url, ogItem.media_type, shortcode)) {
+      seenUrls.add(canonicalMediaKey(ogItem.media_url));
+      media.push(ogItem);
+    } else {
+      const visibleItems = await readVisibleMediaCandidates();
+      const candidate = visibleItems[0];
+      if (candidate?.media_url && isLikelyPostMediaUrl(candidate.media_url, candidate.media_type, shortcode)) {
+        seenUrls.add(canonicalMediaKey(candidate.media_url));
+        media.push(candidate);
+      }
+    }
   }
 
   const hasVideo = media.some((m) => m.media_type === 'VIDEO');
@@ -352,6 +393,21 @@ async function collectMediaAcrossCarousel(page, postUrl, shortcode) {
   }
 
   return media;
+}
+
+function sanitizePathSegment(value) {
+  return String(value || 'unknown')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'unknown';
+}
+
+function postDateFolder(postTimestampIso) {
+  if (!postTimestampIso) return 'unknown-date';
+  const d = new Date(postTimestampIso);
+  if (Number.isNaN(d.getTime())) return 'unknown-date';
+  return d.toISOString().slice(0, 10);
 }
 
 function fileExtensionFromContentType(contentType, fallbackUrl) {
@@ -372,7 +428,7 @@ function fileExtensionFromContentType(contentType, fallbackUrl) {
   return 'bin';
 }
 
-async function downloadMediaAsset(context, mediaUrl, destBasename, postUrl) {
+async function downloadMediaAsset(context, mediaUrl, destInfo, postUrl) {
   const response = await context.request.get(mediaUrl, {
     headers: { referer: postUrl },
     timeout: 45000
@@ -385,8 +441,12 @@ async function downloadMediaAsset(context, mediaUrl, destBasename, postUrl) {
   const buffer = await response.body();
   const contentType = response.headers()['content-type'] || '';
   const ext = fileExtensionFromContentType(contentType, mediaUrl);
-  const filename = `${destBasename}.${ext}`;
-  const absPath = path.join(OUTPUT_MEDIA_DIR, filename);
+  const accountSeg = sanitizePathSegment(destInfo.accountHandle);
+  const dateSeg = postDateFolder(destInfo.postTimestampIso);
+  const postSeg = sanitizePathSegment(destInfo.postShortcode);
+  const mediaBase = `${postSeg}_${String(destInfo.mediaIndex).padStart(2, '0')}.${ext}`;
+  const absPath = path.join(OUTPUT_MEDIA_DIR, accountSeg, dateSeg, postSeg, mediaBase);
+  await ensureDir(path.dirname(absPath));
 
   await fs.writeFile(absPath, buffer);
 
@@ -542,7 +602,12 @@ export async function scrapePostRecord(context, postUrl, accountHandle, config) 
       }
       try {
         const local = await withRetries(
-          () => downloadMediaAsset(context, item.media_url, `${postCore.post_shortcode || 'post'}_${String(i + 1).padStart(2, '0')}`, postCore.post_url),
+          () => downloadMediaAsset(context, item.media_url, {
+            accountHandle,
+            postTimestampIso: postCore.post_timestamp_iso,
+            postShortcode: postCore.post_shortcode || 'post',
+            mediaIndex: i + 1
+          }, postCore.post_url),
           config.navMaxRetries,
           `download:${postCore.post_shortcode || 'post'}:${i}`
         );
