@@ -1,0 +1,16 @@
+﻿{
+    "name":  "instagram-bcws-pilot",
+    "version":  "0.1.0",
+    "private":  true,
+    "type":  "module",
+    "description":  "Pilot extractor for BC Wildfire Service Instagram discourse analysis.",
+    "scripts":  {
+                    "start":  "node src/extract_instagram_posts.mjs",
+                    "check":  "node --check src/extract_instagram_posts.mjs \u0026\u0026 node --check src/hash_identity.mjs \u0026\u0026 node --check src/normalize_output.mjs",
+                    "capture-session":  "node src/capture_instagram_session.mjs",
+                    "review-ui":  "node src/serve_review_ui.mjs"
+                },
+    "dependencies":  {
+                         "playwright":  "^1.54.2"
+                     }
+}

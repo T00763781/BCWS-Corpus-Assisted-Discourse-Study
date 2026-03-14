@@ -1,0 +1,47 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BCWS Instagram Pilot Review</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <h1>BCWS Instagram Pilot Review</h1>
+      <div class="post-nav">
+        <button id="prev-post">Previous Post</button>
+        <span id="post-index">-</span>
+        <button id="next-post">Next Post</button>
+      </div>
+    </header>
+
+    <section class="meta">
+      <a id="post-link" href="#" target="_blank" rel="noreferrer">Open source post</a>
+      <div id="post-stats"></div>
+    </section>
+
+    <section class="media-panel">
+      <div class="media-controls">
+        <button id="prev-media">Previous Media</button>
+        <span id="media-index">-</span>
+        <button id="next-media">Next Media</button>
+      </div>
+      <div id="media-view"></div>
+    </section>
+
+    <section class="caption-panel">
+      <h2>Caption</h2>
+      <pre id="caption"></pre>
+    </section>
+
+    <section class="comments-panel">
+      <h2>Comments</h2>
+      <div id="comments"></div>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
