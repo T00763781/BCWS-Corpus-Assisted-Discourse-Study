@@ -55,6 +55,12 @@ Local PostgreSQL-backed toolkit for researcher-triggered Instagram discourse ing
 
 `research.posts` also records `media_sync_status`, `media_saved_count`, `media_failed_count`, and `media_guard_reason` so partial media persistence is distinguishable from fully successful scrapes.
 
+## Known Follow-Ups
+
+- Carousel/media extraction still depends on Instagram DOM and URL heuristics; layout changes can still reduce completeness without a stable API contract from Instagram.
+- Initial capture with no prior stored media can still persist a partial media set; this is surfaced as partial state in DB/UI, but it is not yet promoted to a separate retry workflow.
+- Comment collection remains flattened to top-level comment rows; reply threading is not reconstructed in normalized storage or the review UI.
+
 ## Privacy
 
 - Commenter handles are pseudonymized with stable HMAC pseudonyms.

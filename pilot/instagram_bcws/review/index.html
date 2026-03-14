@@ -16,6 +16,29 @@
       </div>
     </header>
 
+    <section class="summary-grid">
+      <div class="card summary-card">
+        <div class="eyebrow">Sync State</div>
+        <div id="summary-sync" class="summary-value">Idle</div>
+        <div id="summary-sync-meta" class="muted">No active sync</div>
+      </div>
+      <div class="card summary-card">
+        <div class="eyebrow">Latest Run</div>
+        <div id="summary-run" class="summary-value">n/a</div>
+        <div id="summary-run-meta" class="muted">No runs yet</div>
+      </div>
+      <div class="card summary-card">
+        <div class="eyebrow">Posts Needing Attention</div>
+        <div id="summary-attention" class="summary-value">0</div>
+        <div id="summary-attention-meta" class="muted">No degraded posts loaded</div>
+      </div>
+      <div class="card summary-card">
+        <div class="eyebrow">Loaded Posts</div>
+        <div id="summary-posts" class="summary-value">0</div>
+        <div id="summary-posts-meta" class="muted">Awaiting data</div>
+      </div>
+    </section>
+
     <section class="controls">
       <div class="card">
         <h2>Monitored Accounts</h2>
@@ -48,6 +71,7 @@
         <h2 id="detail-title">Select a post</h2>
         <a id="detail-link" href="#" target="_blank" rel="noreferrer">Open source post</a>
         <div id="detail-meta"></div>
+        <div id="detail-health" class="detail-health"></div>
 
         <div class="media-controls">
           <button id="prev-media">Previous Media</button>
@@ -55,6 +79,7 @@
           <button id="next-media">Next Media</button>
         </div>
         <div id="media-view" class="media-view"></div>
+        <div id="media-list" class="media-list"></div>
 
         <h3>Caption</h3>
         <pre id="caption"></pre>

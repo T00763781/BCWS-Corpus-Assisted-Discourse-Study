@@ -9,7 +9,7 @@
                     "sync":  "node src/sync_accounts.mjs --trigger manual_cli",
                     "extract": "node src/extract_instagram_posts.mjs",
                     "migrate":  "node src/migrate_db.mjs",
-                    "check":  "node --check src/lib/instagram_common.mjs \u0026\u0026 node --check src/lib/instagram_scraper.mjs \u0026\u0026 node --check src/lib/db.mjs \u0026\u0026 node --check src/extract_instagram_posts.mjs \u0026\u0026 node --check src/hash_identity.mjs \u0026\u0026 node --check src/normalize_output.mjs \u0026\u0026 node --check src/sync_accounts.mjs \u0026\u0026 node --check src/serve_research_ui.mjs",
+                    "check":  "node --check src/lib/instagram_common.mjs \u0026\u0026 node --check src/lib/instagram_scraper.mjs \u0026\u0026 node --check src/lib/db.mjs \u0026\u0026 node --check src/extract_instagram_posts.mjs \u0026\u0026 node --check src/hash_identity.mjs \u0026\u0026 node --check src/normalize_output.mjs \u0026\u0026 node --check src/sync_accounts.mjs \u0026\u0026 node --check src/serve_research_ui.mjs \u0026\u0026 node --check review/app.js",
                     "test": "node --test test/*.test.mjs",
                     "capture-session":  "node src/capture_instagram_session.mjs",
                     "review-ui":  "node src/serve_research_ui.mjs"
