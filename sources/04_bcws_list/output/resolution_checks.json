@@ -1,0 +1,22 @@
+[
+  {
+    "hostname": "wfim.nrs.gov.bc.ca",
+    "resolved": false,
+    "error": "[Errno 11001] getaddrinfo failed"
+  },
+  {
+    "hostname": "wfnews.nrs.gov.bc.ca",
+    "resolved": false,
+    "error": "[Errno 11001] getaddrinfo failed"
+  },
+  {
+    "hostname": "wfone.nrs.gov.bc.ca",
+    "resolved": false,
+    "error": "[Errno 11001] getaddrinfo failed"
+  },
+  {
+    "hostname": "resources.wfdm.nrs.gov.bc.ca",
+    "resolved": false,
+    "error": "[Errno 11001] getaddrinfo failed"
+  }
+]

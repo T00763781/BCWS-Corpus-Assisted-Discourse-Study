@@ -1,58 +1,65 @@
 [
   {
     "widget_id": "bcws_map_perimeter_layer_candidate",
-    "label": "Perimeter layer",
+    "label": "Perimeter map layer",
     "source_id": "bcws_map",
     "candidate_target_pages": [
-      "Maps"
+      "Configure",
+      "Maps",
+      "Incidents"
     ],
-    "candidate_target_config_tab": "Maps",
+    "candidate_target_config_tab": "Sources",
     "required_endpoint_ids": [
-      "bcws_map_fire_perimeters_layer"
+      "bcws_fire_perimeters_layer"
     ],
     "confidence": "high",
-    "notes": "Public ArcGIS perimeter layer metadata is accessible."
+    "status": "candidate_only",
+    "notes": "Directly queryable public polygon layer with `FIRE_STATUS`, size, year, and detail URL fields."
   },
   {
     "widget_id": "bcws_map_road_safety_overlay_candidate",
-    "label": "Road safety overlay",
+    "label": "Road-safety overlay",
     "source_id": "bcws_map",
     "candidate_target_pages": [
+      "Configure",
       "Maps"
     ],
-    "candidate_target_config_tab": "Maps",
+    "candidate_target_config_tab": "Sources",
     "required_endpoint_ids": [
-      "bcws_map_fsr_safety_layer"
+      "bcws_fsr_safety_layer"
     ],
     "confidence": "high",
-    "notes": "Public ArcGIS layer metadata is accessible."
+    "status": "candidate_only",
+    "notes": "Verified public point layer with `CLOSURE`, `WARNING`, and `SEASONAL` domain values."
   },
   {
     "widget_id": "bcws_map_recreation_closures_overlay_candidate",
     "label": "Recreation closures overlay",
     "source_id": "bcws_map",
     "candidate_target_pages": [
+      "Configure",
       "Maps"
     ],
-    "candidate_target_config_tab": "Maps",
+    "candidate_target_config_tab": "Sources",
     "required_endpoint_ids": [
-      "bcws_map_recreation_closures_layer"
+      "bcws_recreation_closures_layer"
     ],
     "confidence": "high",
-    "notes": "Public ArcGIS layer metadata is accessible."
+    "status": "candidate_only",
+    "notes": "Verified public point layer with closure indicators, closure dates, and site metadata."
   },
   {
-    "widget_id": "bcws_map_notification_overlay_candidate",
-    "label": "Notification overlay entry",
+    "widget_id": "bcws_map_evacuation_overlay_candidate",
+    "label": "Evacuation overlay",
     "source_id": "bcws_map",
     "candidate_target_pages": [
+      "Configure",
       "Maps"
     ],
-    "candidate_target_config_tab": "Maps",
-    "required_endpoint_ids": [
-      "bcws_map_notification_api"
-    ],
-    "confidence": "medium",
-    "notes": "Notification family is visible in the bundle but unresolved from this environment."
+    "candidate_target_config_tab": "Sources",
+    "required_endpoint_ids": [],
+    "confidence": "low",
+    "status": "candidate_only",
+    "notes": "No concrete evacuation layer URL was isolated in bounded recon; keep candidate-only until a real service is found."
   }
 ]

@@ -1,0 +1,102 @@
+{
+  "objectIdFieldName": "OBJECTID",
+  "uniqueIdField": {
+    "name": "OBJECTID",
+    "isSystemMaintained": true
+  },
+  "globalIdFieldName": "",
+  "geometryType": "esriGeometryPoint",
+  "spatialReference": {
+    "wkid": 102100,
+    "latestWkid": 3857
+  },
+  "fields": [
+    {
+      "name": "PROJECT_NAME",
+      "type": "esriFieldTypeString",
+      "alias": "Name",
+      "sqlType": "sqlTypeOther",
+      "length": 100,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "CLOSURE_IND",
+      "type": "esriFieldTypeString",
+      "alias": "Closure Indicator",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "CLOSURE_DATE",
+      "type": "esriFieldTypeDate",
+      "alias": "Closure Date",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "CLOSURE_TYPE",
+      "type": "esriFieldTypeString",
+      "alias": "Closure Type",
+      "sqlType": "sqlTypeOther",
+      "length": 20,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "SITE_LOCATION",
+      "type": "esriFieldTypeString",
+      "alias": "Site Location",
+      "sqlType": "sqlTypeOther",
+      "length": 500,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "ORG_UNIT_NAME",
+      "type": "esriFieldTypeString",
+      "alias": "ORG_UNIT_NAME",
+      "sqlType": "sqlTypeOther",
+      "length": 100,
+      "domain": null,
+      "defaultValue": null
+    }
+  ],
+  "exceededTransferLimit": true,
+  "features": [
+    {
+      "attributes": {
+        "PROJECT_NAME": "Englishman Creek",
+        "CLOSURE_IND": "N",
+        "CLOSURE_DATE": null,
+        "CLOSURE_TYPE": null,
+        "SITE_LOCATION": "FERNIE",
+        "ORG_UNIT_NAME": "Rocky Mountain Natural Resource District"
+      }
+    },
+    {
+      "attributes": {
+        "PROJECT_NAME": "Retallack Cedars",
+        "CLOSURE_IND": "N",
+        "CLOSURE_DATE": null,
+        "CLOSURE_TYPE": null,
+        "SITE_LOCATION": "KASLO",
+        "ORG_UNIT_NAME": "Selkirk Natural Resource District"
+      }
+    },
+    {
+      "attributes": {
+        "PROJECT_NAME": "Twin Lakes",
+        "CLOSURE_IND": "N",
+        "CLOSURE_DATE": null,
+        "CLOSURE_TYPE": null,
+        "SITE_LOCATION": "CHERRYVILLE",
+        "ORG_UNIT_NAME": "Okanagan Shuswap Natural Resource District"
+      }
+    }
+  ]
+}

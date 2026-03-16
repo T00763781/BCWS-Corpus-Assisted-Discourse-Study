@@ -1,58 +1,70 @@
 [
   {
-    "widget_id": "bcws_dashboard_wildfire_totals_candidate",
-    "label": "Wildfire overview totals",
+    "widget_id": "bcws_dashboard_incident_totals_candidate",
+    "label": "Incident totals",
     "source_id": "bcws_dashboard",
     "candidate_target_pages": [
-      "Dashboard"
+      "Configure",
+      "Dashboard",
+      "Incidents"
     ],
-    "candidate_target_config_tab": "Dashboard",
+    "candidate_target_config_tab": "Sources",
     "required_endpoint_ids": [
-      "bcws_dashboard_published_incident_api"
+      "bcws_shared_published_incident_api"
     ],
     "confidence": "medium",
-    "notes": "Depends on resolving the published incident API family."
+    "status": "candidate_only",
+    "notes": "Strong dashboard candidate if the published-incident API resolves in a later pass."
   },
   {
-    "widget_id": "bcws_dashboard_situation_reports_candidate",
+    "widget_id": "bcws_dashboard_stage_of_control_counts_candidate",
+    "label": "Stage-of-control counts",
+    "source_id": "bcws_dashboard",
+    "candidate_target_pages": [
+      "Configure",
+      "Dashboard",
+      "Incidents"
+    ],
+    "candidate_target_config_tab": "Sources",
+    "required_endpoint_ids": [
+      "bcws_shared_published_incident_api",
+      "bcws_fire_perimeters_layer"
+    ],
+    "confidence": "medium",
+    "status": "candidate_only",
+    "notes": "Bundle exposes `incidentSituation.stageOfControlCode`, and the perimeter layer exposes `FIRE_STATUS`, but the incident API payload remains unresolved."
+  },
+  {
+    "widget_id": "bcws_dashboard_situation_report_summary_candidate",
     "label": "Situation report summary",
     "source_id": "bcws_dashboard",
     "candidate_target_pages": [
+      "Configure",
       "Dashboard"
     ],
-    "candidate_target_config_tab": "Dashboard",
+    "candidate_target_config_tab": "Sources",
     "required_endpoint_ids": [
-      "bcws_dashboard_situation_report_api"
+      "bcws_shared_situation_report_api"
     ],
-    "confidence": "medium",
-    "notes": "Bundle-level family only; unresolved hostname in this environment."
+    "confidence": "low",
+    "status": "candidate_only",
+    "notes": "Client family is present, but no direct payload specimen was obtained in this environment."
   },
   {
-    "widget_id": "bcws_dashboard_perimeter_count_candidate",
+    "widget_id": "bcws_dashboard_perimeter_totals_candidate",
     "label": "Perimeter-backed incident count",
     "source_id": "bcws_dashboard",
     "candidate_target_pages": [
-      "Dashboard"
+      "Configure",
+      "Dashboard",
+      "Maps"
     ],
-    "candidate_target_config_tab": "Dashboard",
+    "candidate_target_config_tab": "Sources",
     "required_endpoint_ids": [
-      "bcws_dashboard_fire_perimeters_layer"
+      "bcws_fire_perimeters_layer"
     ],
-    "confidence": "medium",
-    "notes": "Public ArcGIS layer is accessible, but dashboard derivation still needs validation."
-  },
-  {
-    "widget_id": "bcws_dashboard_notifications_candidate",
-    "label": "Notification summary",
-    "source_id": "bcws_dashboard",
-    "candidate_target_pages": [
-      "Dashboard"
-    ],
-    "candidate_target_config_tab": "Dashboard",
-    "required_endpoint_ids": [
-      "bcws_dashboard_notification_api"
-    ],
-    "confidence": "medium",
-    "notes": "Notification family is referenced but unresolved from this environment."
+    "confidence": "high",
+    "status": "candidate_only",
+    "notes": "Public perimeter layer is directly queryable and already exposes countable records plus stage-like `FIRE_STATUS` values."
   }
 ]

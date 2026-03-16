@@ -1,0 +1,131 @@
+{
+  "source_id": "bcws_map",
+  "source_label": "BC Wildfire Situation Map",
+  "canonical_url": "https://wildfiresituation.nrs.gov.bc.ca/map",
+  "bundle_url": "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js",
+  "page_summary": "Map route in the shared BCWS Angular shell. The route appears to depend on shared wildfire incident structures plus directly reachable public ArcGIS overlay layers.",
+  "confirmed_summary": "The route shares the same Angular shell and bundle as dashboard and list. Public perimeter, forest-service-road safety, and recreation-closure layers are concrete and queryable. The shared bundle also exposes BC geocoder usage.",
+  "unresolved_summary": "No concrete evacuation service was isolated. The NRS incident and notification hosts remain unresolved from this environment, so those data families remain probable or unresolved.",
+  "confidence": "medium",
+  "recommendation": "pursue",
+  "endpoints": [
+    {
+      "endpoint_id": "bcws_map_page",
+      "url": "https://wildfiresituation.nrs.gov.bc.ca/map",
+      "endpoint_type": "page_document",
+      "source_confidence": "high",
+      "verification_status": "verified",
+      "shared_across_sources": false,
+      "notes": "Map route HTML shell."
+    },
+    {
+      "endpoint_id": "bcws_shared_main_js",
+      "url": "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js",
+      "endpoint_type": "page_asset",
+      "source_confidence": "high",
+      "verification_status": "verified",
+      "shared_across_sources": true,
+      "notes": "Shared Angular bundle used by dashboard, map, and list."
+    },
+    {
+      "endpoint_id": "bcws_shared_published_incident_api",
+      "url": "https://wfim.nrs.gov.bc.ca/v1/publishedIncident",
+      "endpoint_type": "data_endpoint",
+      "source_confidence": "medium",
+      "verification_status": "unresolved",
+      "shared_across_sources": true,
+      "notes": "Shared bundle contains the incident client family and stage-of-control model fields, but hostname did not resolve from this environment."
+    },
+    {
+      "endpoint_id": "bcws_shared_notification_api",
+      "url": "https://wfone.nrs.gov.bc.ca/v1/notification",
+      "endpoint_type": "data_endpoint",
+      "source_confidence": "medium",
+      "verification_status": "unresolved",
+      "shared_across_sources": true,
+      "notes": "Notification client family appears in the shared bundle, but hostname did not resolve from this environment."
+    },
+    {
+      "endpoint_id": "bcws_map_geocoder_family",
+      "url": "https://geocoder.api.gov.bc.ca/addresses.geojsonp",
+      "endpoint_type": "data_endpoint",
+      "source_confidence": "medium",
+      "verification_status": "probable",
+      "shared_across_sources": false,
+      "notes": "Shared bundle contains the BC geocoder family for map search interaction, but this pass did not capture a direct live request."
+    },
+    {
+      "endpoint_id": "bcws_fire_perimeters_layer",
+      "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0",
+      "endpoint_type": "arcgis_service",
+      "source_confidence": "high",
+      "verification_status": "verified",
+      "shared_across_sources": true,
+      "notes": "Public ArcGIS feature layer is queryable. Fields include `FIRE_STATUS`, `FIRE_SIZE_HECTARES`, and `FIRE_URL`."
+    },
+    {
+      "endpoint_id": "bcws_fsr_safety_layer",
+      "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/FSR_Safety_Information_View/FeatureServer/0",
+      "endpoint_type": "arcgis_service",
+      "source_confidence": "high",
+      "verification_status": "verified",
+      "shared_across_sources": true,
+      "notes": "Public ArcGIS point layer is queryable. Domain values include `CLOSURE`, `WARNING`, and `SEASONAL`."
+    },
+    {
+      "endpoint_id": "bcws_recreation_closures_layer",
+      "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/RecSitesReservesInterpForests_DetailsClosures_publicView/FeatureServer/0",
+      "endpoint_type": "arcgis_service",
+      "source_confidence": "high",
+      "verification_status": "verified",
+      "shared_across_sources": true,
+      "notes": "Public ArcGIS point layer is queryable. Fields include `CLOSURE_IND`, `CLOSURE_TYPE`, `CLOSURE_DATE`, and site metadata."
+    }
+  ],
+  "widgets": [
+    {
+      "widget_id": "bcws_map_perimeter_layer_candidate",
+      "label": "Perimeter map layer",
+      "source_id": "bcws_map",
+      "candidate_target_pages": ["Configure", "Maps", "Incidents"],
+      "candidate_target_config_tab": "Sources",
+      "required_endpoint_ids": ["bcws_fire_perimeters_layer"],
+      "confidence": "high",
+      "status": "candidate_only",
+      "notes": "Directly queryable public polygon layer with `FIRE_STATUS`, size, year, and detail URL fields."
+    },
+    {
+      "widget_id": "bcws_map_road_safety_overlay_candidate",
+      "label": "Road-safety overlay",
+      "source_id": "bcws_map",
+      "candidate_target_pages": ["Configure", "Maps"],
+      "candidate_target_config_tab": "Sources",
+      "required_endpoint_ids": ["bcws_fsr_safety_layer"],
+      "confidence": "high",
+      "status": "candidate_only",
+      "notes": "Verified public point layer with `CLOSURE`, `WARNING`, and `SEASONAL` domain values."
+    },
+    {
+      "widget_id": "bcws_map_recreation_closures_overlay_candidate",
+      "label": "Recreation closures overlay",
+      "source_id": "bcws_map",
+      "candidate_target_pages": ["Configure", "Maps"],
+      "candidate_target_config_tab": "Sources",
+      "required_endpoint_ids": ["bcws_recreation_closures_layer"],
+      "confidence": "high",
+      "status": "candidate_only",
+      "notes": "Verified public point layer with closure indicators, closure dates, and site metadata."
+    },
+    {
+      "widget_id": "bcws_map_evacuation_overlay_candidate",
+      "label": "Evacuation overlay",
+      "source_id": "bcws_map",
+      "candidate_target_pages": ["Configure", "Maps"],
+      "candidate_target_config_tab": "Sources",
+      "required_endpoint_ids": [],
+      "confidence": "low",
+      "status": "candidate_only",
+      "notes": "No concrete evacuation layer URL was isolated in bounded recon; keep candidate-only until a real service is found."
+    }
+  ]
+}

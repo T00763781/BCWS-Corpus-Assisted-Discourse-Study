@@ -4,62 +4,80 @@
     "url": "https://wildfiresituation.nrs.gov.bc.ca/dashboard",
     "endpoint_type": "page_document",
     "source_confidence": "high",
+    "verification_status": "verified",
+    "shared_across_sources": false,
     "notes": "Dashboard route HTML shell."
   },
   {
-    "endpoint_id": "bcws_dashboard_main_js",
+    "endpoint_id": "bcws_shared_main_js",
     "url": "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js",
     "endpoint_type": "page_asset",
     "source_confidence": "high",
-    "notes": "Shared Angular bundle for dashboard/map/list routes."
+    "verification_status": "verified",
+    "shared_across_sources": true,
+    "notes": "Shared Angular bundle used by dashboard, map, and list."
   },
   {
-    "endpoint_id": "bcws_dashboard_published_incident_api",
+    "endpoint_id": "bcws_shared_published_incident_api",
     "url": "https://wfim.nrs.gov.bc.ca/v1/publishedIncident",
     "endpoint_type": "data_endpoint",
     "source_confidence": "medium",
-    "notes": "Referenced in bundle; hostname did not resolve from this environment."
+    "verification_status": "unresolved",
+    "shared_across_sources": true,
+    "notes": "Bundle contains `createPublishedIncident` client wiring and `incidentSituation.stageOfControlCode`, but hostname did not resolve from this environment."
   },
   {
-    "endpoint_id": "bcws_dashboard_situation_report_api",
+    "endpoint_id": "bcws_shared_situation_report_api",
     "url": "https://wfnews.nrs.gov.bc.ca/v1/situationReport",
     "endpoint_type": "data_endpoint",
     "source_confidence": "medium",
-    "notes": "Referenced in bundle; hostname did not resolve from this environment."
+    "verification_status": "unresolved",
+    "shared_across_sources": true,
+    "notes": "Bundle client family is present, but hostname did not resolve from this environment."
   },
   {
-    "endpoint_id": "bcws_dashboard_notification_api",
+    "endpoint_id": "bcws_shared_notification_api",
     "url": "https://wfone.nrs.gov.bc.ca/v1/notification",
     "endpoint_type": "data_endpoint",
     "source_confidence": "medium",
-    "notes": "Referenced in bundle; hostname did not resolve from this environment."
+    "verification_status": "unresolved",
+    "shared_across_sources": true,
+    "notes": "Notification client family appears in the shared bundle, but hostname did not resolve from this environment."
   },
   {
-    "endpoint_id": "bcws_dashboard_file_details_api",
+    "endpoint_id": "bcws_shared_file_details_api",
     "url": "https://resources.wfdm.nrs.gov.bc.ca/fileDetails",
     "endpoint_type": "data_endpoint",
     "source_confidence": "medium",
-    "notes": "Referenced in bundle; hostname did not resolve from this environment."
+    "verification_status": "unresolved",
+    "shared_across_sources": true,
+    "notes": "Shared bundle references file-details and file-metadata resource families, but hostname did not resolve from this environment."
   },
   {
-    "endpoint_id": "bcws_dashboard_fire_perimeters_layer",
-    "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0?f=pjson",
+    "endpoint_id": "bcws_fire_perimeters_layer",
+    "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0",
     "endpoint_type": "arcgis_service",
     "source_confidence": "high",
-    "notes": "Public ArcGIS feature layer metadata fetch succeeded."
+    "verification_status": "verified",
+    "shared_across_sources": true,
+    "notes": "Public ArcGIS feature layer is queryable. Fields include `FIRE_STATUS`, `FIRE_SIZE_HECTARES`, and `FIRE_URL`."
   },
   {
-    "endpoint_id": "bcws_dashboard_fsr_safety_layer",
-    "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/FSR_Safety_Information_View/FeatureServer/0?f=pjson",
+    "endpoint_id": "bcws_fsr_safety_layer",
+    "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/FSR_Safety_Information_View/FeatureServer/0",
     "endpoint_type": "arcgis_service",
     "source_confidence": "high",
-    "notes": "Public ArcGIS feature layer metadata fetch succeeded."
+    "verification_status": "verified",
+    "shared_across_sources": true,
+    "notes": "Public ArcGIS point layer is queryable. Domain values include `CLOSURE`, `WARNING`, and `SEASONAL`."
   },
   {
-    "endpoint_id": "bcws_dashboard_recreation_closures_layer",
-    "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/RecSitesReservesInterpForests_DetailsClosures_publicView/FeatureServer/0?f=pjson",
+    "endpoint_id": "bcws_recreation_closures_layer",
+    "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/RecSitesReservesInterpForests_DetailsClosures_publicView/FeatureServer/0",
     "endpoint_type": "arcgis_service",
     "source_confidence": "high",
-    "notes": "Public ArcGIS feature layer metadata fetch succeeded."
+    "verification_status": "verified",
+    "shared_across_sources": true,
+    "notes": "Public ArcGIS point layer is queryable. Fields include `CLOSURE_IND`, `CLOSURE_TYPE`, `CLOSURE_DATE`, and site metadata."
   }
 ]

@@ -10,29 +10,29 @@
 - source_id: bcws_dashboard
   status: preliminary
   recon_completed: true
-  specimen_count: 5
+  specimen_count: 15
   endpoint_count: 9
   widget_candidate_count: 4
   recommendation: pursue
-  notes: Shared Angular shell references multiple NRS API families. Public ArcGIS perimeter, road safety, and recreation closure layers were directly verified.
+  notes: Deepened BCWS recon confirmed the shared Angular shell, extracted stage-of-control bundle structures, and verified public perimeter, road-safety, and recreation-closure ArcGIS services. NRS hosts remain unresolved in this environment.
 
 - source_id: bcws_map
   status: preliminary
   recon_completed: true
-  specimen_count: 5
-  endpoint_count: 7
+  specimen_count: 15
+  endpoint_count: 8
   widget_candidate_count: 4
   recommendation: pursue
-  notes: Map route shares the same BCWS shell and ArcGIS layer families as the dashboard route. Bundle references unresolved NRS service families.
+  notes: Deepened BCWS recon confirmed the shared shell, verified the perimeter, road-safety, and recreation-closure ArcGIS services, and isolated a probable BC geocoder family for map interaction. No concrete evacuation service was found.
 
 - source_id: bcws_list
   status: preliminary
   recon_completed: true
-  specimen_count: 3
+  specimen_count: 13
   endpoint_count: 7
   widget_candidate_count: 3
   recommendation: pursue
-  notes: List route shares the BCWS Angular shell and published incident family references. Public perimeter layer metadata was verified.
+  notes: Deepened BCWS recon confirmed shared shell behavior and bundle client families for published incidents, attachments, external URIs, and situation reports. The perimeter service is verified; NRS hosts remain unresolved in this environment.
 
 - source_id: bcgov_weather_maps
   status: preliminary

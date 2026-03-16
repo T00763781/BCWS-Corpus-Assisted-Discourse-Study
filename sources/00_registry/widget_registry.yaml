@@ -1,6 +1,52 @@
-- widget_id: ""
-  label: ""
-  target_page: ""
-  source_ids: []
-  status: ""
-  notes: ""
+- widget_id: bcws_perimeter_layer_candidate
+  label: Perimeter map layer
+  target_page: Maps
+  source_ids:
+    - bcws_map
+    - bcws_dashboard
+    - bcws_list
+  status: candidate_only
+  notes: Candidate-only. Backed by the verified `BCWS_FirePerimeters_PublicView` ArcGIS layer.
+
+- widget_id: bcws_road_safety_overlay_candidate
+  label: Road-safety overlay
+  target_page: Maps
+  source_ids:
+    - bcws_map
+    - bcws_dashboard
+  status: candidate_only
+  notes: Candidate-only. Backed by the verified `FSR_Safety_Information_View` ArcGIS layer.
+
+- widget_id: bcws_recreation_closures_overlay_candidate
+  label: Recreation closures overlay
+  target_page: Maps
+  source_ids:
+    - bcws_map
+    - bcws_dashboard
+  status: candidate_only
+  notes: Candidate-only. Backed by the verified `RecSitesReservesInterpForests_DetailsClosures_publicView` ArcGIS layer.
+
+- widget_id: bcws_incident_totals_candidate
+  label: Incident totals
+  target_page: Dashboard
+  source_ids:
+    - bcws_dashboard
+    - bcws_list
+  status: candidate_only
+  notes: Candidate-only. Depends on the unresolved `wfim` published-incident API family.
+
+- widget_id: bcws_stage_of_control_counts_candidate
+  label: Stage-of-control counts
+  target_page: Dashboard
+  source_ids:
+    - bcws_dashboard
+  status: candidate_only
+  notes: Candidate-only. Bundle exposes `incidentSituation.stageOfControlCode`; direct incident payloads remain unresolved.
+
+- widget_id: bcws_incident_list_table_candidate
+  label: Incident list table
+  target_page: Incidents
+  source_ids:
+    - bcws_list
+  status: candidate_only
+  notes: Candidate-only. Depends on the unresolved `wfim` published-incident API family.

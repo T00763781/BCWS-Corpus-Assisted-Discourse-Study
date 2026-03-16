@@ -1,0 +1,140 @@
+{
+  "source_id": "bcws_dashboard",
+  "source_label": "BC Wildfire Situation Dashboard",
+  "canonical_url": "https://wildfiresituation.nrs.gov.bc.ca/dashboard",
+  "bundle_url": "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js",
+  "page_summary": "Dashboard route in the shared BCWS Angular shell. The route appears to summarize wildfire incidents and related supporting overlays, but concrete dashboard metrics still trace back to unresolved NRS APIs plus verified public ArcGIS layers.",
+  "confirmed_summary": "The route shares the same Angular shell as map and list. The public perimeter, road-safety, and recreation-closure ArcGIS services are concrete and queryable. The bundle exposes stage-of-control structures and NRS client families.",
+  "unresolved_summary": "The `wfim`, `wfnews`, `wfone`, and `resources.wfdm` hostnames still do not resolve from this environment, so direct incident, notification, attachment, and situation-report payloads remain unverified.",
+  "confidence": "medium",
+  "recommendation": "pursue",
+  "endpoints": [
+    {
+      "endpoint_id": "bcws_dashboard_page",
+      "url": "https://wildfiresituation.nrs.gov.bc.ca/dashboard",
+      "endpoint_type": "page_document",
+      "source_confidence": "high",
+      "verification_status": "verified",
+      "shared_across_sources": false,
+      "notes": "Dashboard route HTML shell."
+    },
+    {
+      "endpoint_id": "bcws_shared_main_js",
+      "url": "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js",
+      "endpoint_type": "page_asset",
+      "source_confidence": "high",
+      "verification_status": "verified",
+      "shared_across_sources": true,
+      "notes": "Shared Angular bundle used by dashboard, map, and list."
+    },
+    {
+      "endpoint_id": "bcws_shared_published_incident_api",
+      "url": "https://wfim.nrs.gov.bc.ca/v1/publishedIncident",
+      "endpoint_type": "data_endpoint",
+      "source_confidence": "medium",
+      "verification_status": "unresolved",
+      "shared_across_sources": true,
+      "notes": "Bundle contains `createPublishedIncident` client wiring and `incidentSituation.stageOfControlCode`, but hostname did not resolve from this environment."
+    },
+    {
+      "endpoint_id": "bcws_shared_situation_report_api",
+      "url": "https://wfnews.nrs.gov.bc.ca/v1/situationReport",
+      "endpoint_type": "data_endpoint",
+      "source_confidence": "medium",
+      "verification_status": "unresolved",
+      "shared_across_sources": true,
+      "notes": "Bundle client family is present, but hostname did not resolve from this environment."
+    },
+    {
+      "endpoint_id": "bcws_shared_notification_api",
+      "url": "https://wfone.nrs.gov.bc.ca/v1/notification",
+      "endpoint_type": "data_endpoint",
+      "source_confidence": "medium",
+      "verification_status": "unresolved",
+      "shared_across_sources": true,
+      "notes": "Notification client family appears in the shared bundle, but hostname did not resolve from this environment."
+    },
+    {
+      "endpoint_id": "bcws_shared_file_details_api",
+      "url": "https://resources.wfdm.nrs.gov.bc.ca/fileDetails",
+      "endpoint_type": "data_endpoint",
+      "source_confidence": "medium",
+      "verification_status": "unresolved",
+      "shared_across_sources": true,
+      "notes": "Shared bundle references file-details and file-metadata resource families, but hostname did not resolve from this environment."
+    },
+    {
+      "endpoint_id": "bcws_fire_perimeters_layer",
+      "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0",
+      "endpoint_type": "arcgis_service",
+      "source_confidence": "high",
+      "verification_status": "verified",
+      "shared_across_sources": true,
+      "notes": "Public ArcGIS feature layer is queryable. Fields include `FIRE_STATUS`, `FIRE_SIZE_HECTARES`, and `FIRE_URL`."
+    },
+    {
+      "endpoint_id": "bcws_fsr_safety_layer",
+      "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/FSR_Safety_Information_View/FeatureServer/0",
+      "endpoint_type": "arcgis_service",
+      "source_confidence": "high",
+      "verification_status": "verified",
+      "shared_across_sources": true,
+      "notes": "Public ArcGIS point layer is queryable. Domain values include `CLOSURE`, `WARNING`, and `SEASONAL`."
+    },
+    {
+      "endpoint_id": "bcws_recreation_closures_layer",
+      "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/RecSitesReservesInterpForests_DetailsClosures_publicView/FeatureServer/0",
+      "endpoint_type": "arcgis_service",
+      "source_confidence": "high",
+      "verification_status": "verified",
+      "shared_across_sources": true,
+      "notes": "Public ArcGIS point layer is queryable. Fields include `CLOSURE_IND`, `CLOSURE_TYPE`, `CLOSURE_DATE`, and site metadata."
+    }
+  ],
+  "widgets": [
+    {
+      "widget_id": "bcws_dashboard_incident_totals_candidate",
+      "label": "Incident totals",
+      "source_id": "bcws_dashboard",
+      "candidate_target_pages": ["Configure", "Dashboard", "Incidents"],
+      "candidate_target_config_tab": "Sources",
+      "required_endpoint_ids": ["bcws_shared_published_incident_api"],
+      "confidence": "medium",
+      "status": "candidate_only",
+      "notes": "Strong dashboard candidate if the published-incident API resolves in a later pass."
+    },
+    {
+      "widget_id": "bcws_dashboard_stage_of_control_counts_candidate",
+      "label": "Stage-of-control counts",
+      "source_id": "bcws_dashboard",
+      "candidate_target_pages": ["Configure", "Dashboard", "Incidents"],
+      "candidate_target_config_tab": "Sources",
+      "required_endpoint_ids": ["bcws_shared_published_incident_api", "bcws_fire_perimeters_layer"],
+      "confidence": "medium",
+      "status": "candidate_only",
+      "notes": "Bundle exposes `incidentSituation.stageOfControlCode`, and the perimeter layer exposes `FIRE_STATUS`, but the incident API payload remains unresolved."
+    },
+    {
+      "widget_id": "bcws_dashboard_situation_report_summary_candidate",
+      "label": "Situation report summary",
+      "source_id": "bcws_dashboard",
+      "candidate_target_pages": ["Configure", "Dashboard"],
+      "candidate_target_config_tab": "Sources",
+      "required_endpoint_ids": ["bcws_shared_situation_report_api"],
+      "confidence": "low",
+      "status": "candidate_only",
+      "notes": "Client family is present, but no direct payload specimen was obtained in this environment."
+    },
+    {
+      "widget_id": "bcws_dashboard_perimeter_totals_candidate",
+      "label": "Perimeter-backed incident count",
+      "source_id": "bcws_dashboard",
+      "candidate_target_pages": ["Configure", "Dashboard", "Maps"],
+      "candidate_target_config_tab": "Sources",
+      "required_endpoint_ids": ["bcws_fire_perimeters_layer"],
+      "confidence": "high",
+      "status": "candidate_only",
+      "notes": "Public perimeter layer is directly queryable and already exposes countable records plus stage-like `FIRE_STATUS` values."
+    }
+  ]
+}

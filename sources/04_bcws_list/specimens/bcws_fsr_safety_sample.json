@@ -1,0 +1,110 @@
+{
+  "objectIdFieldName": "OBJECTID",
+  "uniqueIdField": {
+    "name": "OBJECTID",
+    "isSystemMaintained": true
+  },
+  "globalIdFieldName": "",
+  "geometryType": "esriGeometryPoint",
+  "spatialReference": {
+    "wkid": 102100,
+    "latestWkid": 3857
+  },
+  "fields": [
+    {
+      "name": "ALERT_TYPE",
+      "type": "esriFieldTypeString",
+      "alias": "ALERT_TYPE",
+      "sqlType": "sqlTypeOther",
+      "length": 50,
+      "domain": {
+        "type": "codedValue",
+        "name": "ALERT",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "codedValues": [
+          {
+            "name": "CLOSURE",
+            "code": "CLOSURE"
+          },
+          {
+            "name": "WARNING",
+            "code": "WARNING"
+          },
+          {
+            "name": "SEASONAL",
+            "code": "SEASONAL"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "LOCATION",
+      "type": "esriFieldTypeString",
+      "alias": "LOCATION",
+      "sqlType": "sqlTypeOther",
+      "length": 50,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "INFORMATION",
+      "type": "esriFieldTypeString",
+      "alias": "INFORMATION",
+      "sqlType": "sqlTypeOther",
+      "length": 256,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "NOTICE",
+      "type": "esriFieldTypeString",
+      "alias": "NOTICE",
+      "sqlType": "sqlTypeOther",
+      "length": 256,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "Contact",
+      "type": "esriFieldTypeString",
+      "alias": "Contact Info",
+      "sqlType": "sqlTypeOther",
+      "length": 256,
+      "domain": null,
+      "defaultValue": null,
+      "description": "{\"value\":\"Additional contact information about Notice or Closure\",\"fieldValueType\":\"\"}"
+    }
+  ],
+  "exceededTransferLimit": true,
+  "features": [
+    {
+      "attributes": {
+        "ALERT_TYPE": "CLOSURE",
+        "LOCATION": "Tsileuh FSR",
+        "INFORMATION": "Please be advised that there is no vehicle access beyond 4.4 km on Tsileuh FSR.",
+        "NOTICE": null,
+        "Contact": null
+      }
+    },
+    {
+      "attributes": {
+        "ALERT_TYPE": "CLOSURE",
+        "LOCATION": "Fleetwood FSR",
+        "INFORMATION": "No vehicle access beyond 5.0 km on Fleetwood FSR due to a road washout",
+        "NOTICE": null,
+        "Contact": null
+      }
+    },
+    {
+      "attributes": {
+        "ALERT_TYPE": "CLOSURE",
+        "LOCATION": "Squeah FSR",
+        "INFORMATION": "No vehicle access beyond 10.0 km on Sqeah FSR due to a road washout",
+        "NOTICE": null,
+        "Contact": null
+      }
+    }
+  ]
+}

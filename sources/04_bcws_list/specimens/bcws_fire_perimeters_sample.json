@@ -1,0 +1,100 @@
+{
+  "objectIdFieldName": "OBJECTID",
+  "uniqueIdField": {
+    "name": "OBJECTID",
+    "isSystemMaintained": true
+  },
+  "globalIdFieldName": "GlobalID",
+  "geometryType": "esriGeometryPolygon",
+  "spatialReference": {
+    "wkid": 102100,
+    "latestWkid": 3857
+  },
+  "fields": [
+    {
+      "name": "FIRE_NUMBER",
+      "type": "esriFieldTypeString",
+      "alias": "Fire Number",
+      "sqlType": "sqlTypeOther",
+      "length": 6,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "FIRE_YEAR",
+      "type": "esriFieldTypeSmallInteger",
+      "alias": "Fire Year",
+      "sqlType": "sqlTypeOther",
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "FIRE_SIZE_HECTARES",
+      "type": "esriFieldTypeDouble",
+      "alias": "Fire Size Hectares",
+      "sqlType": "sqlTypeOther",
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "FIRE_STATUS",
+      "type": "esriFieldTypeString",
+      "alias": "FIRE_STATUS",
+      "sqlType": "sqlTypeOther",
+      "length": 30,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "TRACK_DATE",
+      "type": "esriFieldTypeDate",
+      "alias": "Track Date",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "FIRE_URL",
+      "type": "esriFieldTypeString",
+      "alias": "FIRE_URL",
+      "sqlType": "sqlTypeOther",
+      "length": 255,
+      "domain": null,
+      "defaultValue": null
+    }
+  ],
+  "exceededTransferLimit": true,
+  "features": [
+    {
+      "attributes": {
+        "FIRE_NUMBER": "G70229",
+        "FIRE_YEAR": 2025,
+        "FIRE_SIZE_HECTARES": 37.5,
+        "FIRE_STATUS": "Out",
+        "TRACK_DATE": 1746255600000,
+        "FIRE_URL": "https://wildfiresituation.nrs.gov.bc.ca/incidents?fireYear=2025&incidentNumber=G70229"
+      }
+    },
+    {
+      "attributes": {
+        "FIRE_NUMBER": "G70422",
+        "FIRE_YEAR": 2025,
+        "FIRE_SIZE_HECTARES": 26195.3,
+        "FIRE_STATUS": "Under Control",
+        "TRACK_DATE": 1753513200000,
+        "FIRE_URL": "https://wildfiresituation.nrs.gov.bc.ca/incidents?fireYear=2025&incidentNumber=G70422"
+      }
+    },
+    {
+      "attributes": {
+        "FIRE_NUMBER": "G80426",
+        "FIRE_YEAR": 2025,
+        "FIRE_SIZE_HECTARES": 1660.8,
+        "FIRE_STATUS": "Under Control",
+        "TRACK_DATE": 1752130800000,
+        "FIRE_URL": "https://wildfiresituation.nrs.gov.bc.ca/incidents?fireYear=2025&incidentNumber=G80426"
+      }
+    }
+  ]
+}

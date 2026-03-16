@@ -4,48 +4,62 @@
     "url": "https://wildfiresituation.nrs.gov.bc.ca/list",
     "endpoint_type": "page_document",
     "source_confidence": "high",
+    "verification_status": "verified",
+    "shared_across_sources": false,
     "notes": "List route HTML shell."
   },
   {
-    "endpoint_id": "bcws_list_main_js",
+    "endpoint_id": "bcws_shared_main_js",
     "url": "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js",
     "endpoint_type": "page_asset",
     "source_confidence": "high",
-    "notes": "Shared Angular bundle for dashboard/map/list routes."
+    "verification_status": "verified",
+    "shared_across_sources": true,
+    "notes": "Shared Angular bundle used by dashboard, map, and list."
   },
   {
-    "endpoint_id": "bcws_list_published_incident_api",
+    "endpoint_id": "bcws_shared_published_incident_api",
     "url": "https://wfim.nrs.gov.bc.ca/v1/publishedIncident",
     "endpoint_type": "data_endpoint",
     "source_confidence": "medium",
-    "notes": "Referenced in bundle; hostname unresolved from this environment."
+    "verification_status": "unresolved",
+    "shared_across_sources": true,
+    "notes": "Shared bundle contains the incident client family and stage-of-control model fields, but hostname did not resolve from this environment."
   },
   {
     "endpoint_id": "bcws_list_attachment_api",
     "url": "https://wfim.nrs.gov.bc.ca/v1/attachment",
     "endpoint_type": "data_endpoint",
     "source_confidence": "medium",
-    "notes": "Referenced in bundle; hostname unresolved from this environment."
+    "verification_status": "unresolved",
+    "shared_across_sources": false,
+    "notes": "Shared bundle contains attachment client wiring, but hostname did not resolve from this environment."
   },
   {
     "endpoint_id": "bcws_list_external_uri_api",
     "url": "https://wfim.nrs.gov.bc.ca/v1/externalUri",
     "endpoint_type": "data_endpoint",
     "source_confidence": "medium",
-    "notes": "Referenced in bundle; hostname unresolved from this environment."
+    "verification_status": "unresolved",
+    "shared_across_sources": false,
+    "notes": "Shared bundle contains external URI client wiring, but hostname did not resolve from this environment."
   },
   {
-    "endpoint_id": "bcws_list_situation_report_api",
+    "endpoint_id": "bcws_shared_situation_report_api",
     "url": "https://wfnews.nrs.gov.bc.ca/v1/situationReport",
     "endpoint_type": "data_endpoint",
     "source_confidence": "medium",
-    "notes": "Referenced in bundle; hostname unresolved from this environment."
+    "verification_status": "unresolved",
+    "shared_across_sources": true,
+    "notes": "Shared bundle client family is present, but hostname did not resolve from this environment."
   },
   {
-    "endpoint_id": "bcws_list_fire_perimeters_layer",
-    "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0?f=pjson",
+    "endpoint_id": "bcws_fire_perimeters_layer",
+    "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0",
     "endpoint_type": "arcgis_service",
     "source_confidence": "high",
-    "notes": "Shared public ArcGIS layer discoverable from the common bundle."
+    "verification_status": "verified",
+    "shared_across_sources": true,
+    "notes": "Public ArcGIS feature layer is queryable. Fields include `FIRE_STATUS`, `FIRE_SIZE_HECTARES`, and `FIRE_URL`."
   }
 ]

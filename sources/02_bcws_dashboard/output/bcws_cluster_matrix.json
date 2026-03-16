@@ -1,0 +1,140 @@
+{
+  "cluster_sources": [
+    "bcws_dashboard",
+    "bcws_map",
+    "bcws_list"
+  ],
+  "shared_endpoint_families": [
+    {
+      "endpoint_id": "bcws_shared_main_js",
+      "url": "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js",
+      "verification_status": "verified",
+      "notes": "Shared Angular shell bundle across dashboard, map, and list."
+    },
+    {
+      "endpoint_id": "bcws_shared_published_incident_api",
+      "url": "https://wfim.nrs.gov.bc.ca/v1/publishedIncident",
+      "verification_status": "unresolved",
+      "notes": "Shared client family in the bundle. Contains `incidentSituation.stageOfControlCode` mapping but hostname did not resolve from this environment."
+    },
+    {
+      "endpoint_id": "bcws_shared_situation_report_api",
+      "url": "https://wfnews.nrs.gov.bc.ca/v1/situationReport",
+      "verification_status": "unresolved",
+      "notes": "Shared client family in the bundle; hostname did not resolve from this environment."
+    },
+    {
+      "endpoint_id": "bcws_shared_notification_api",
+      "url": "https://wfone.nrs.gov.bc.ca/v1/notification",
+      "verification_status": "unresolved",
+      "notes": "Shared client family in the bundle; hostname did not resolve from this environment."
+    }
+  ],
+  "shared_layer_families": [
+    {
+      "endpoint_id": "bcws_fire_perimeters_layer",
+      "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0",
+      "verification_status": "verified",
+      "notes": "Verified public polygon layer. Query count 320. Fields include `FIRE_STATUS`, `FIRE_SIZE_HECTARES`, and `FIRE_URL`."
+    },
+    {
+      "endpoint_id": "bcws_fsr_safety_layer",
+      "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/FSR_Safety_Information_View/FeatureServer/0",
+      "verification_status": "verified",
+      "notes": "Verified public point layer. Query count 100. Domain values include `CLOSURE`, `WARNING`, and `SEASONAL`."
+    },
+    {
+      "endpoint_id": "bcws_recreation_closures_layer",
+      "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/RecSitesReservesInterpForests_DetailsClosures_publicView/FeatureServer/0",
+      "verification_status": "verified",
+      "notes": "Verified public point layer. Query count 2272. Fields include `CLOSURE_IND`, `CLOSURE_TYPE`, `CLOSURE_DATE`, and site metadata."
+    }
+  ],
+  "source_specific_endpoint_families": {
+    "bcws_dashboard": [
+      {
+        "endpoint_id": "bcws_shared_file_details_api",
+        "url": "https://resources.wfdm.nrs.gov.bc.ca/fileDetails",
+        "verification_status": "unresolved",
+        "notes": "File-details family surfaced in the dashboard-focused deepening output but hostname did not resolve from this environment."
+      }
+    ],
+    "bcws_map": [
+      {
+        "endpoint_id": "bcws_map_geocoder_family",
+        "url": "https://geocoder.api.gov.bc.ca/addresses.geojsonp",
+        "verification_status": "probable",
+        "notes": "Bundle string indicates map-search usage. This pass did not capture a direct live request."
+      }
+    ],
+    "bcws_list": [
+      {
+        "endpoint_id": "bcws_list_attachment_api",
+        "url": "https://wfim.nrs.gov.bc.ca/v1/attachment",
+        "verification_status": "unresolved",
+        "notes": "Bundle contains attachment client wiring, but hostname did not resolve from this environment."
+      },
+      {
+        "endpoint_id": "bcws_list_external_uri_api",
+        "url": "https://wfim.nrs.gov.bc.ca/v1/externalUri",
+        "verification_status": "unresolved",
+        "notes": "Bundle contains external URI client wiring, but hostname did not resolve from this environment."
+      }
+    ]
+  },
+  "strongest_widget_candidates": [
+    {
+      "widget_id": "bcws_map_perimeter_layer_candidate",
+      "label": "Perimeter map layer",
+      "strength": "strongest_verified",
+      "required_endpoint_ids": [
+        "bcws_fire_perimeters_layer"
+      ],
+      "notes": "Strongest first-generation candidate because the underlying public polygon layer is verified and queryable."
+    },
+    {
+      "widget_id": "bcws_map_road_safety_overlay_candidate",
+      "label": "Road-safety overlay",
+      "strength": "strongest_verified",
+      "required_endpoint_ids": [
+        "bcws_fsr_safety_layer"
+      ],
+      "notes": "Strong verified overlay candidate with explicit alert-type domains."
+    },
+    {
+      "widget_id": "bcws_map_recreation_closures_overlay_candidate",
+      "label": "Recreation closures overlay",
+      "strength": "strongest_verified",
+      "required_endpoint_ids": [
+        "bcws_recreation_closures_layer"
+      ],
+      "notes": "Strong verified overlay candidate with closure indicators and date fields."
+    },
+    {
+      "widget_id": "bcws_dashboard_stage_of_control_counts_candidate",
+      "label": "Stage-of-control counts",
+      "strength": "blocked_by_unresolved_api",
+      "required_endpoint_ids": [
+        "bcws_shared_published_incident_api",
+        "bcws_fire_perimeters_layer"
+      ],
+      "notes": "Conceptually strong, but still blocked by the unresolved incident API family."
+    },
+    {
+      "widget_id": "bcws_list_incident_list_table_candidate",
+      "label": "Incident list table",
+      "strength": "blocked_by_unresolved_api",
+      "required_endpoint_ids": [
+        "bcws_shared_published_incident_api"
+      ],
+      "notes": "Natural list candidate once the incident API becomes directly reachable."
+    }
+  ],
+  "unresolved_questions": [
+    "Whether the `wfim` published-incident family is directly reachable from another network vantage point or through a browser-only resolution path.",
+    "Whether dashboard-specific counts or list payloads are delivered entirely through `publishedIncident` or through additional hidden NRS endpoints.",
+    "Whether a concrete evacuation overlay service exists in the BCWS shell or in an adjacent ArcGIS item not surfaced by the current bundle strings.",
+    "Whether `FIRE_STATUS` in the public perimeter layer is sufficient for public stage-of-control counts without the unpublished incident payload."
+  ],
+  "notes": "This matrix is limited to the BCWS dashboard/map/list cluster. It separates verified public ArcGIS services from unresolved NRS families and keeps all widget recommendations at candidate-only status."
+}
