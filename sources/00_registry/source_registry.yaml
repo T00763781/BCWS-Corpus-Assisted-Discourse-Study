@@ -1,0 +1,63 @@
+- source_id: weather_gc_ca
+  label: Environment Canada Weather
+  canonical_url: https://weather.gc.ca/
+  source_class: environment
+  authority_type: government
+  status: preliminary
+  notes: preliminary named source
+
+- source_id: bcws_dashboard
+  label: BC Wildfire Situation Dashboard
+  canonical_url: https://wildfiresituation.nrs.gov.bc.ca/dashboard
+  source_class: incident
+  authority_type: government
+  status: preliminary
+  notes: preliminary named source
+
+- source_id: bcws_map
+  label: BC Wildfire Situation Map
+  canonical_url: https://wildfiresituation.nrs.gov.bc.ca/map
+  source_class: maps
+  authority_type: government
+  status: preliminary
+  notes: preliminary named source
+
+- source_id: bcws_list
+  label: BC Wildfire Situation List
+  canonical_url: https://wildfiresituation.nrs.gov.bc.ca/list
+  source_class: incident
+  authority_type: government
+  status: preliminary
+  notes: preliminary named source
+
+- source_id: bcgov_weather_maps
+  label: BC Government Weather Maps
+  canonical_url: https://www2.gov.bc.ca/gov/content/safety/wildfire-status/prepare/weather-fire-danger/fire-weather/weather-maps
+  source_class: environment
+  authority_type: government
+  status: preliminary
+  notes: preliminary named source
+
+- source_id: weather_gc_ca_lightning
+  label: Environment Canada Lightning Layers
+  canonical_url: https://weather.gc.ca/index_e.html?layers=,,lightning
+  source_class: environment
+  authority_type: government
+  status: preliminary
+  notes: preliminary named source
+
+- source_id: firesmoke_fireweather_current
+  label: FireSmoke Current Fire Weather
+  canonical_url: https://firesmoke.ca/forecasts/fireweather/current/
+  source_class: environment
+  authority_type: public
+  status: preliminary
+  notes: preliminary named source
+
+- source_id: bcgov_arcgis_mapviewer
+  label: Government of BC ArcGIS Map Viewer
+  canonical_url: https://governmentofbc.maps.arcgis.com/apps/mapviewer/index.html
+  source_class: maps
+  authority_type: government
+  status: preliminary
+  notes: preliminary named source
