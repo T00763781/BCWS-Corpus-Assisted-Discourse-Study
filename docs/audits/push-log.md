@@ -20,3 +20,10 @@
 - Commit message: `Harden Windows bootstrap and seed-demo launch paths`
 - Short note: added `.cmd` wrappers for Windows-safe script execution and hardened `seed-demo` to wait for API readiness and emit diagnostics
 - Verification result: `cmd /c scripts\bootstrap\seed-demo.cmd` completed successfully and `.diagnostics/latest/seed-demo.log` was written
+
+## 2026-03-15T23:26:44-07:00
+
+- Commit hash: `d40b920f2074e978e4014e7360093d9ee40df617`
+- Commit message: `Document runtime repair and package operator feedback bundle`
+- Short note: updated the README and operator docs to the canonical `/api` and `.cmd` flow, wrote the runtime repair audit, and packaged `feedback.zip`
+- Verification result: `feedback.zip` contains the runtime audit, next steps, verification log, and relevant runtime logs
