@@ -268,6 +268,16 @@ a {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.dashboard-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dashboard-main-grid {
+  align-items: start;
+}
+
 .template-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -321,6 +331,12 @@ a {
   font-weight: 700;
 }
 
+.map-caption {
+  max-width: 420px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
 .metric-card,
 .outlook-card,
 .incident-card,
@@ -342,6 +358,12 @@ a {
 .metric-value {
   font-size: 1.6rem;
   font-weight: 700;
+}
+
+.dashboard-incident-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .list-card {
@@ -482,6 +504,7 @@ a {
 }
 
 @media (max-width: 1200px) {
+  .dashboard-kpi-grid,
   .dashboard-template-grid,
   .template-grid,
   .gallery-grid,
@@ -519,6 +542,7 @@ a {
     padding: 18px;
   }
 
+  .dashboard-kpi-grid,
   .dashboard-template-grid,
   .template-grid,
   .environment-grid,

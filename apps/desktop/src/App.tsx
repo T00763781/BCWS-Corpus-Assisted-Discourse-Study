@@ -118,70 +118,68 @@ function stageClass(stage: string) {
 }
 
 function DashboardPage({
-  analytics,
   dashboard,
-  environment,
-  incidents,
-}: Pick<AppData, "analytics" | "dashboard" | "environment" | "incidents">) {
+}: Pick<AppData, "dashboard">) {
+  if (!dashboard) {
+    return (
+      <section className="panel">
+        <div className="panel-title">Dashboard overview</div>
+        <div className="muted">Loading dashboard overview...</div>
+      </section>
+    );
+  }
+
   return (
     <>
       <section className="page-header">
         <div>
           <p className="eyebrow">Wildfire overview</p>
           <h1>Dashboard</h1>
-          <p className="lede">Operational wildfire workspace aligned to the approved mockup structure and powered by the normalized incident spine.</p>
+          <p className="lede">Operational overview driven directly from the Open Fireside dashboard contract.</p>
         </div>
       </section>
 
-      <section className="dashboard-template-grid">
+      <section className="dashboard-kpi-grid">
+        <div className="metric-card">
+          <div className="metric-label">Active wildfires</div>
+          <div className="metric-value">{dashboard.active_incidents}</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">Out of control</div>
+          <div className="metric-value">{dashboard.out_of_control}</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">Being held</div>
+          <div className="metric-value">{dashboard.being_held}</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">Under control</div>
+          <div className="metric-value">{dashboard.under_control}</div>
+        </div>
+      </section>
+
+      <section className="dashboard-kpi-grid">
+        <div className="metric-card">
+          <div className="metric-label">Evacuation orders</div>
+          <div className="metric-value">{dashboard.evacuation_orders}</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">Evacuation alerts</div>
+          <div className="metric-value">{dashboard.evacuation_alerts}</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">Area restrictions</div>
+          <div className="metric-value">{dashboard.area_restrictions}</div>
+        </div>
+      </section>
+
+      <section className="dashboard-template-grid dashboard-main-grid">
         <div className="panel span-two">
-          <div className="panel-title">British Columbia overview</div>
+          <div className="panel-title">Provincial overview map</div>
           <div className="map-placeholder tall-map">
-            <div className="map-label">Province map surface</div>
-            <div className="legend-row">
-              <span className="chip">Incident zones</span>
-              <span className="chip">Evacuation overlays</span>
-              <span className="chip">Perimeter layers</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">Operational totals</div>
-          <div className="metrics-row">
-            <div className="metric-card">
-              <div className="metric-label">Active wildfires</div>
-              <div className="metric-value">{dashboard?.active_incidents ?? incidents.length}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">Evacuation alerts</div>
-              <div className="metric-value">{dashboard?.evacuation_alerts ?? 0}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">Area restrictions</div>
-              <div className="metric-value">{dashboard?.area_restrictions ?? 0}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">Connector runs</div>
-              <div className="metric-value">{analytics?.connector_runs ?? 0}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">Stage of control</div>
-          <div className="metrics-row">
-            <div className="metric-card">
-              <div className="metric-label">Under control</div>
-              <div className="metric-value">{dashboard?.under_control ?? 0}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">Being held</div>
-              <div className="metric-value">{dashboard?.being_held ?? 0}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">Out of control</div>
-              <div className="metric-value">{dashboard?.out_of_control ?? 0}</div>
+            <div className="map-label">Dashboard map container</div>
+            <div className="map-caption">
+              Wildfire, evacuation, and area restriction layers will mount here when the dashboard map feed is wired.
             </div>
           </div>
         </div>
@@ -189,20 +187,25 @@ function DashboardPage({
         <div className="panel">
           <div className="panel-title">Pinned incidents</div>
           <div className="list-card">
-            {(dashboard?.pinned_incidents ?? []).map((incident) => (
+            {dashboard.pinned_incidents.map((incident) => (
               <Link className="list-link" key={incident.fire_number} to={`/incidents/${incident.fire_number}`}>
-                <div>
+                <div className="dashboard-incident-copy">
                   <strong>{incident.wildfire_name}</strong>
-                  <div className="muted">{incident.fire_number} · {incident.fire_centre}</div>
+                  <div className="muted">{incident.fire_number} · {incident.fire_centre ?? "Unassigned"}</div>
+                  <div className="muted">
+                    {incident.size_hectares ? `${incident.size_hectares.toLocaleString()} ha` : "Size pending"} · Updated {formatDateTime(incident.updated_at)}
+                  </div>
                 </div>
                 <span className={stageClass(incident.stage_of_control)}>{incident.stage_of_control}</span>
               </Link>
             ))}
           </div>
         </div>
+      </section>
 
-        <div className="panel span-two">
-          <div className="panel-title">Fire centre matrix</div>
+      <section className="dashboard-template-grid">
+        <div className="panel span-three">
+          <div className="panel-title">Fire centre summary</div>
           <div className="matrix-table">
             <div className="data-row data-row-header data-row-five">
               <span>Fire centre</span>
@@ -211,48 +214,13 @@ function DashboardPage({
               <span>Held</span>
               <span>Out</span>
             </div>
-            {(dashboard?.fire_centres ?? []).map((centre) => (
+            {dashboard.fire_centres.map((centre) => (
               <div className="data-row data-row-five" key={centre.fire_centre}>
                 <span>{centre.fire_centre}</span>
                 <span>{centre.incident_count}</span>
                 <span>{centre.under_control}</span>
                 <span>{centre.being_held}</span>
                 <span>{centre.out_of_control}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">Discourse posture</div>
-          <div className="discourse-grid">
-            <div className="metric-card">
-              <div className="metric-label">Discourse items</div>
-              <div className="metric-value">{analytics?.discourse_items ?? 0}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">Actors</div>
-              <div className="metric-value">{analytics?.actors ?? 0}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">Claims</div>
-              <div className="metric-value">{analytics?.claims ?? 0}</div>
-            </div>
-          </div>
-          <div className="prose-box">
-            Discourse remains secondary in this phase. Signals attach to an incident or fire-centre context rather than driving the product information architecture.
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">Fire centre outlooks</div>
-          <div className="outlook-grid">
-            {(environment?.outlooks ?? []).map((outlook) => (
-              <div className="outlook-card" key={`${outlook.fire_centre}-${outlook.issued_on ?? "undated"}`}>
-                <strong>{outlook.fire_centre}</strong>
-                <div className="muted">{outlook.valid_window ?? "Forecast window pending"}</div>
-                <p>{outlook.summary}</p>
-                <div className="muted">{formatDateTime(outlook.issued_on)}</div>
               </div>
             ))}
           </div>
@@ -720,7 +688,7 @@ function WorkstationLayout({ analytics, dashboard, incidents, environment, mapsC
       <main className="workspace">
         {error ? <div className="alert">{error}</div> : null}
         <Routes>
-          <Route path="/dashboard" element={<DashboardPage analytics={analytics} dashboard={dashboard} environment={environment} incidents={incidents} />} />
+          <Route path="/dashboard" element={<DashboardPage dashboard={dashboard} />} />
           <Route path="/incidents" element={<IncidentListPage incidents={incidents} />} />
           <Route path="/incidents/:incidentId" element={<IncidentDetailPage />} />
           <Route path="/discourse" element={<DiscoursePage incidents={incidents} />} />
