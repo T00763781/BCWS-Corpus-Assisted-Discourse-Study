@@ -1,0 +1,45 @@
+{
+  "source_id": "bcgov_weather_maps",
+  "specimens": [
+    {
+      "url": "https://www2.gov.bc.ca/gov/content/safety/wildfire-status/prepare/weather-fire-danger/fire-weather/weather-maps",
+      "saved": true,
+      "path": "specimens\\https_www2_gov_bc_ca_gov_content_safety_wildfire_status_prepare_weather_fire_dan.html",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "error": null
+    },
+    {
+      "url": "https://governmentofbc.maps.arcgis.com/sharing/rest/content/items/c36baf74b74a46978cf517579a9ee332?f=json",
+      "saved": true,
+      "path": "specimens\\https_governmentofbc_maps_arcgis_com_sharing_rest_content_items_c36baf74b74a4697.json",
+      "status": 200,
+      "content_type": "application/json;charset=utf-8",
+      "error": null
+    },
+    {
+      "url": "https://governmentofbc.maps.arcgis.com/sharing/rest/content/items/c36baf74b74a46978cf517579a9ee332/data?f=json",
+      "saved": true,
+      "path": "specimens\\https_governmentofbc_maps_arcgis_com_sharing_rest_content_items_c36baf74b74a4697.json",
+      "status": 200,
+      "content_type": "application/json;charset=utf-8",
+      "error": null
+    },
+    {
+      "url": "https://governmentofbc.maps.arcgis.com/sharing/rest/content/items/59b1b3cfd5144059b39705d51b4d6ce6?f=json",
+      "saved": true,
+      "path": "specimens\\https_governmentofbc_maps_arcgis_com_sharing_rest_content_items_59b1b3cfd5144059.json",
+      "status": 200,
+      "content_type": "application/json;charset=utf-8",
+      "error": null
+    },
+    {
+      "url": "https://governmentofbc.maps.arcgis.com/sharing/rest/content/items/59b1b3cfd5144059b39705d51b4d6ce6/data?f=json",
+      "saved": true,
+      "path": "specimens\\https_governmentofbc_maps_arcgis_com_sharing_rest_content_items_59b1b3cfd5144059.json",
+      "status": 200,
+      "content_type": "application/json;charset=utf-8",
+      "error": null
+    }
+  ]
+}

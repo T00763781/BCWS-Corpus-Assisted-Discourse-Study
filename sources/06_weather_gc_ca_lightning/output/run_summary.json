@@ -1,0 +1,21 @@
+{
+  "source_id": "weather_gc_ca_lightning",
+  "specimens": [
+    {
+      "url": "https://weather.gc.ca/index_e.html?layers=,,lightning",
+      "saved": true,
+      "path": "specimens\\https_weather_gc_ca_index_e_html_layers_lightning.html",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "error": null
+    },
+    {
+      "url": "https://weather.gc.ca/vue/ssr/js/chunk-c299a0f6.310e9f420cc9f3c47991.js",
+      "saved": true,
+      "path": "specimens\\https_weather_gc_ca_vue_ssr_js_chunk_c299a0f6_310e9f420cc9f3c47991_js.js",
+      "status": 200,
+      "content_type": "text/javascript",
+      "error": null
+    }
+  ]
+}

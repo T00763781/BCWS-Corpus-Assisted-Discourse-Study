@@ -1,0 +1,47 @@
+[
+  {
+    "widget_id": "firesmoke_fireweather_current_fireweather_layer_candidate",
+    "label": "Fire weather map layer",
+    "source_id": "firesmoke_fireweather_current",
+    "candidate_target_pages": [
+      "Environment",
+      "Maps"
+    ],
+    "candidate_target_config_tab": "Environment",
+    "required_endpoint_ids": [
+      "firesmoke_fireweather_current_geomet_root",
+      "firesmoke_fireweather_current_zone_json"
+    ],
+    "confidence": "medium",
+    "notes": "Page purpose and JS structure strongly suggest time-based fire weather layers."
+  },
+  {
+    "widget_id": "firesmoke_fireweather_current_smoke_layer_candidate",
+    "label": "Smoke forecast layer",
+    "source_id": "firesmoke_fireweather_current",
+    "candidate_target_pages": [
+      "Environment",
+      "Maps"
+    ],
+    "candidate_target_config_tab": "Environment",
+    "required_endpoint_ids": [
+      "firesmoke_fireweather_current_zone_json"
+    ],
+    "confidence": "medium",
+    "notes": "FireSmoke surface is map-centric but exact smoke layer URLs were not fully expanded in bounded recon."
+  },
+  {
+    "widget_id": "firesmoke_fireweather_current_air_quality_overlay_candidate",
+    "label": "Air quality overlay",
+    "source_id": "firesmoke_fireweather_current",
+    "candidate_target_pages": [
+      "Environment"
+    ],
+    "candidate_target_config_tab": "Environment",
+    "required_endpoint_ids": [
+      "firesmoke_fireweather_current_waqi_tiles"
+    ],
+    "confidence": "low",
+    "notes": "WAQI tiles appear in the layer controller bundle as an optional overlay family."
+  }
+]

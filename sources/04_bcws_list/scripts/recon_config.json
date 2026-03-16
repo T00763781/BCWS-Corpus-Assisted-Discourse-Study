@@ -1,0 +1,37 @@
+{
+  "source_id": "bcws_list",
+  "source_label": "BC Wildfire Situation List",
+  "canonical_url": "https://wildfiresituation.nrs.gov.bc.ca/list",
+  "what_page_provides": "List-oriented route inside the same BC Wildfire Service Angular application shell used by dashboard and map.",
+  "likely_endpoint_families": [
+    "Published incident API family for list rows and status fields.",
+    "Situation report and attachment/external URI families for supporting detail.",
+    "Shared ArcGIS layer families still appear in the common bundle even if the route itself is list-oriented."
+  ],
+  "likely_layer_families": [
+    "Fire perimeter layer family shared with the map route.",
+    "Shared ArcGIS support layers discoverable in the common bundle."
+  ],
+  "auth_notes": "Public route shell. Bundle references NRS API families, but the primary NRS API hostnames did not resolve from this environment.",
+  "confidence": "medium",
+  "recommendation": "pursue",
+  "endpoints": [
+    {"endpoint_id": "bcws_list_page", "url": "https://wildfiresituation.nrs.gov.bc.ca/list", "endpoint_type": "page_document", "source_confidence": "high", "notes": "List route HTML shell."},
+    {"endpoint_id": "bcws_list_main_js", "url": "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js", "endpoint_type": "page_asset", "source_confidence": "high", "notes": "Shared Angular bundle for dashboard/map/list routes."},
+    {"endpoint_id": "bcws_list_published_incident_api", "url": "https://wfim.nrs.gov.bc.ca/v1/publishedIncident", "endpoint_type": "data_endpoint", "source_confidence": "medium", "notes": "Referenced in bundle; hostname unresolved from this environment."},
+    {"endpoint_id": "bcws_list_attachment_api", "url": "https://wfim.nrs.gov.bc.ca/v1/attachment", "endpoint_type": "data_endpoint", "source_confidence": "medium", "notes": "Referenced in bundle; hostname unresolved from this environment."},
+    {"endpoint_id": "bcws_list_external_uri_api", "url": "https://wfim.nrs.gov.bc.ca/v1/externalUri", "endpoint_type": "data_endpoint", "source_confidence": "medium", "notes": "Referenced in bundle; hostname unresolved from this environment."},
+    {"endpoint_id": "bcws_list_situation_report_api", "url": "https://wfnews.nrs.gov.bc.ca/v1/situationReport", "endpoint_type": "data_endpoint", "source_confidence": "medium", "notes": "Referenced in bundle; hostname unresolved from this environment."},
+    {"endpoint_id": "bcws_list_fire_perimeters_layer", "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0?f=pjson", "endpoint_type": "arcgis_service", "source_confidence": "high", "notes": "Shared public ArcGIS layer discoverable from the common bundle."}
+  ],
+  "widgets": [
+    {"widget_id": "bcws_list_incident_table_candidate", "label": "Incident list table", "source_id": "bcws_list", "candidate_target_pages": ["Incidents"], "candidate_target_config_tab": "Incidents", "required_endpoint_ids": ["bcws_list_published_incident_api"], "confidence": "medium", "notes": "List route strongly implies this family, but host resolution remains unresolved from this environment."},
+    {"widget_id": "bcws_list_attachment_links_candidate", "label": "Incident attachment links", "source_id": "bcws_list", "candidate_target_pages": ["Incidents"], "candidate_target_config_tab": "Incidents", "required_endpoint_ids": ["bcws_list_attachment_api", "bcws_list_external_uri_api"], "confidence": "medium", "notes": "Attachment families are bundle-level findings only."},
+    {"widget_id": "bcws_list_situation_report_links_candidate", "label": "Situation report links", "source_id": "bcws_list", "candidate_target_pages": ["Incidents"], "candidate_target_config_tab": "Incidents", "required_endpoint_ids": ["bcws_list_situation_report_api"], "confidence": "medium", "notes": "Situation report family is bundle-level only from this environment."}
+  ],
+  "specimen_urls": [
+    "https://wildfiresituation.nrs.gov.bc.ca/list",
+    "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js",
+    "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0?f=pjson"
+  ]
+}

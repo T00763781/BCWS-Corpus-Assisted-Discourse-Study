@@ -1,0 +1,37 @@
+[
+  {
+    "endpoint_id": "bcgov_arcgis_mapviewer_page",
+    "url": "https://governmentofbc.maps.arcgis.com/apps/mapviewer/index.html",
+    "endpoint_type": "page_document",
+    "source_confidence": "high",
+    "notes": "Generic ArcGIS Map Viewer shell."
+  },
+  {
+    "endpoint_id": "bcgov_arcgis_mapviewer_common_js",
+    "url": "https://governmentofbc.maps.arcgis.com/apps/mapviewer/assets/common-gZK4FVHu.js",
+    "endpoint_type": "page_asset",
+    "source_confidence": "high",
+    "notes": "Common Map Viewer asset bundle found in rendered DOM."
+  },
+  {
+    "endpoint_id": "bcgov_arcgis_mapviewer_arcgis_core_js",
+    "url": "https://governmentofbc.maps.arcgis.com/apps/mapviewer/assets/arcgis-core-HhYfEpbx.js",
+    "endpoint_type": "page_asset",
+    "source_confidence": "high",
+    "notes": "ArcGIS core asset bundle found in rendered DOM."
+  },
+  {
+    "endpoint_id": "bcgov_arcgis_mapviewer_generic_sharing_rest",
+    "url": "arcgis.com/sharing/rest/content/items/{itemId}",
+    "endpoint_type": "api_json",
+    "source_confidence": "low",
+    "notes": "Generic ArcGIS content family implied by the shell; no specific item ID surfaced from the naked URL."
+  },
+  {
+    "endpoint_id": "bcgov_arcgis_mapviewer_generic_service_family",
+    "url": "arcgis/rest/services/{serviceName}/{serviceType}",
+    "endpoint_type": "arcgis_service",
+    "source_confidence": "low",
+    "notes": "Generic ArcGIS service families are referenced in the common bundle, but no concrete layer URL surfaced from the naked shell."
+  }
+]

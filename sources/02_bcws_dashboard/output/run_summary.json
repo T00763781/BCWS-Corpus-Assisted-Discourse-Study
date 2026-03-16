@@ -1,0 +1,45 @@
+{
+  "source_id": "bcws_dashboard",
+  "specimens": [
+    {
+      "url": "https://wildfiresituation.nrs.gov.bc.ca/dashboard",
+      "saved": true,
+      "path": "specimens\\https_wildfiresituation_nrs_gov_bc_ca_dashboard.html",
+      "status": 200,
+      "content_type": "text/html",
+      "error": null
+    },
+    {
+      "url": "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js",
+      "saved": true,
+      "path": "specimens\\https_wildfiresituation_nrs_gov_bc_ca_main_da9882e70a9138f1_js.js",
+      "status": 200,
+      "content_type": "application/javascript",
+      "error": null
+    },
+    {
+      "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0?f=pjson",
+      "saved": true,
+      "path": "specimens\\https_services6_arcgis_com_ubm4tcTYICKBpist_ArcGIS_rest_services_BCWS_FirePerime.json",
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "error": null
+    },
+    {
+      "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/FSR_Safety_Information_View/FeatureServer/0?f=pjson",
+      "saved": true,
+      "path": "specimens\\https_services6_arcgis_com_ubm4tcTYICKBpist_ArcGIS_rest_services_FSR_Safety_Info.json",
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "error": null
+    },
+    {
+      "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/RecSitesReservesInterpForests_DetailsClosures_publicView/FeatureServer/0?f=pjson",
+      "saved": true,
+      "path": "specimens\\https_services6_arcgis_com_ubm4tcTYICKBpist_ArcGIS_rest_services_RecSitesReserve.json",
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "error": null
+    }
+  ]
+}

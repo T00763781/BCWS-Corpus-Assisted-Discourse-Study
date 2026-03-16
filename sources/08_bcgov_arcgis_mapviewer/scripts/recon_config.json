@@ -1,0 +1,33 @@
+{
+  "source_id": "bcgov_arcgis_mapviewer",
+  "source_label": "Government of BC ArcGIS Map Viewer",
+  "canonical_url": "https://governmentofbc.maps.arcgis.com/apps/mapviewer/index.html",
+  "what_page_provides": "Generic ArcGIS Map Viewer shell without a specific map item in the naked URL.",
+  "likely_endpoint_families": [
+    "Map Viewer asset bundles, including common and arcgis-core modules.",
+    "Generic ArcGIS portal item, sharing/rest, and service families implied by the runtime shell.",
+    "No concrete web map item was exposed directly from the naked shell URL during bounded recon."
+  ],
+  "likely_layer_families": [
+    "Generic ArcGIS service families: FeatureServer, MapServer, ImageServer, VectorTileServer, SceneServer.",
+    "No concrete operational layer URL was exposed from the naked shell route in bounded recon."
+  ],
+  "auth_notes": "Public shell route. Main rendered DOM exposes asset bundles only. Concrete map content likely requires a specific item or later user interaction.",
+  "confidence": "low",
+  "recommendation": "deprioritize",
+  "endpoints": [
+    {"endpoint_id": "bcgov_arcgis_mapviewer_page", "url": "https://governmentofbc.maps.arcgis.com/apps/mapviewer/index.html", "endpoint_type": "page_document", "source_confidence": "high", "notes": "Generic ArcGIS Map Viewer shell."},
+    {"endpoint_id": "bcgov_arcgis_mapviewer_common_js", "url": "https://governmentofbc.maps.arcgis.com/apps/mapviewer/assets/common-gZK4FVHu.js", "endpoint_type": "page_asset", "source_confidence": "high", "notes": "Common Map Viewer asset bundle found in rendered DOM."},
+    {"endpoint_id": "bcgov_arcgis_mapviewer_arcgis_core_js", "url": "https://governmentofbc.maps.arcgis.com/apps/mapviewer/assets/arcgis-core-HhYfEpbx.js", "endpoint_type": "page_asset", "source_confidence": "high", "notes": "ArcGIS core asset bundle found in rendered DOM."},
+    {"endpoint_id": "bcgov_arcgis_mapviewer_generic_sharing_rest", "url": "arcgis.com/sharing/rest/content/items/{itemId}", "endpoint_type": "api_json", "source_confidence": "low", "notes": "Generic ArcGIS content family implied by the shell; no specific item ID surfaced from the naked URL."},
+    {"endpoint_id": "bcgov_arcgis_mapviewer_generic_service_family", "url": "arcgis/rest/services/{serviceName}/{serviceType}", "endpoint_type": "arcgis_service", "source_confidence": "low", "notes": "Generic ArcGIS service families are referenced in the common bundle, but no concrete layer URL surfaced from the naked shell."}
+  ],
+  "widgets": [
+    {"widget_id": "bcgov_arcgis_mapviewer_specific_map_import_candidate", "label": "Specific map import entry", "source_id": "bcgov_arcgis_mapviewer", "candidate_target_pages": ["Configure"], "candidate_target_config_tab": "Sources", "required_endpoint_ids": ["bcgov_arcgis_mapviewer_generic_sharing_rest"], "confidence": "low", "notes": "Only useful if a later pass supplies a specific ArcGIS item or web map."},
+    {"widget_id": "bcgov_arcgis_mapviewer_generic_layer_probe_candidate", "label": "Generic layer probe entry", "source_id": "bcgov_arcgis_mapviewer", "candidate_target_pages": ["Configure"], "candidate_target_config_tab": "Sources", "required_endpoint_ids": ["bcgov_arcgis_mapviewer_generic_service_family"], "confidence": "low", "notes": "Naked mapviewer shell is too generic to support route-level widgets yet."}
+  ],
+  "specimen_urls": [
+    "https://governmentofbc.maps.arcgis.com/apps/mapviewer/index.html",
+    "https://governmentofbc.maps.arcgis.com/apps/mapviewer/assets/common-gZK4FVHu.js"
+  ]
+}

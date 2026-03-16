@@ -1,0 +1,30 @@
+[
+  {
+    "widget_id": "bcgov_arcgis_mapviewer_specific_map_import_candidate",
+    "label": "Specific map import entry",
+    "source_id": "bcgov_arcgis_mapviewer",
+    "candidate_target_pages": [
+      "Configure"
+    ],
+    "candidate_target_config_tab": "Sources",
+    "required_endpoint_ids": [
+      "bcgov_arcgis_mapviewer_generic_sharing_rest"
+    ],
+    "confidence": "low",
+    "notes": "Only useful if a later pass supplies a specific ArcGIS item or web map."
+  },
+  {
+    "widget_id": "bcgov_arcgis_mapviewer_generic_layer_probe_candidate",
+    "label": "Generic layer probe entry",
+    "source_id": "bcgov_arcgis_mapviewer",
+    "candidate_target_pages": [
+      "Configure"
+    ],
+    "candidate_target_config_tab": "Sources",
+    "required_endpoint_ids": [
+      "bcgov_arcgis_mapviewer_generic_service_family"
+    ],
+    "confidence": "low",
+    "notes": "Naked mapviewer shell is too generic to support route-level widgets yet."
+  }
+]

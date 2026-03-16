@@ -1,0 +1,39 @@
+{
+  "source_id": "weather_gc_ca",
+  "source_label": "Environment Canada Weather",
+  "canonical_url": "https://weather.gc.ca/",
+  "what_page_provides": "National Environment Canada weather portal with warnings, forecast navigation, radar/lightning entry points, and SSR-inlined weather state.",
+  "likely_endpoint_families": [
+    "SSR inline state embedded in the page for alerts, city, and map state.",
+    "Warnings HTML document family under /warnings/, including weather summaries.",
+    "Vue SSR bundles that reference lightning, radar, alert, and AQHI state handling."
+  ],
+  "likely_layer_families": [
+    "Lightning family referenced in bundle strings as Lightning/1/ and Lightning/metadata/1.",
+    "Radar family referenced in bundle strings, including radar composites and coverage metadata.",
+    "Map state in SSR output suggests route-driven weather web mapping rather than a standalone JSON API."
+  ],
+  "auth_notes": "Public site. No auth barrier observed. Main page is SSR HTML plus Vue bundles.",
+  "confidence": "medium",
+  "recommendation": "maybe",
+  "endpoints": [
+    {"endpoint_id": "weather_gc_ca_page", "url": "https://weather.gc.ca/", "endpoint_type": "page_document", "source_confidence": "high", "notes": "Primary SSR page document."},
+    {"endpoint_id": "weather_gc_ca_main_js", "url": "https://weather.gc.ca/vue/ssr/js/main.310e9f420cc9f3c47991.js", "endpoint_type": "page_asset", "source_confidence": "high", "notes": "Main Vue SSR bundle for the weather portal."},
+    {"endpoint_id": "weather_gc_ca_weather_chunk", "url": "https://weather.gc.ca/vue/ssr/js/chunk-c299a0f6.310e9f420cc9f3c47991.js", "endpoint_type": "page_asset", "source_confidence": "high", "notes": "Bundle contains lightning/radar strings and alert-related route handling."},
+    {"endpoint_id": "weather_gc_ca_warning_summaries", "url": "https://weather.gc.ca/warnings/weathersummaries_e.html", "endpoint_type": "data_endpoint", "source_confidence": "medium", "notes": "Warning summary document family referenced by bundle/page state."},
+    {"endpoint_id": "weather_gc_ca_lightning_family", "url": "Lightning/1/", "endpoint_type": "tile_layer", "source_confidence": "low", "notes": "Relative lightning family string found in the bundle; host/path resolution remains uncertain from page-only recon."},
+    {"endpoint_id": "weather_gc_ca_lightning_metadata_family", "url": "Lightning/metadata/1", "endpoint_type": "api_json", "source_confidence": "low", "notes": "Relative lightning metadata family string found in the bundle; host/path resolution remains uncertain from page-only recon."},
+    {"endpoint_id": "weather_gc_ca_radar_family", "url": "radar.3978/", "endpoint_type": "tile_layer", "source_confidence": "low", "notes": "Relative radar family string found in the bundle."}
+  ],
+  "widgets": [
+    {"widget_id": "weather_gc_ca_alert_summary_candidate", "label": "Weather alert summary", "source_id": "weather_gc_ca", "candidate_target_pages": ["Environment"], "candidate_target_config_tab": "Environment", "required_endpoint_ids": ["weather_gc_ca_warning_summaries"], "confidence": "medium", "notes": "Could surface warning summary state if later normalized."},
+    {"widget_id": "weather_gc_ca_radar_entry_candidate", "label": "Radar availability entry", "source_id": "weather_gc_ca", "candidate_target_pages": ["Environment"], "candidate_target_config_tab": "Environment", "required_endpoint_ids": ["weather_gc_ca_radar_family"], "confidence": "low", "notes": "Bundle points to radar families but host resolution is still uncertain from bounded recon."},
+    {"widget_id": "weather_gc_ca_lightning_entry_candidate", "label": "Lightning entry", "source_id": "weather_gc_ca", "candidate_target_pages": ["Environment"], "candidate_target_config_tab": "Environment", "required_endpoint_ids": ["weather_gc_ca_lightning_family", "weather_gc_ca_lightning_metadata_family"], "confidence": "low", "notes": "Better supported by the explicit lightning route than the generic homepage."}
+  ],
+  "specimen_urls": [
+    "https://weather.gc.ca/",
+    "https://weather.gc.ca/vue/ssr/js/main.310e9f420cc9f3c47991.js",
+    "https://weather.gc.ca/vue/ssr/js/chunk-c299a0f6.310e9f420cc9f3c47991.js",
+    "https://weather.gc.ca/warnings/weathersummaries_e.html"
+  ]
+}

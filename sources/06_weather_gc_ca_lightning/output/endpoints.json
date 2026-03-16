@@ -1,0 +1,37 @@
+[
+  {
+    "endpoint_id": "weather_gc_ca_lightning_page",
+    "url": "https://weather.gc.ca/index_e.html?layers=,,lightning",
+    "endpoint_type": "page_document",
+    "source_confidence": "high",
+    "notes": "Lightning route page document."
+  },
+  {
+    "endpoint_id": "weather_gc_ca_lightning_chunk",
+    "url": "https://weather.gc.ca/vue/ssr/js/chunk-c299a0f6.310e9f420cc9f3c47991.js",
+    "endpoint_type": "page_asset",
+    "source_confidence": "high",
+    "notes": "Chunk contains lightning and radar strings."
+  },
+  {
+    "endpoint_id": "weather_gc_ca_lightning_family",
+    "url": "Lightning/1/",
+    "endpoint_type": "tile_layer",
+    "source_confidence": "medium",
+    "notes": "Direct string in the bundle for lightning data family."
+  },
+  {
+    "endpoint_id": "weather_gc_ca_lightning_metadata_family",
+    "url": "Lightning/metadata/1",
+    "endpoint_type": "api_json",
+    "source_confidence": "medium",
+    "notes": "Direct string in the bundle for lightning metadata family."
+  },
+  {
+    "endpoint_id": "weather_gc_ca_lightning_radar_family",
+    "url": "radar.3978/",
+    "endpoint_type": "tile_layer",
+    "source_confidence": "low",
+    "notes": "Radar family string appears in the same chunk."
+  }
+]

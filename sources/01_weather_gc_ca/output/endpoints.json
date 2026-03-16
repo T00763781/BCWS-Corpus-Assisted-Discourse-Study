@@ -1,0 +1,51 @@
+[
+  {
+    "endpoint_id": "weather_gc_ca_page",
+    "url": "https://weather.gc.ca/",
+    "endpoint_type": "page_document",
+    "source_confidence": "high",
+    "notes": "Primary SSR page document."
+  },
+  {
+    "endpoint_id": "weather_gc_ca_main_js",
+    "url": "https://weather.gc.ca/vue/ssr/js/main.310e9f420cc9f3c47991.js",
+    "endpoint_type": "page_asset",
+    "source_confidence": "high",
+    "notes": "Main Vue SSR bundle for the weather portal."
+  },
+  {
+    "endpoint_id": "weather_gc_ca_weather_chunk",
+    "url": "https://weather.gc.ca/vue/ssr/js/chunk-c299a0f6.310e9f420cc9f3c47991.js",
+    "endpoint_type": "page_asset",
+    "source_confidence": "high",
+    "notes": "Bundle contains lightning/radar strings and alert-related route handling."
+  },
+  {
+    "endpoint_id": "weather_gc_ca_warning_summaries",
+    "url": "https://weather.gc.ca/warnings/weathersummaries_e.html",
+    "endpoint_type": "data_endpoint",
+    "source_confidence": "medium",
+    "notes": "Warning summary document family referenced by bundle/page state."
+  },
+  {
+    "endpoint_id": "weather_gc_ca_lightning_family",
+    "url": "Lightning/1/",
+    "endpoint_type": "tile_layer",
+    "source_confidence": "low",
+    "notes": "Relative lightning family string found in the bundle; host/path resolution remains uncertain from page-only recon."
+  },
+  {
+    "endpoint_id": "weather_gc_ca_lightning_metadata_family",
+    "url": "Lightning/metadata/1",
+    "endpoint_type": "api_json",
+    "source_confidence": "low",
+    "notes": "Relative lightning metadata family string found in the bundle; host/path resolution remains uncertain from page-only recon."
+  },
+  {
+    "endpoint_id": "weather_gc_ca_radar_family",
+    "url": "radar.3978/",
+    "endpoint_type": "tile_layer",
+    "source_confidence": "low",
+    "notes": "Relative radar family string found in the bundle."
+  }
+]

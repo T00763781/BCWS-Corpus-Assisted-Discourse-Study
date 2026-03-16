@@ -1,0 +1,71 @@
+- source_id: weather_gc_ca
+  status: preliminary
+  recon_completed: true
+  specimen_count: 4
+  endpoint_count: 7
+  widget_candidate_count: 3
+  recommendation: maybe
+  notes: SSR weather portal. Bundle strings expose warning, radar, and lightning families, but several layer paths remain only partially resolved from bounded recon.
+
+- source_id: bcws_dashboard
+  status: preliminary
+  recon_completed: true
+  specimen_count: 5
+  endpoint_count: 9
+  widget_candidate_count: 4
+  recommendation: pursue
+  notes: Shared Angular shell references multiple NRS API families. Public ArcGIS perimeter, road safety, and recreation closure layers were directly verified.
+
+- source_id: bcws_map
+  status: preliminary
+  recon_completed: true
+  specimen_count: 5
+  endpoint_count: 7
+  widget_candidate_count: 4
+  recommendation: pursue
+  notes: Map route shares the same BCWS shell and ArcGIS layer families as the dashboard route. Bundle references unresolved NRS service families.
+
+- source_id: bcws_list
+  status: preliminary
+  recon_completed: true
+  specimen_count: 3
+  endpoint_count: 7
+  widget_candidate_count: 3
+  recommendation: pursue
+  notes: List route shares the BCWS Angular shell and published incident family references. Public perimeter layer metadata was verified.
+
+- source_id: bcgov_weather_maps
+  status: preliminary
+  recon_completed: true
+  specimen_count: 5
+  endpoint_count: 9
+  widget_candidate_count: 3
+  recommendation: pursue
+  notes: BC Gov content page links to a concrete ArcGIS web app and web map. Weather stations, fire zones, and fire centre boundary layers were directly identified from app data.
+
+- source_id: weather_gc_ca_lightning
+  status: preliminary
+  recon_completed: true
+  specimen_count: 2
+  endpoint_count: 5
+  widget_candidate_count: 3
+  recommendation: pursue
+  notes: Lightning-focused route exposes the same WeatherGC bundle family with explicit lightning route state. Concrete lightning layer host resolution still needs deeper validation.
+
+- source_id: firesmoke_fireweather_current
+  status: preliminary
+  recon_completed: true
+  specimen_count: 4
+  endpoint_count: 5
+  widget_candidate_count: 3
+  recommendation: pursue
+  notes: Public FireSmoke page exposes a zone JSON specimen and references GeoMET and air quality tile families through its JS layer controller.
+
+- source_id: bcgov_arcgis_mapviewer
+  status: preliminary
+  recon_completed: true
+  specimen_count: 2
+  endpoint_count: 5
+  widget_candidate_count: 2
+  recommendation: deprioritize
+  notes: Naked ArcGIS Map Viewer shell exposed only generic runtime asset and service families. No concrete map item or operational layer was identified in bounded recon.

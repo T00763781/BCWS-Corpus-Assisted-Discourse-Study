@@ -1,0 +1,81 @@
+<!DOCTYPE html><html lang="en"><head><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <base href="/">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="utf-8">
+    <meta name="description" content="BC Wildfire Service App">
+    <meta property="og:title" content="BC Wildfire Service">
+    <meta property="og:image" content="assets/images/share-wildfire.png">
+    <meta property="og:site_name" content="BC Wildfire Service">
+    <meta property="og:description" content="BC Wildfire Service App">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@BCGovFireInfo'">
+    <meta name="twitter:image" content="assets/images/share-wildfire.png">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <link rel="icon" type="image/x-icon" href="favicon.png">
+    <style type="text/css">@font-face{font-family:'Material Icons';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/materialicons/v145/flUhRq6tzZclQEJ-Vdg-IuiaDsNcIhQ8tQ.woff2) format('woff2');}@font-face{font-family:'Material Icons Outlined';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/materialiconsoutlined/v110/gok-H7zzDkdnRel8-DQ6KAXJ69wP1tGnf4ZGhUcel5euIg.woff2) format('woff2');}@font-face{font-family:'Material Icons Round';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/materialiconsround/v109/LDItaoyNOAY6Uewc665JcIzCKsKc_M9flwmPq_HTTw.woff2) format('woff2');}@font-face{font-family:'Material Icons Sharp';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/materialiconssharp/v110/oPWQ_lt5nv4pWNJpghLP75WiFR4kLh3kvmvRImcycg.woff2) format('woff2');}@font-face{font-family:'Material Icons Two Tone';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/materialiconstwotone/v113/hESh6WRmNCxEqUmNyh3JDeGxjVVyMg4tHGctNCu0NjbrHg.woff2) format('woff2');}body{--google-font-color-materialiconstwotone:none;}.material-icons{font-family:'Material Icons';font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}.material-icons-outlined{font-family:'Material Icons Outlined';font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}.material-icons-round{font-family:'Material Icons Round';font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}.material-icons-sharp{font-family:'Material Icons Sharp';font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}.material-icons-two-tone{font-family:'Material Icons Two Tone';font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}</style>
+    <style type="text/css">@font-face{font-family:'Material Icons';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/materialicons/v145/flUhRq6tzZclQEJ-Vdg-IuiaDsNcIhQ8tQ.woff2) format('woff2');}.material-icons{font-family:'Material Icons';font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}</style>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="assets/icons/icon-128x128.png">
+    <meta name="theme-color" content="#1976d2">
+
+    <link rel="preconnect" href="https://maps.int.bcwildfireservices.com">
+    <link rel="preconnect" href="https://openmaps.gov.bc.ca">
+    <link rel="preconnect" href="https://www2.gov.bc.ca">
+    <link rel="preconnect" href="https://spt.apps.gov.bc.ca">
+    <link rel="preconnect" href="https://tile.openstreetmap.org">
+    <!-- meta http-equiv="Content-Security-Policy" content="
+      default-src 'self' 'unsafe-inline';
+      img-src https://* 'self' data:;
+      script-src 'self';
+      font-src 'self' https://fonts.gstatic.com;
+      style-src 'self' https://fonts.googleapis.com" -->
+
+    <script src="assets/splash-screen/index.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://www.gstatic.com/charts/loader.js"></script>
+    <!-- script>SPLASH_SCREEN.show( { title: 'NEWS' } )</script -->
+    <!-- Snowplow starts plowing - Standalone vE.2.14.0 -->
+    <script type="text/javascript">
+      ;(function(p,l,o,w,i,n,g){if(!p[i]){p.GlobalSnowplowNamespace=p.GlobalSnowplowNamespace||[];
+      p.GlobalSnowplowNamespace.push(i);p[i]=function(){(p[i].q=p[i].q||[]).push(arguments)
+      };p[i].q=p[i].q||[];n=l.createElement(o);g=l.getElementsByTagName(o)[0];n.async=1;
+      n.src=w;g.parentNode.insertBefore(n,g)}}(window,document,"script","https://www2.gov.bc.ca/StaticWebResources/static/sp/sp-2-14-0.js","snowplow"));
+      var collector = 'spt.apps.gov.bc.ca';
+      window.snowplow('newTracker','rt',collector, {
+        appId: 'Snowplow_standalone_WFNEWS',
+        cookieLifetime: 86400 * 548,
+        platform: 'web',
+        post: true,
+        forceSecureTracker: true,
+        contexts: {
+          webPage: true,
+          performanceTiming: true
+        }
+      });
+      window.snowplow('enableActivityTracking', 30, 30); // Ping every 30 seconds after 30 seconds
+      window.snowplow('enableLinkClickTracking');
+      window.snowplow('trackPageView');
+    </script>
+  <!-- Snowplow stops plowing -->
+<style>body{margin:0}*{-webkit-tap-highlight-color:transparent}:root{--sat:env(safe-area-inset-top, 20px);--sar:env(safe-area-inset-right);--sab:env(safe-area-inset-bottom, 20px);--sal:env(safe-area-inset-left)}html{font-family:BCSans,Open Sans,Verdana,Arial,sans-serif!important;--mdc-typography-font-family:$font-family-main;--mdc-typography-button-letter-spacing:.5px}</style><link rel="stylesheet" href="styles.7acfd707bedba332.css" media="print" onload="this.media='all'"><noscript><link rel="stylesheet" href="styles.7acfd707bedba332.css"></noscript></head>
+
+<body>
+    <app-root id="app-root">
+    </app-root>
+<script src="runtime.8a5e6919cf328264.js" type="module"></script><script src="polyfills.c14e9a64c278b01e.js" type="module"></script><script src="scripts.4197bfc965508f21.js" defer></script><script src="main.da9882e70a9138f1.js" type="module"></script>
+
+<template id="wf-weather-station-feature-template">
+  <div class="wf-weather-station-feature">
+      <div class="smk-bespoke-content" v-content="content"></div>
+  </div>
+</template>
+
+<template id="wf-incident-feature-template">
+  <div class="wf-incident-feature">
+    <div class="smk-bespoke-content" v-content="content"></div>
+  </div>
+</template>
+
+
+</body></html>

@@ -1,0 +1,37 @@
+{
+  "source_id": "firesmoke_fireweather_current",
+  "specimens": [
+    {
+      "url": "https://firesmoke.ca/forecasts/fireweather/current/",
+      "saved": true,
+      "path": "specimens\\https_firesmoke_ca_forecasts_fireweather_current.html",
+      "status": 200,
+      "content_type": "text/html",
+      "error": null
+    },
+    {
+      "url": "https://firesmoke.ca/static/json/fwf-zone-merge.json",
+      "saved": true,
+      "path": "specimens\\https_firesmoke_ca_static_json_fwf_zone_merge_json.json",
+      "status": 200,
+      "content_type": "application/json",
+      "error": null
+    },
+    {
+      "url": "https://firesmoke.ca/static/js/fwf-layer-controler-0.0.6.min.js",
+      "saved": true,
+      "path": "specimens\\https_firesmoke_ca_static_js_fwf_layer_controler_0_0_6_min_js.js",
+      "status": 200,
+      "content_type": "application/javascript",
+      "error": null
+    },
+    {
+      "url": "https://geo.weather.gc.ca/geomet?f=pjson",
+      "saved": true,
+      "path": "specimens\\https_geo_weather_gc_ca_geomet_f_pjson.xml",
+      "status": 200,
+      "content_type": "text/xml",
+      "error": null
+    }
+  ]
+}

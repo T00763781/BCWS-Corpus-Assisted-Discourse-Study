@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <!-- Web Experience Toolkit (WET) / Boîte à outils de l'expérience Web (BOEW)
+    wet-boew.github.io/wet-boew/License-en.html / wet-boew.github.io/wet-boew/Licence-fr.html -->
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <meta name="dcterms.creator" content="Environment Canada">
+    <meta name="dcterms.language" title="ISO639-2" content="eng">
+<title>Weather Summaries - Environment Canada</title>
+<meta name="dcterms.title" content="Weather Summaries - Environment Canada" />
+<meta name="description" content="Weather summaries are issued to provide a post-event summary of a significant weather event. For example, an intense winter storm that produced heavy snowfalls. The Bulletin is issued as needed. Updates to the Bulletin are also issued as needed." />
+<meta name="dcterms.subject" title="scheme" content="Meteorology; Weather" />
+<meta name="dcterms.issued" title="W3CDTF" content="2013-08-06" />
+<meta name="dcterms.modified" title="W3CDTF" content="2026-03-04" />
+<link href="/template/gcweb/v15.0.0/GCWeb/assets/favicon.ico" rel="icon" type="image/x-icon">
+<link rel="stylesheet" href="/template/gcweb/v15.0.0/GCWeb/css/theme.min.css">
+<noscript><link rel="stylesheet" href="/template/gcweb/v15.0.0/wet-boew/css/noscript.min.css"></noscript>
+<link rel="stylesheet" href="/204/css/city/jquery-ui-1.10.3.custom.min.css">
+<link rel="stylesheet" href="/204/css/base.css">
+<link rel="stylesheet" href="/204/css/wxotemplate/wxo.css">
+<link rel="stylesheet" href="/204/css/wxotemplate/outdated.css">
+<link rel="stylesheet" href="/204/css/wxotemplate/print-sm.css">
+<link rel="stylesheet" href="/204/vue/mwp/profileBanner.css">
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-KRTDXYDHQP"></script>
+<script>
+(function () {
+  'use strict';
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function () {
+    window.dataLayer.push(arguments);
+  };
+  window.gtag('js', new Date());
+
+  window.gtag('config', 'G-KRTDXYDHQP');
+}());
+</script>
+<!-- Google Tag Manager -->
+<script>
+(function (w,d,s,l,i) {
+  'use strict';
+  w[l] = w[l] || [];
+  w[l].push({'gtm.start': new Date().getTime(), event: 'gtm.js'});
+  var f = d.getElementsByTagName(s)[0];
+  var j = d.createElement(s);
+  var dl = l != 'dataLayer' ? '&l=' + l : '';
+  j.async = true;
+  j.src = 'https://www.googletagmanager.com/gtm.js?id=' + i + dl;
+  f.parentNode.insertBefore(j,f);
+}(window, window.document, 'script', 'dataLayer', 'GTM-MLV9G4T'));
+</script>
+<!-- End Google Tag Manager -->
+</head>
+<body class="secondary" vocab="http://schema.org/" typeof="WebPage">
+<ul id="wb-tphp">
+  <li class="wb-slc">
+    <a class="wb-sl" href="#wb-cont">Skip to main content</a>
+  </li>
+  <li class="wb-slc visible-sm visible-md visible-lg">
+    <a class="wb-sl" href="#wb-info">Skip to "About government"</a>
+  </li>
+</ul>
+<header>
+  <div id="wb-bnr" class="container">
+    <section id="wb-lng" class="text-right">
+      <h2 class="wb-inv">Language selection</h2>
+      <ul class="list-inline margin-bottom-none">
+        <li>
+          <a href="/include/lang.php" hreflang="fr" rel="alternate">
+            Français          </a>
+        </li>
+      </ul>
+    </section>
+    <div class="row">
+      <div class="brand col-xs-5 col-md-4">
+        <a href="http://www.canada.ca/en.html" hreflang="en" rel="external">
+          <img src="/template/gcweb/v15.0.0/GCWeb/assets/sig-blk-en.svg" alt="">
+          <span class="wb-inv">
+            Government of Canada /
+            <span lang="fr">Gouvernement du Canada</span>
+          </span>
+        </a>
+      </div>
+      <section id="wb-srch" class="col-lg-8 text-right">
+        <h2>Search</h2>
+        <form action="https://www.canada.ca/en/environment-climate-change/weather/search.html" method="get"
+        name="cse-search-box" role="search" class="form-inline">
+          <div class="form-group">
+            <label for="wb-srch-q" class="wb-inv">Search website</label>
+            <input id="wb-srch-q" list="wb-srch-q-ac" class="wb-srch-q form-control" name="q"
+            type="search" value="" size="27" maxlength="150" placeholder="Search Canada.ca">
+            <datalist id="wb-srch-q-ac">
+            </datalist>
+          </div>
+          <div class="form-group submit">
+            <button type="submit" id="wb-srch-sub" class="btn btn-primary btn-small" name="wb-srch-sub">
+              <span class="glyphicon-search glyphicon"></span>
+              <span class="wb-inv">Search</span>
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </div>
+  <nav id="wb-bc" property="breadcrumb">
+    <h2>You are here:</h2>
+    <div class="container">
+      <ol class="breadcrumb">
+          <li><a href="http://www.canada.ca/en.html" hreflang="en">Canada.ca</a></li>
+<li><a href="/index_e.html">Weather information</a></li>
+<li><a href="/mainmenu/alert_menu_e.html">Alerts</a></li>
+
+      </ol>
+    </div>
+  </nav>
+</header>
+
+<!-- 4127 -->
+<div class="container hidden-print">
+  <div class="mrgn-tp-sm">
+      <span class="pull-right profile-link mrgn-rght-sm mrgn-bttm-sm hidden">
+      <a class="btn btn-default btn-sm ga-mwp" role="button"
+    href="/myprofile/index_e.html">My Weather Profile      </a>
+    </span>
+      <span class="pull-right mrgn-rght-sm mrgn-bttm-sm">
+      <a href="#favourites-panel" aria-controls="favourites-panel"
+      class="btn btn-default btn-sm overlay-lnk" id="weather-shortcuts-link">Weather shortcuts</a>
+    </span>
+    <div class="pull-right mrgn-rght-sm mrgn-bttm-lg">
+      <form role="search" id="cityjump" method="GET"
+      action="/city/jump_e.html">
+        <label id="search-label" for="city" accesskey="g" class="wb-inv">Access city</label>
+        <input id="city" type="text" name="city" pattern=".{2,}" required
+        title="Please enter at least two characters"
+        placeholder="Find a location">
+        <button type="submit" id="jump" value="Go" class="btn btn-default btn-sm">Go</button>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="clearfix"></div>
+
+<div id='collapsible-alerts' class='container'></div>
+<div class="clearfix"></div>
+<main property="mainContentOfPage" class="container">
+
+<section>
+   <div class="row profile">
+    <div class="col-md-12">
+      <h1 property="name" id="wb-cont">Weather Summaries</h1>
+      <p class="pagetag hidden-xs hidden-sm">Choose a Province or Territory</p>
+    </div>
+  </div>
+  <div class="row col-md-12 hidden-xs">
+       <ul class="province-nav-desktop list-inline hidden-xs hidden-sm"><li><a title="Alberta" href="/warnings/weathersummaries_e.html#AB"><span class="wb-inv">Alberta</span>AB</a></li> 
+<li><a title="British Columbia" href="/warnings/weathersummaries_e.html#BC"><span class="wb-inv">British Columbia</span>BC</a></li> 
+<li><a title="Manitoba" href="/warnings/weathersummaries_e.html#MB"><span class="wb-inv">Manitoba</span>MB</a></li> 
+<li><a title="New Brunswick" href="/warnings/weathersummaries_e.html#NB"><span class="wb-inv">New Brunswick</span>NB</a></li> 
+<li><a title="Newfoundland and Labrador" href="/warnings/weathersummaries_e.html#NL"><span class="wb-inv">Newfoundland and Labrador</span>NL</a></li> 
+<li><a title="Nova Scotia" href="/warnings/weathersummaries_e.html#NS"><span class="wb-inv">Nova Scotia</span>NS</a></li> 
+<li><a title="Northwest Territories" href="/warnings/weathersummaries_e.html#NT"><span class="wb-inv">Northwest Territories</span>NT</a></li> 
+<li><a title="Nunavut" href="/warnings/weathersummaries_e.html#NU"><span class="wb-inv">Nunavut</span>NU</a></li> 
+<li><a title="Ontario" href="/warnings/weathersummaries_e.html#ON"><span class="wb-inv">Ontario</span>ON</a></li> 
+<li><a title="Prince Edward Island" href="/warnings/weathersummaries_e.html#PE"><span class="wb-inv">Prince Edward Island</span>PE</a></li> 
+<li><a title="Quebec" href="/warnings/weathersummaries_e.html#QC"><span class="wb-inv">Quebec</span>QC</a></li> 
+<li><a title="Saskatchewan" href="/warnings/weathersummaries_e.html#SK"><span class="wb-inv">Saskatchewan</span>SK</a></li> 
+<li><a title="Yukon" href="/warnings/weathersummaries_e.html#YT"><span class="wb-inv">Yukon</span>YT</a></li> 
+</ul>
+<details class="hidden-md hidden-lg"><summary>Choose a Province or Territory</summary><ul class="list-unstyled wxo-btn"><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#AB">Alberta</a></li><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#BC">British Columbia</a></li><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#MB">Manitoba</a></li><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#NB">New Brunswick</a></li><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#NL">Newfoundland and Labrador</a></li><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#NT">Northwest Territories</a></li><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#NS">Nova Scotia</a></li><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#NU">Nunavut</a></li><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#ON">Ontario</a></li><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#PE">Prince Edward Island</a></li><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#QC">Quebec</a></li><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#SK">Saskatchewan</a></li><li><a class="btn btn-default btn-sm btn-block" role="button" href="/warnings/weathersummaries_e.html#YT">Yukon</a></li></ul></details>  </div>
+
+
+
+<section id="AB"><div class="hidden-xs"><h2>ALBERTA</h2><p>No weather summaries at this time.</p>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details >
+<summary>Alberta</summary><p>No weather summaries at this time.</p>
+</details></div></section><section id="BC"><div class="hidden-xs"><h2>BRITISH COLUMBIA</h2><div><!--AWCN11 CWVR 160124-->
+<strong>AWCN11 CWVR</strong><pre class="bulletintext">
+Weather summary
+for British Columbia
+issued by Environment Canada
+at 6:24 p.m. PDT Sunday 15 March 2026.
+
+Discussion.
+
+The following area will have set a daily minimum temperature record 
+on March 15, 2026 (temperature values given in degrees Celsius): 
+
+PENTICTON AREA (Penticton A) 
+Preliminary new record of -7.7 
+Old record of -7.0 set in 2020 
+Records in this area have been kept since 1907 
+
+Note: the temperature record reported here has been derived from a 
+selection of historical stations in this geographic area that were 
+active during the period of record.
+
+Please note that this summary may contain preliminary or unofficial 
+information and does not constitute a complete or final report.
+
+End/PSPC
+
+</pre>
+</div>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details open >
+<summary>British Columbia</summary><div><!--AWCN11 CWVR 160124-->
+<strong>AWCN11 CWVR</strong><pre class="bulletintext">
+Weather summary
+for British Columbia
+issued by Environment Canada
+at 6:24 p.m. PDT Sunday 15 March 2026.
+
+Discussion.
+
+The following area will have set a daily minimum temperature record 
+on March 15, 2026 (temperature values given in degrees Celsius): 
+
+PENTICTON AREA (Penticton A) 
+Preliminary new record of -7.7 
+Old record of -7.0 set in 2020 
+Records in this area have been kept since 1907 
+
+Note: the temperature record reported here has been derived from a 
+selection of historical stations in this geographic area that were 
+active during the period of record.
+
+Please note that this summary may contain preliminary or unofficial 
+information and does not constitute a complete or final report.
+
+End/PSPC
+
+</pre>
+</div>
+</details></div></section><section id="MB"><div class="hidden-xs"><h2>MANITOBA</h2><p>No weather summaries at this time.</p>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details >
+<summary>Manitoba</summary><p>No weather summaries at this time.</p>
+</details></div></section><section id="NB"><div class="hidden-xs"><h2>NEW BRUNSWICK</h2><p>No weather summaries at this time.</p>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details >
+<summary>New Brunswick</summary><p>No weather summaries at this time.</p>
+</details></div></section><section id="NL"><div class="hidden-xs"><h2>NEWFOUNDLAND AND LABRADOR</h2><p>No weather summaries at this time.</p>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details >
+<summary>Newfoundland and Labrador</summary><p>No weather summaries at this time.</p>
+</details></div></section><section id="NS"><div class="hidden-xs"><h2>NOVA SCOTIA</h2><p>No weather summaries at this time.</p>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details >
+<summary>Nova Scotia</summary><p>No weather summaries at this time.</p>
+</details></div></section><section id="NT"><div class="hidden-xs"><h2>NORTHWEST TERRITORIES</h2><p>No weather summaries at this time.</p>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details >
+<summary>Northwest Territories</summary><p>No weather summaries at this time.</p>
+</details></div></section><section id="NU"><div class="hidden-xs"><h2>NUNAVUT</h2><p>No weather summaries at this time.</p>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details >
+<summary>Nunavut</summary><p>No weather summaries at this time.</p>
+</details></div></section><section id="ON"><div class="hidden-xs"><h2>ONTARIO</h2><p>No weather summaries at this time.</p>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details >
+<summary>Ontario</summary><p>No weather summaries at this time.</p>
+</details></div></section><section id="PE"><div class="hidden-xs"><h2>PRINCE EDWARD ISLAND</h2><p>No weather summaries at this time.</p>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details >
+<summary>Prince Edward Island</summary><p>No weather summaries at this time.</p>
+</details></div></section><section id="QC"><div class="hidden-xs"><h2>QUEBEC</h2><p>No weather summaries at this time.</p>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details >
+<summary>Quebec</summary><p>No weather summaries at this time.</p>
+</details></div></section><section id="SK"><div class="hidden-xs"><h2>SASKATCHEWAN</h2><p>No weather summaries at this time.</p>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details >
+<summary>Saskatchewan</summary><p>No weather summaries at this time.</p>
+</details></div></section><section id="YT"><div class="hidden-xs"><h2>YUKON</h2><p>No weather summaries at this time.</p>
+</div>
+<div class="hidden-sm hidden-md hidden-lg"><details >
+<summary>Yukon</summary><p>No weather summaries at this time.</p>
+</details></div></section>
+
+
+</section>
+<section id="favourites-panel" class="modal-content overlay-def wb-overlay wb-panel-r"> <header class="modal-header"> <h2 class="modal-title">Weather shortcuts</h2> </header> <div class="modal-body"> <div id="favourites-div-addorg"> <button type="button" id="favourites-btn-add" class="btn btn-default btn-sm pull-left">Add to shortcuts</button> <button type="button" id="favourites-btn-organize" class="btn btn-default btn-sm pull-right">Organize shortcuts</button> <div class="clearfix"></div> <br> </div> <section id="favourites-div-panel"> <header id="favourites-div-heading" class="hidden panel-heading"> <h3 class="panel-title">Organize Shortcuts</h3> </header> <div id="favourites-div-body"> <div class="clearfix"></div> <p id="favourites-txt-description" class="hidden small text-center">Select to drag and drop, rename or delete.</p> <div class="clearfix"></div> <h4 id="favourites-txt-none" class="hidden text-center">No shortcuts</h4> <div class="clearfix"></div> <ul id="favourites-list"> <li data-href="https://www.canada.ca/en/environment-climate-change/services/report-severe-weather/overview.html"> <a href="https://www.canada.ca/en/environment-climate-change/services/report-severe-weather/overview.html" hreflang="en" rel="external">Report Severe Weather</a> </li> <li data-href="/canada_e.html"> <a href="/canada_e.html" hreflang="en">Canadian Weather</a> </li> <li data-href="/index_e.html?layers=,radar"> <a href="/index_e.html?layers=,radar" hreflang="en">Weather Radar - Canada</a> </li> <li data-href="/satellite/index_e.html"> <a href="/satellite/index_e.html" hreflang="en">Satellite - Canada</a> </li> <li data-href="/marine/index_e.html"> <a href="/marine/index_e.html" hreflang="en">Marine - Canada</a> </li> <li data-href="/mainmenu/airquality_menu_e.html"> <a href="/mainmenu/airquality_menu_e.html" hreflang="en">Air Quality</a> </li> <li data-href="https://www.canada.ca/en/environment-climate-change/services/ice-forecasts-observations/latest-conditions.html"> <a href="https://www.canada.ca/en/environment-climate-change/services/ice-forecasts-observations/latest-conditions.html" hreflang="en" rel="external">Canadian Ice Service</a> </li> <li data-href="/saisons/index_e.html"> <a href="/saisons/index_e.html" hreflang="en">Seasonal forecasts</a> </li> <li data-href="/forecast/public_bulletins_e.html"> <a href="/forecast/public_bulletins_e.html" hreflang="en">Extended forecast</a> </li> <li data-href="/index_e.html?layers=alert"> <a href="/index_e.html?layers=alert" hreflang="en">Public Alerts - Canada</a> </li> <li data-href="/index_e.html?layers=,,lightning"> <a href="/index_e.html?layers=,,lightning" hreflang="en">Lightning</a> </li> <li data-href="/hurricane/index_e.html"> <a href="/hurricane/index_e.html" hreflang="en">Hurricane</a> </li> <li data-href="/warnings/weathersummaries_e.html"> <a href="/warnings/weathersummaries_e.html" hreflang="en">Weather Summaries</a> </li> <li data-href="https://www.canada.ca/en/environment-climate-change/services/seasonal-weather-hazards.html"> <a href="https://www.canada.ca/en/environment-climate-change/services/seasonal-weather-hazards.html" hreflang="en" rel="external">Hazardous Weather</a> </li> <li data-href="/model_forecast/model_e.html"> <a href="/model_forecast/model_e.html" hreflang="en">Global and Regional forecast models</a> </li> <li data-href="/astro/index_e.html"> <a href="/astro/index_e.html" hreflang="en">Astronomy</a> </li> <li data-href="https://www.canada.ca/en/environment-climate-change/services/water-overview/quantity/monitoring/survey.html"> <a href="https://www.canada.ca/en/environment-climate-change/services/water-overview/quantity/monitoring/survey.html" hreflang="en" rel="external">Water Level and Flow</a> </li> <li data-href="https://climate.weather.gc.ca/index_e.html"> <a href="https://climate.weather.gc.ca/index_e.html" hreflang="en" rel="external">Historical Climate Data</a> </li> <li data-href="https://flightplanning.navcanada.ca/cgi-bin/CreePage.pl?Langue=anglais&NoSession=NS_Inconnu&Page=forecast-observation&TypeDoc=html"> <a href="https://flightplanning.navcanada.ca/cgi-bin/CreePage.pl?Langue=anglais&NoSession=NS_Inconnu&Page=forecast-observation&TypeDoc=html" hreflang="en" rel="external">Aviation</a> </li> <li data-href="https://www.canada.ca/en/environment-climate-change/services/types-weather-forecasts-use/public/guide.html"> <a href="https://www.canada.ca/en/environment-climate-change/services/types-weather-forecasts-use/public/guide.html" hreflang="en" rel="external">Guide to Public forecasts</a> </li> <li data-href="https://www.canada.ca/en/environment-climate-change/services/general-marine-weather-information/publications/guide-forecasts.html"> <a href="https://www.canada.ca/en/environment-climate-change/services/general-marine-weather-information/publications/guide-forecasts.html" hreflang="en" rel="external">Guide to Marine forecasts</a> </li> <li data-href="https://www.canada.ca/en/environment-climate-change/services/weather-health/publications/guide-air-quality-index-forecasts.html"> <a href="https://www.canada.ca/en/environment-climate-change/services/weather-health/publications/guide-air-quality-index-forecasts.html" hreflang="en" rel="external">Guide to Air Quality forecasts</a> </li> <li data-href="https://climate-change.canada.ca/climate-library"> <a href="https://climate-change.canada.ca/climate-library" hreflang="en" rel="external">Canadian Centre for Climate Services Library</a> </li> <li data-href="/windchill/wind_chill_e.html"> <a href="/windchill/wind_chill_e.html" hreflang="en">Wind Chill and Humidex Calculators</a> </li> <li data-href="https://www.canada.ca/en/environment-climate-change/services/weather-health.html"> <a href="https://www.canada.ca/en/environment-climate-change/services/weather-health.html" hreflang="en" rel="external">Weather and your health</a> </li> </ul> <div id="favourites-add" class="hidden"> <div class="panel panel-default"> <div class="favourites-body panel-body"> <div> <span class="float-left glyphicon glyphicon-star" aria-hidden="true"></span> <h5>Add this page</h5> </div> <div class="clearfix"></div> <div class="favourites-add-body"> <label class="float-left">Name</label> <input type="text" id="favourites-text-name" class="favourites-add-text" maxlength="50"> </div> <div class="clearfix"></div> <button type="button" id="favourites-btn-save" class="btn btn-default btn-sm pull-left">Save</button> <button type="button" id="favourites-btn-cancel" class="btn btn-default btn-sm pull-right">Cancel</button> </div> </div> </div> <div class="clearfix"></div> <div class="col-lg-4 col-md-4 col-sm-4 col-xs-4"> <button type="button" id="favourites-btn-rename" class="btn btn-default btn-sm hidden" disabled>Rename</button> </div> <div class="col-lg-4 col-md-4 col-sm-4 col-xs-4"> <button type="button" id="favourites-btn-delete" class="btn btn-danger btn-sm hidden" disabled>Delete</button> </div> <div class="col-lg-4 col-md-4 col-sm-4 col-xs-4"> <button type="button" id="favourites-btn-close" class="btn btn-default btn-sm hidden">Save</button> </div> <div id="favourites-dlg-samename" class="popup-modal"> <div class="popup-modal-div"> <div class="popup-modal-header"> <span class="popup-modal-close pull-right">×</span> <h5 class="popup-modal-header-text">Add to shortcuts</h5> <div class="clearfix"></div> </div> <div class="popup-modal-content"> <p>The name you have entered for the shortcut already exists on your Weather shortcuts menu. Would you like to overwrite it?</p> <button type="button" class="btn btn-default btn-sm button-yes">Yes</button> <button type="button" class="btn btn-default btn-sm button-no pull-right">No</button> </div> </div> </div> <div id="favourites-dlg-renamematch" class="popup-modal"> <div class="popup-modal-div"> <div class="popup-modal-header"> <span class="popup-modal-close pull-right">×</span> <h5 class="popup-modal-header-text">Rename shortcut</h5> <div class="clearfix"></div> </div> <div class="popup-modal-content"> <p> There is already a shortcut with the same name in this list. Do you want to rename "<span id="replace-text1">link</span>" to "<span id="replace-text2">link(2)</span>"? </p> <button type="button" class="btn btn-default btn-sm button-yes">Yes</button> <button type="button" class="btn btn-default btn-sm button-no pull-right">No</button> </div> </div> </div> <div id="favourites-dlg-maxreached" class="popup-modal"> <div class="popup-modal-div"> <div class="popup-modal-header"> <span class="popup-modal-close pull-right">×</span> <h5 class="popup-modal-header-text">Add to shortcuts</h5> <div class="clearfix"></div> </div> <div class="popup-modal-content"> <p>Your shortcut list has reached the maximum size of 30</p> <button type="button" class="btn btn-default btn-sm button-close">Close</button> </div> </div> </div> </div> </section> <section class="panel panel-primary"> <header class="panel-heading"> <h5 class="panel-title">How to use</h5> </header> <div class="panel-body"> <div class="mwsbodytext parbase section text"> <ul class="list-unstyled"> <li> <details> <summary>Add to shortcuts</summary> <ul class="mrgn-lft-0"> <li class="mrgn-bttm-md">Go to the desired page on the site, open the Weather shortcuts menu and click on the "Add to shortcuts" button</li> <li class="mrgn-bttm-md">Page name will display in the "Add this page" window, the name can be changed by highlighting the text and entering the desired name</li> <li class="mrgn-bttm-md">Click on the "Save" button to add the link to the list</li> <li class="mrgn-bttm-md">Click on the "X" button to close the panel</li> </ul> </details> </li> <li> <details> <summary>Delete a link</summary> <ul class="mrgn-lft-0"> <li class="mrgn-bttm-md">Click on the "Organize shortcuts" button</li> <li class="mrgn-bttm-md">Select the link to delete</li> <li class="mrgn-bttm-md">Click on the "Delete" button to remove the link from the list</li> <li class="mrgn-bttm-md">Click on the "Close" button to save the change</li> </ul> </details> </li> <li> <details> <summary>Move a link up/down the list</summary> <ul class="mrgn-lft-0"> <li class="mrgn-bttm-md">Click on the "Organize shortcuts" button</li> <li class="mrgn-bttm-md">Click and hold the link and move to new location in the list</li> <li class="mrgn-bttm-md">Click on the "Close" button to save the change</li> </ul> </details> </li> <li> <details> <summary>Rename a link</summary> <ul class="mrgn-lft-0"> <li class="mrgn-bttm-md">Click on the "Organize shortcuts" button</li> <li class="mrgn-bttm-md">Select the link to rename</li> <li class="mrgn-bttm-md">Click on the "Rename" button and change the link name</li> <li class="mrgn-bttm-md">Click the enter or tab key</li> <li class="mrgn-bttm-md">Click on the "Close" button to save the change</li> </ul> </details> </li> <li> <details> <summary>Keyboard navigation</summary> <ul class="mrgn-lft-0"> <li class="mrgn-bttm-md"> Use the <kbd>Tab</kbd> key to move to a button or link </li> <li class="mrgn-bttm-md"> Use the <kbd>Enter</kbd> key to click on buttons or links </li> <li class="mrgn-bttm-md">Organize shortcuts navigation <ul class="mrgn-lft-0"> <li class="mrgn-bttm-md"> Use the <kbd><abbr title="Up Arrow">↑</abbr></kbd> Up key to select the link above. If none are selected, it will select the first link. </li> <li class="mrgn-bttm-md"> Use the <kbd><abbr title="Down Arrow">↓</abbr></kbd> Down key to select the link below. If none are selected, it will select the last link. </li> <li class="mrgn-bttm-md"> Use the <kbd>Page Up</kbd> key to move a selection up in the list. </li> <li class="mrgn-bttm-md"> Use the <kbd>Page Down</kbd> key to move a selection down in the list. </li> </ul> </li> </ul> </details> </li> <li> <details> <summary>Restore default list</summary> <div class="alert alert-warning"> <p><strong>Warning:</strong> Clicking on the button below will remove all your customized links.</p> </div> <button type="button" id="favourites-btn-reset" class="btn btn-default btn-sm center-block">Restore default links</button> </details> </li> </ul> </div> </div> </section> </div> </section><section id="confirm-favourites" class="hidden-print mfp-hide modal-content modal-dialog nojs-hide overlay-def"> <header class="modal-header"> <h2 class="modal-title">Customized Weather shortcuts</h2> </header> <div class="modal-body"> <p><strong>Save your customized list as a bookmark.</strong></p> <p>Copy/paste or click on the link below then when the page displays, you can bookmark the page using the web browser. Bookmarking your customized list will allow you to access it even if the local storage on your device is erased.</p> <div id="url6076" class="container-adjust"></div> </div> <div class="modal-footer"> <button class="btn btn-primary popup-modal-dismiss" type="button">Close</button> </div> </section><section class="gc-prtts"><h2>Features</h2><div class="row"><section class="col-md-12">
+<a rel="external" href="/redirect.php?url=http://www.canada.ca/en/services/environment/weather/severeweather/weather-alerts/colour-coded-alerts.html">
+<h3 class="h5">New: Colour-coded weather alerts</h3>
+<img class="img-responsive thumbnail mrgn-bttm-sm" src="/cacheable/images/banners/Rita_-_Feature_button_EN.jpg?ver=1769708917" alt="">
+</a>
+<p>Learn more about weather alerting in Canada</p></section></div></section>
+<div class="pagedetails container">
+  <div class="row">
+    <div class="col-sm-6 col-md-5 col-lg-4">
+      <a class="btn btn-default btn-block"
+      href="/mainmenu/contact_us_e.html" hreflang="en">
+        <span class="glyphicon glyphicon-comment mrgn-rght-sm"></span>
+        Feedback<span class="wb-inv">about this web site</span>
+      </a>
+    </div>
+  </div>
+  <dl id="wb-dtmd">
+    <dt>Date modified:</dt>
+    <dd>
+  <time property="dateModified">2026-03-04</time>
+  </dd>
+  </dl>
+</div>
+</main>
+<footer id="wb-info">
+    <h2 class="wb-inv">About this site</h2>
+    <div class="gc-contextual"><div class="container">
+    <nav>
+      <h3>Weather in Canada</h3>
+      <ul class="list-col-sm-2 list-col-md-3">
+                    <li>
+                        <a href="/mainmenu/contact_us_e.html" hreflang="en" rel="">
+                         Contact us                        </a>
+                    </li>
+                    <li>
+                        <a href="https://www.canada.ca/en/environment-climate-change/services/weather-general-tools-resources.html" hreflang="en" rel="external">
+                         Weather tools and resources                        </a>
+                    </li>
+                    <li>
+                        <a href="https://www.canada.ca/en/services/environment/weather/careers-meteorologist.html" hreflang="en" rel="external">
+                         Careers                        </a>
+                    </li>
+      </ul>
+    </nav>
+    </div></div>
+
+    <div class="gc-main-footer">
+        <div class="container">
+            <nav>
+                <h3>Government of Canada</h3>
+                <ul class="list-col-sm-2 list-col-md-3">
+                                    <li>
+                        <a href="https://www.canada.ca/en/contact.html" hreflang="en" rel="external">
+                        All contacts                        </a>
+                    </li>
+                                    <li>
+                        <a href="https://www.canada.ca/en/government/dept.html" hreflang="en" rel="external">
+                        Departments and agencies                        </a>
+                    </li>
+                                    <li>
+                        <a href="https://www.canada.ca/en/government/system.html" hreflang="en" rel="external">
+                        About government                        </a>
+                    </li>
+                                </ul>
+                <h4><span class="wb-inv">Themes and topics</span></h4>
+                <ul class="list-unstyled colcount-sm-2 colcount-md-3">
+                         <li>
+           <a href="https://www.canada.ca/en/services/jobs.html" hreflang="en" rel="external">
+             Jobs           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/immigration-citizenship.html" hreflang="en" rel="external">
+             Immigration and citizenship           </a>
+         </li>
+                         <li>
+           <a href="https://travel.gc.ca/" hreflang="en" rel="external">
+             Travel and tourism           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/business.html" hreflang="en" rel="external">
+             Business           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/benefits.html" hreflang="en" rel="external">
+             Benefits           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/health.html" hreflang="en" rel="external">
+             Health           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/taxes.html" hreflang="en" rel="external">
+             Taxes           </a>
+         </li>
+                         <li>
+           <a href="http://www.canada.ca/en/services/environment.html" hreflang="en" rel="external">
+             Environment and natural resources           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/defence.html" hreflang="en" rel="external">
+             National security and defence           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/culture.html" hreflang="en" rel="external">
+             Culture, history and sport           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/policing.html" hreflang="en" rel="external">
+             Policing, justice and emergencies           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/transport.html" hreflang="en" rel="external">
+             Transport and infrastructure           </a>
+         </li>
+                         <li>
+           <a href="http://international.gc.ca/world-monde/index.aspx?lang=eng" hreflang="en" rel="external">
+             Canada and the world           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/finance.html" hreflang="en" rel="external">
+             Money and finance           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/science.html" hreflang="en" rel="external">
+             Science and innovation           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/indigenous-peoples.html" hreflang="en" rel="external">
+             Indigenous peoples           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/veterans-military.html" hreflang="en" rel="external">
+             Veterans and military           </a>
+         </li>
+                         <li>
+           <a href="https://www.canada.ca/en/services/youth.html" hreflang="en" rel="external">
+             Youth           </a>
+         </li>
+                      </ul>
+            </nav>
+        </div>
+    </div>
+
+    <div class="gc-sub-footer">
+        <div class="container d-flex align-items-center">
+            <nav>
+                <h3 class="wb-inv">Government of Canada Corporate</h3>
+                <ul>
+          <li>
+           <a href="https://www.canada.ca/en/social.html" hreflang="en" rel="external">Social media</a>
+         </li>
+          <li>
+           <a href="https://www.canada.ca/en/mobile.html" hreflang="en" rel="external">Mobile applications</a>
+         </li>
+          <li>
+           <a href="https://www.canada.ca/en/government/about.html" hreflang="en" rel="external">About Canada.ca</a>
+         </li>
+          <li>
+           <a href="https://www.canada.ca/en/transparency/terms.html" hreflang="en" rel="external">Terms and conditions</a>
+         </li>
+          <li>
+           <a href="https://www.canada.ca/en/transparency/privacy.html" hreflang="en" rel="external">Privacy</a>
+         </li>
+       </ul>
+            </nav>
+            <div class="wtrmrk align-self-end">
+                <img src="/template/gcweb/v15.0.0/GCWeb/assets/wmms-blk.svg" alt="Symbol of the Government of Canada">
+            </div>
+        </div>
+    </div>
+</footer>
+<script src="/204/js/sanitizeurl.js"></script>
+<script src="/template/gcweb/v15.0.0/wet-boew/js/jquery/2.2.4/jquery.min.js"></script>
+<script src="/template/gcweb/v15.0.0/wet-boew/js/wet-boew.min.js"></script>
+<script src="/template/gcweb/v15.0.0/GCWeb/js/theme.min.js"></script>
+<script src="/204/js/city/jquery-ui-1.10.3.custom.min.js"></script>
+<script src="/204/js/shared-js/sortable-1.7.min.js"></script>
+<script src="/204/js/shared-js/modals-1.0.min.js"></script>
+<script src="/204/js/myprofile/jquery.query-object.js"></script>
+<script src="/204/js/favourites/favourites-1.7.min.js"></script>
+<script src="/204/vue/mwp/profileBanner.umd.min.js"></script>
+</body>
+</html>

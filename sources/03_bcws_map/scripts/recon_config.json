@@ -1,0 +1,42 @@
+{
+  "source_id": "bcws_map",
+  "source_label": "BC Wildfire Situation Map",
+  "canonical_url": "https://wildfiresituation.nrs.gov.bc.ca/map",
+  "what_page_provides": "Map-first route inside the same BC Wildfire Service Angular shell used by dashboard and list.",
+  "likely_endpoint_families": [
+    "Same NRS API families as the dashboard route: published incidents, notifications, situation reports, attachments, and file metadata.",
+    "Same public ArcGIS service families for fire perimeters, forest service road safety, and recreation closures.",
+    "Bundle references BC geocoder and ArcGIS basemap families for map interaction."
+  ],
+  "likely_layer_families": [
+    "Fire perimeter feature layer.",
+    "Forest service road safety feature layer.",
+    "Recreation site closure feature layer.",
+    "ArcGIS basemap and vector tile families."
+  ],
+  "auth_notes": "Public shell. ArcGIS layers are accessible. Bundle-level NRS API families remain unresolved by DNS from this environment.",
+  "confidence": "medium",
+  "recommendation": "pursue",
+  "endpoints": [
+    {"endpoint_id": "bcws_map_page", "url": "https://wildfiresituation.nrs.gov.bc.ca/map", "endpoint_type": "page_document", "source_confidence": "high", "notes": "Map route HTML shell."},
+    {"endpoint_id": "bcws_map_main_js", "url": "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js", "endpoint_type": "page_asset", "source_confidence": "high", "notes": "Shared Angular bundle for dashboard/map/list routes."},
+    {"endpoint_id": "bcws_map_fire_perimeters_layer", "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0?f=pjson", "endpoint_type": "arcgis_service", "source_confidence": "high", "notes": "Public ArcGIS feature layer metadata fetch succeeded."},
+    {"endpoint_id": "bcws_map_fsr_safety_layer", "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/FSR_Safety_Information_View/FeatureServer/0?f=pjson", "endpoint_type": "arcgis_service", "source_confidence": "high", "notes": "Public ArcGIS feature layer metadata fetch succeeded."},
+    {"endpoint_id": "bcws_map_recreation_closures_layer", "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/RecSitesReservesInterpForests_DetailsClosures_publicView/FeatureServer/0?f=pjson", "endpoint_type": "arcgis_service", "source_confidence": "high", "notes": "Public ArcGIS feature layer metadata fetch succeeded."},
+    {"endpoint_id": "bcws_map_geocoder_family", "url": "https://geocoder.api.gov.bc.ca/addresses.geojsonp", "endpoint_type": "data_endpoint", "source_confidence": "medium", "notes": "Geocoder family string appears in the shared bundle for map interaction."},
+    {"endpoint_id": "bcws_map_notification_api", "url": "https://wfone.nrs.gov.bc.ca/v1/notification", "endpoint_type": "data_endpoint", "source_confidence": "medium", "notes": "Bundle reference only; hostname unresolved from this environment."}
+  ],
+  "widgets": [
+    {"widget_id": "bcws_map_perimeter_layer_candidate", "label": "Perimeter layer", "source_id": "bcws_map", "candidate_target_pages": ["Maps"], "candidate_target_config_tab": "Maps", "required_endpoint_ids": ["bcws_map_fire_perimeters_layer"], "confidence": "high", "notes": "Public ArcGIS perimeter layer metadata is accessible."},
+    {"widget_id": "bcws_map_road_safety_overlay_candidate", "label": "Road safety overlay", "source_id": "bcws_map", "candidate_target_pages": ["Maps"], "candidate_target_config_tab": "Maps", "required_endpoint_ids": ["bcws_map_fsr_safety_layer"], "confidence": "high", "notes": "Public ArcGIS layer metadata is accessible."},
+    {"widget_id": "bcws_map_recreation_closures_overlay_candidate", "label": "Recreation closures overlay", "source_id": "bcws_map", "candidate_target_pages": ["Maps"], "candidate_target_config_tab": "Maps", "required_endpoint_ids": ["bcws_map_recreation_closures_layer"], "confidence": "high", "notes": "Public ArcGIS layer metadata is accessible."},
+    {"widget_id": "bcws_map_notification_overlay_candidate", "label": "Notification overlay entry", "source_id": "bcws_map", "candidate_target_pages": ["Maps"], "candidate_target_config_tab": "Maps", "required_endpoint_ids": ["bcws_map_notification_api"], "confidence": "medium", "notes": "Notification family is visible in the bundle but unresolved from this environment."}
+  ],
+  "specimen_urls": [
+    "https://wildfiresituation.nrs.gov.bc.ca/map",
+    "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js",
+    "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0?f=pjson",
+    "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/FSR_Safety_Information_View/FeatureServer/0?f=pjson",
+    "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/RecSitesReservesInterpForests_DetailsClosures_publicView/FeatureServer/0?f=pjson"
+  ]
+}

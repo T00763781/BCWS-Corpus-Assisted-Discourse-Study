@@ -1,0 +1,21 @@
+{
+  "source_id": "bcgov_arcgis_mapviewer",
+  "specimens": [
+    {
+      "url": "https://governmentofbc.maps.arcgis.com/apps/mapviewer/index.html",
+      "saved": true,
+      "path": "specimens\\https_governmentofbc_maps_arcgis_com_apps_mapviewer_index_html.html",
+      "status": 200,
+      "content_type": "text/html",
+      "error": null
+    },
+    {
+      "url": "https://governmentofbc.maps.arcgis.com/apps/mapviewer/assets/common-gZK4FVHu.js",
+      "saved": true,
+      "path": "specimens\\https_governmentofbc_maps_arcgis_com_apps_mapviewer_assets_common_gZK4FVHu_js.js",
+      "status": 200,
+      "content_type": "application/javascript",
+      "error": null
+    }
+  ]
+}

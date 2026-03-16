@@ -1,0 +1,45 @@
+[
+  {
+    "widget_id": "weather_gc_ca_alert_summary_candidate",
+    "label": "Weather alert summary",
+    "source_id": "weather_gc_ca",
+    "candidate_target_pages": [
+      "Environment"
+    ],
+    "candidate_target_config_tab": "Environment",
+    "required_endpoint_ids": [
+      "weather_gc_ca_warning_summaries"
+    ],
+    "confidence": "medium",
+    "notes": "Could surface warning summary state if later normalized."
+  },
+  {
+    "widget_id": "weather_gc_ca_radar_entry_candidate",
+    "label": "Radar availability entry",
+    "source_id": "weather_gc_ca",
+    "candidate_target_pages": [
+      "Environment"
+    ],
+    "candidate_target_config_tab": "Environment",
+    "required_endpoint_ids": [
+      "weather_gc_ca_radar_family"
+    ],
+    "confidence": "low",
+    "notes": "Bundle points to radar families but host resolution is still uncertain from bounded recon."
+  },
+  {
+    "widget_id": "weather_gc_ca_lightning_entry_candidate",
+    "label": "Lightning entry",
+    "source_id": "weather_gc_ca",
+    "candidate_target_pages": [
+      "Environment"
+    ],
+    "candidate_target_config_tab": "Environment",
+    "required_endpoint_ids": [
+      "weather_gc_ca_lightning_family",
+      "weather_gc_ca_lightning_metadata_family"
+    ],
+    "confidence": "low",
+    "notes": "Better supported by the explicit lightning route than the generic homepage."
+  }
+]

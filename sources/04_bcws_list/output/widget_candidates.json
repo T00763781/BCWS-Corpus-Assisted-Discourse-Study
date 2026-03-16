@@ -1,0 +1,45 @@
+[
+  {
+    "widget_id": "bcws_list_incident_table_candidate",
+    "label": "Incident list table",
+    "source_id": "bcws_list",
+    "candidate_target_pages": [
+      "Incidents"
+    ],
+    "candidate_target_config_tab": "Incidents",
+    "required_endpoint_ids": [
+      "bcws_list_published_incident_api"
+    ],
+    "confidence": "medium",
+    "notes": "List route strongly implies this family, but host resolution remains unresolved from this environment."
+  },
+  {
+    "widget_id": "bcws_list_attachment_links_candidate",
+    "label": "Incident attachment links",
+    "source_id": "bcws_list",
+    "candidate_target_pages": [
+      "Incidents"
+    ],
+    "candidate_target_config_tab": "Incidents",
+    "required_endpoint_ids": [
+      "bcws_list_attachment_api",
+      "bcws_list_external_uri_api"
+    ],
+    "confidence": "medium",
+    "notes": "Attachment families are bundle-level findings only."
+  },
+  {
+    "widget_id": "bcws_list_situation_report_links_candidate",
+    "label": "Situation report links",
+    "source_id": "bcws_list",
+    "candidate_target_pages": [
+      "Incidents"
+    ],
+    "candidate_target_config_tab": "Incidents",
+    "required_endpoint_ids": [
+      "bcws_list_situation_report_api"
+    ],
+    "confidence": "medium",
+    "notes": "Situation report family is bundle-level only from this environment."
+  }
+]

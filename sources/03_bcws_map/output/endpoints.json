@@ -1,0 +1,51 @@
+[
+  {
+    "endpoint_id": "bcws_map_page",
+    "url": "https://wildfiresituation.nrs.gov.bc.ca/map",
+    "endpoint_type": "page_document",
+    "source_confidence": "high",
+    "notes": "Map route HTML shell."
+  },
+  {
+    "endpoint_id": "bcws_map_main_js",
+    "url": "https://wildfiresituation.nrs.gov.bc.ca/main.da9882e70a9138f1.js",
+    "endpoint_type": "page_asset",
+    "source_confidence": "high",
+    "notes": "Shared Angular bundle for dashboard/map/list routes."
+  },
+  {
+    "endpoint_id": "bcws_map_fire_perimeters_layer",
+    "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0?f=pjson",
+    "endpoint_type": "arcgis_service",
+    "source_confidence": "high",
+    "notes": "Public ArcGIS feature layer metadata fetch succeeded."
+  },
+  {
+    "endpoint_id": "bcws_map_fsr_safety_layer",
+    "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/FSR_Safety_Information_View/FeatureServer/0?f=pjson",
+    "endpoint_type": "arcgis_service",
+    "source_confidence": "high",
+    "notes": "Public ArcGIS feature layer metadata fetch succeeded."
+  },
+  {
+    "endpoint_id": "bcws_map_recreation_closures_layer",
+    "url": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/RecSitesReservesInterpForests_DetailsClosures_publicView/FeatureServer/0?f=pjson",
+    "endpoint_type": "arcgis_service",
+    "source_confidence": "high",
+    "notes": "Public ArcGIS feature layer metadata fetch succeeded."
+  },
+  {
+    "endpoint_id": "bcws_map_geocoder_family",
+    "url": "https://geocoder.api.gov.bc.ca/addresses.geojsonp",
+    "endpoint_type": "data_endpoint",
+    "source_confidence": "medium",
+    "notes": "Geocoder family string appears in the shared bundle for map interaction."
+  },
+  {
+    "endpoint_id": "bcws_map_notification_api",
+    "url": "https://wfone.nrs.gov.bc.ca/v1/notification",
+    "endpoint_type": "data_endpoint",
+    "source_confidence": "medium",
+    "notes": "Bundle reference only; hostname unresolved from this environment."
+  }
+]

@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding="utf-8"?>
+    <ogc:ServiceExceptionReport version="1.3.0"
+    xmlns:ogc="http://www.opengis.net/ogc"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.opengis.net/ogc
+    http://schemas.opengis.net/wms/1.3.0/exceptions_1_3_0.xsd">
+    <ogc:ServiceException code="MissingParameterValue" locator="service">Veuillez spécifier une requête respectant le standard WMS, WFS ou WCS. Pour davantage d'information sur les services web géospatiaux GeoMet du Service météorologique du Canada, veuillez visiter https://www.canada.ca/fr/environnement-changement-climatique/services/conditions-meteorologiques-ressources-outils-generaux/outils-donnees-specialisees/services-web-geospatiaux.html / Please specify a request according to the WMS, WFS or WCS standards. For more information on the Meteorological Service of Canada GeoMet Geospatial Web Services, please visit https://www.canada.ca/en/environment-climate-change/services/weather-general-tools-resources/weather-tools-specialized-data/geospatial-web-services.html</ogc:ServiceException>
+    </ogc:ServiceExceptionReport>

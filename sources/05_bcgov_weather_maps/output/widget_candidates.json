@@ -1,0 +1,47 @@
+[
+  {
+    "widget_id": "bcgov_weather_maps_station_layer_candidate",
+    "label": "Station-location layer",
+    "source_id": "bcgov_weather_maps",
+    "candidate_target_pages": [
+      "Environment",
+      "Maps"
+    ],
+    "candidate_target_config_tab": "Environment",
+    "required_endpoint_ids": [
+      "bcgov_weather_maps_weather_stations_layer"
+    ],
+    "confidence": "high",
+    "notes": "Linked app data exposes a concrete weather stations layer."
+  },
+  {
+    "widget_id": "bcgov_weather_maps_fire_zone_overlay_candidate",
+    "label": "Fire zone overlay",
+    "source_id": "bcgov_weather_maps",
+    "candidate_target_pages": [
+      "Environment",
+      "Maps"
+    ],
+    "candidate_target_config_tab": "Maps",
+    "required_endpoint_ids": [
+      "bcgov_weather_maps_fire_zones_layer"
+    ],
+    "confidence": "high",
+    "notes": "Linked app data exposes a concrete fire zones layer."
+  },
+  {
+    "widget_id": "bcgov_weather_maps_fire_centre_overlay_candidate",
+    "label": "Fire centre boundary layer",
+    "source_id": "bcgov_weather_maps",
+    "candidate_target_pages": [
+      "Environment",
+      "Maps"
+    ],
+    "candidate_target_config_tab": "Maps",
+    "required_endpoint_ids": [
+      "bcgov_weather_maps_fire_centre_boundaries_layer"
+    ],
+    "confidence": "high",
+    "notes": "Linked app data exposes a concrete fire centre boundaries layer."
+  }
+]

@@ -1,0 +1,58 @@
+[
+  {
+    "widget_id": "bcws_map_perimeter_layer_candidate",
+    "label": "Perimeter layer",
+    "source_id": "bcws_map",
+    "candidate_target_pages": [
+      "Maps"
+    ],
+    "candidate_target_config_tab": "Maps",
+    "required_endpoint_ids": [
+      "bcws_map_fire_perimeters_layer"
+    ],
+    "confidence": "high",
+    "notes": "Public ArcGIS perimeter layer metadata is accessible."
+  },
+  {
+    "widget_id": "bcws_map_road_safety_overlay_candidate",
+    "label": "Road safety overlay",
+    "source_id": "bcws_map",
+    "candidate_target_pages": [
+      "Maps"
+    ],
+    "candidate_target_config_tab": "Maps",
+    "required_endpoint_ids": [
+      "bcws_map_fsr_safety_layer"
+    ],
+    "confidence": "high",
+    "notes": "Public ArcGIS layer metadata is accessible."
+  },
+  {
+    "widget_id": "bcws_map_recreation_closures_overlay_candidate",
+    "label": "Recreation closures overlay",
+    "source_id": "bcws_map",
+    "candidate_target_pages": [
+      "Maps"
+    ],
+    "candidate_target_config_tab": "Maps",
+    "required_endpoint_ids": [
+      "bcws_map_recreation_closures_layer"
+    ],
+    "confidence": "high",
+    "notes": "Public ArcGIS layer metadata is accessible."
+  },
+  {
+    "widget_id": "bcws_map_notification_overlay_candidate",
+    "label": "Notification overlay entry",
+    "source_id": "bcws_map",
+    "candidate_target_pages": [
+      "Maps"
+    ],
+    "candidate_target_config_tab": "Maps",
+    "required_endpoint_ids": [
+      "bcws_map_notification_api"
+    ],
+    "confidence": "medium",
+    "notes": "Notification family is visible in the bundle but unresolved from this environment."
+  }
+]

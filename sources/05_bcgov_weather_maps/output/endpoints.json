@@ -1,0 +1,65 @@
+[
+  {
+    "endpoint_id": "bcgov_weather_maps_page",
+    "url": "https://www2.gov.bc.ca/gov/content/safety/wildfire-status/prepare/weather-fire-danger/fire-weather/weather-maps",
+    "endpoint_type": "page_document",
+    "source_confidence": "high",
+    "notes": "BC Gov content page."
+  },
+  {
+    "endpoint_id": "bcgov_weather_maps_linked_webapp",
+    "url": "https://governmentofbc.maps.arcgis.com/apps/webappviewer/index.html?id=c36baf74b74a46978cf517579a9ee332",
+    "endpoint_type": "indirect_link",
+    "source_confidence": "high",
+    "notes": "Direct outbound link present on the content page."
+  },
+  {
+    "endpoint_id": "bcgov_weather_maps_app_item",
+    "url": "https://governmentofbc.maps.arcgis.com/sharing/rest/content/items/c36baf74b74a46978cf517579a9ee332?f=json",
+    "endpoint_type": "api_json",
+    "source_confidence": "high",
+    "notes": "Linked app item metadata."
+  },
+  {
+    "endpoint_id": "bcgov_weather_maps_app_data",
+    "url": "https://governmentofbc.maps.arcgis.com/sharing/rest/content/items/c36baf74b74a46978cf517579a9ee332/data?f=json",
+    "endpoint_type": "api_json",
+    "source_confidence": "high",
+    "notes": "Linked app configuration JSON."
+  },
+  {
+    "endpoint_id": "bcgov_weather_maps_webmap_item",
+    "url": "https://governmentofbc.maps.arcgis.com/sharing/rest/content/items/59b1b3cfd5144059b39705d51b4d6ce6?f=json",
+    "endpoint_type": "api_json",
+    "source_confidence": "high",
+    "notes": "BCWS Weather Stations web map item metadata."
+  },
+  {
+    "endpoint_id": "bcgov_weather_maps_webmap_data",
+    "url": "https://governmentofbc.maps.arcgis.com/sharing/rest/content/items/59b1b3cfd5144059b39705d51b4d6ce6/data?f=json",
+    "endpoint_type": "api_json",
+    "source_confidence": "high",
+    "notes": "Web map operational layer JSON."
+  },
+  {
+    "endpoint_id": "bcgov_weather_maps_weather_stations_layer",
+    "url": "https://maps.gov.bc.ca/arcserver/rest/services/whse/bcgw_pub_whse_land_and_natural_resource/MapServer/16",
+    "endpoint_type": "arcgis_service",
+    "source_confidence": "high",
+    "notes": "Weather Stations layer URL present in linked app data."
+  },
+  {
+    "endpoint_id": "bcgov_weather_maps_fire_zones_layer",
+    "url": "https://maps.gov.bc.ca/arcserver/rest/services/whse/bcgw_pub_whse_legal_admin_boundaries/MapServer/8",
+    "endpoint_type": "arcgis_service",
+    "source_confidence": "high",
+    "notes": "Fire Zones layer URL present in linked app data."
+  },
+  {
+    "endpoint_id": "bcgov_weather_maps_fire_centre_boundaries_layer",
+    "url": "https://tiles.arcgis.com/tiles/ubm4tcTYICKBpist/arcgis/rest/services/BCWS_FireCenterBdys2/MapServer/0",
+    "endpoint_type": "tile_layer",
+    "source_confidence": "high",
+    "notes": "Fire Centre Boundaries tiled layer URL present in linked app data."
+  }
+]

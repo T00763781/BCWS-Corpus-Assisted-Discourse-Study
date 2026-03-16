@@ -1,0 +1,37 @@
+{
+  "source_id": "firesmoke_fireweather_current",
+  "source_label": "FireSmoke Current Fire Weather",
+  "canonical_url": "https://firesmoke.ca/forecasts/fireweather/current/",
+  "what_page_provides": "Leaflet/Mapbox fire weather forecast map with time controls and multiple JS-managed layer groups.",
+  "likely_endpoint_families": [
+    "Static JSON family under /static/json/, including zone merge data.",
+    "GeoMet root family referenced in JS for weather layer access.",
+    "Optional external tile families such as WAQI PM2.5 tiles appear in the layer-controller bundle."
+  ],
+  "likely_layer_families": [
+    "Fire weather raster/time layers managed by local JS bundles.",
+    "GeoMet-backed weather layer family.",
+    "Station/location overlays implied by wxstations and grouped layer control bundles."
+  ],
+  "auth_notes": "Public site. No auth barrier observed. Main page is JS-heavy and likely assembles layer URLs at runtime; bounded recon captured only directly visible families and specimens.",
+  "confidence": "medium",
+  "recommendation": "pursue",
+  "endpoints": [
+    {"endpoint_id": "firesmoke_fireweather_current_page", "url": "https://firesmoke.ca/forecasts/fireweather/current/", "endpoint_type": "page_document", "source_confidence": "high", "notes": "Primary FireSmoke fire weather page."},
+    {"endpoint_id": "firesmoke_fireweather_current_zone_json", "url": "https://firesmoke.ca/static/json/fwf-zone-merge.json", "endpoint_type": "api_json", "source_confidence": "high", "notes": "Static JSON specimen fetch succeeded."},
+    {"endpoint_id": "firesmoke_fireweather_current_layer_controller_js", "url": "https://firesmoke.ca/static/js/fwf-layer-controler-0.0.6.min.js", "endpoint_type": "page_asset", "source_confidence": "high", "notes": "JS bundle references geomet root and external tile families."},
+    {"endpoint_id": "firesmoke_fireweather_current_geomet_root", "url": "https://geo.weather.gc.ca/geomet", "endpoint_type": "data_endpoint", "source_confidence": "medium", "notes": "GeoMet root string appears in the layer-controller bundle; direct root fetch returned a service exception asking for WMS/WFS/WCS parameters."},
+    {"endpoint_id": "firesmoke_fireweather_current_waqi_tiles", "url": "https://tiles.waqi.info/tiles/usepa-pm25/{z}/{x}/{y}.png?token=_TOKEN_ID_", "endpoint_type": "tile_layer", "source_confidence": "low", "notes": "Optional external PM2.5 tile family visible in JS."}
+  ],
+  "widgets": [
+    {"widget_id": "firesmoke_fireweather_current_fireweather_layer_candidate", "label": "Fire weather map layer", "source_id": "firesmoke_fireweather_current", "candidate_target_pages": ["Environment", "Maps"], "candidate_target_config_tab": "Environment", "required_endpoint_ids": ["firesmoke_fireweather_current_geomet_root", "firesmoke_fireweather_current_zone_json"], "confidence": "medium", "notes": "Page purpose and JS structure strongly suggest time-based fire weather layers."},
+    {"widget_id": "firesmoke_fireweather_current_smoke_layer_candidate", "label": "Smoke forecast layer", "source_id": "firesmoke_fireweather_current", "candidate_target_pages": ["Environment", "Maps"], "candidate_target_config_tab": "Environment", "required_endpoint_ids": ["firesmoke_fireweather_current_zone_json"], "confidence": "medium", "notes": "FireSmoke surface is map-centric but exact smoke layer URLs were not fully expanded in bounded recon."},
+    {"widget_id": "firesmoke_fireweather_current_air_quality_overlay_candidate", "label": "Air quality overlay", "source_id": "firesmoke_fireweather_current", "candidate_target_pages": ["Environment"], "candidate_target_config_tab": "Environment", "required_endpoint_ids": ["firesmoke_fireweather_current_waqi_tiles"], "confidence": "low", "notes": "WAQI tiles appear in the layer controller bundle as an optional overlay family."}
+  ],
+  "specimen_urls": [
+    "https://firesmoke.ca/forecasts/fireweather/current/",
+    "https://firesmoke.ca/static/json/fwf-zone-merge.json",
+    "https://firesmoke.ca/static/js/fwf-layer-controler-0.0.6.min.js",
+    "https://geo.weather.gc.ca/geomet?f=pjson"
+  ]
+}
