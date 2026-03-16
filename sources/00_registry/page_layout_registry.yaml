@@ -1,0 +1,29 @@
+- page_id: dashboard
+  route: /dashboard
+  edit_mode: false
+  columns: []
+  widget_instance_placements: []
+
+- page_id: incidents
+  route: /incidents
+  edit_mode: false
+  columns: []
+  widget_instance_placements: []
+
+- page_id: discourse
+  route: /discourse
+  edit_mode: false
+  columns: []
+  widget_instance_placements: []
+
+- page_id: environment
+  route: /environment
+  edit_mode: false
+  columns: []
+  widget_instance_placements: []
+
+- page_id: maps
+  route: /maps
+  edit_mode: false
+  columns: []
+  widget_instance_placements: []

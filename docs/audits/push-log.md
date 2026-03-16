@@ -11,3 +11,9 @@
 - Commit message: `Implement the BCWS perimeter widget in Configure Sources`
 - Short note: added one verified widget in `Configure > Sources` backed only by the public BCWS Fire Perimeters ArcGIS layer, updated the single approved widget registry entry, and kept all other routes and tabs blank/minimal
 - Verification result: the shell still launched with the same route structure, Configure rendered the BCWS perimeter widget, the widget fetched the verified ArcGIS source only, raw specimen inspection rendered, other routes stayed blank/minimal, and feedback.zip was rebuilt with screenshot and verification artifacts
+
+## 2026-03-16T09:05:00-07:00
+
+- Commit message: `Introduce widget objects and shared page builder surfaces`
+- Short note: refactored widgets into first-class objects, expanded Configure with `Widgets` plus page-builder tabs, moved the BCWS perimeter widget behind the object model, and added the same shared builder controls to Dashboard, Incidents, Discourse, Environment, and Maps without promoting any widget to those pages
+- Verification result: the shell still launched with the same routes, Configure rendered `Sources / Widgets / Dashboard / Incidents / Discourse / Environment / Maps`, the live widget object view rendered in `Configure > Widgets`, every page route exposed the same edit/add-column/add-widget controls, edit mode produced empty columns and empty widget slots on every page, no page route rendered the BCWS perimeter widget, the widget and page layout registries parsed, and feedback.zip was rebuilt with screenshots and verification JSON

@@ -1,52 +1,82 @@
 - widget_id: bcws_perimeter_layer_candidate
   label: Perimeter map layer
-  target_page: Configure > Sources
   source_ids:
     - bcws_map
     - bcws_dashboard
     - bcws_list
   status: configure_sources_only
-  notes: Implemented only in Configure > Sources. Not approved for promotion to Dashboard, Incidents, or Maps yet. Backed only by the verified `BCWS_FirePerimeters_PublicView` ArcGIS layer.
+  render_type: bcws_perimeter_layer
+  allowed_pages: []
+  allowed_config_tabs:
+    - sources
+    - widgets
+  fetch_mode: live_arcgis_feature_layer
+  notes: Implemented only in Configure > Sources and Configure > Widgets. Not approved for promotion to Dashboard, Incidents, Discourse, Environment, or Maps.
 
 - widget_id: bcws_road_safety_overlay_candidate
   label: Road-safety overlay
-  target_page: Maps
   source_ids:
     - bcws_map
     - bcws_dashboard
   status: candidate_only
-  notes: Candidate-only. Backed by the verified `FSR_Safety_Information_View` ArcGIS layer.
+  render_type: candidate_only
+  allowed_pages:
+    - maps
+  allowed_config_tabs:
+    - widgets
+  fetch_mode: verified_arcgis_feature_layer
+  notes: Candidate-only.
 
 - widget_id: bcws_recreation_closures_overlay_candidate
   label: Recreation closures overlay
-  target_page: Maps
   source_ids:
     - bcws_map
     - bcws_dashboard
   status: candidate_only
-  notes: Candidate-only. Backed by the verified `RecSitesReservesInterpForests_DetailsClosures_publicView` ArcGIS layer.
+  render_type: candidate_only
+  allowed_pages:
+    - maps
+  allowed_config_tabs:
+    - widgets
+  fetch_mode: verified_arcgis_feature_layer
+  notes: Candidate-only.
 
 - widget_id: bcws_incident_totals_candidate
   label: Incident totals
-  target_page: Dashboard
   source_ids:
     - bcws_dashboard
     - bcws_list
   status: candidate_only
-  notes: Candidate-only. Depends on the unresolved `wfim` published-incident API family.
+  render_type: candidate_only
+  allowed_pages:
+    - dashboard
+  allowed_config_tabs:
+    - widgets
+  fetch_mode: unresolved_data_contract
+  notes: Candidate-only.
 
 - widget_id: bcws_stage_of_control_counts_candidate
   label: Stage-of-control counts
-  target_page: Dashboard
   source_ids:
     - bcws_dashboard
   status: candidate_only
-  notes: Candidate-only. Bundle exposes `incidentSituation.stageOfControlCode`; direct incident payloads remain unresolved.
+  render_type: candidate_only
+  allowed_pages:
+    - dashboard
+  allowed_config_tabs:
+    - widgets
+  fetch_mode: unresolved_data_contract
+  notes: Candidate-only.
 
 - widget_id: bcws_incident_list_table_candidate
   label: Incident list table
-  target_page: Incidents
   source_ids:
     - bcws_list
   status: candidate_only
-  notes: Candidate-only. Depends on the unresolved `wfim` published-incident API family.
+  render_type: candidate_only
+  allowed_pages:
+    - incidents
+  allowed_config_tabs:
+    - widgets
+  fetch_mode: unresolved_data_contract
+  notes: Candidate-only.

@@ -151,6 +151,108 @@ button { font: inherit; }
   overflow: auto;
 }
 
+.configure-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.widget-lab-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.widget-lab-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #3d454d;
+  letter-spacing: 0.05em;
+}
+
+.widget-object-card {
+  border: 1px solid #c6c8cc;
+  background: #f0f0f0;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.widget-object-card__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1d2327;
+  margin-bottom: 10px;
+}
+
+.widget-object-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.widget-object-card__item {
+  border: 1px solid #d0d2d6;
+  background: #ebeced;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.widget-object-card__item-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #5a6168;
+  margin-bottom: 6px;
+  letter-spacing: 0.05em;
+}
+
+.widget-object-card__item-value {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #20262b;
+  overflow-wrap: anywhere;
+}
+
+.candidate-widget-list {
+  border: 1px solid #cfd2d6;
+  background: #f0f0f0;
+}
+
+.candidate-widget-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #d7d9dc;
+  align-items: center;
+}
+
+.candidate-widget-row:last-child {
+  border-bottom: 0;
+}
+
+.candidate-widget-row__label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1d2327;
+}
+
+.candidate-widget-row__meta {
+  font-size: 12px;
+  color: #575f67;
+  margin-top: 2px;
+}
+
+.candidate-widget-row__status {
+  font-size: 12px;
+  font-weight: 700;
+  color: #575f67;
+  text-transform: lowercase;
+}
+
 .source-widget {
   border: 1px solid #c6c8cc;
   background: #f4f4f4;
@@ -291,6 +393,103 @@ button { font: inherit; }
   overflow: auto;
 }
 
+.page-builder {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.page-builder.is-nested {
+  min-height: 0;
+}
+
+.page-builder__bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid #cfd2d6;
+  background: #f0f0f0;
+  padding: 12px 14px;
+}
+
+.page-builder__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1d2327;
+}
+
+.page-builder__controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.page-builder__button {
+  appearance: none;
+  border: 1px solid #b9bcc2;
+  background: #d7d8dc;
+  color: #1a1f23;
+  font-weight: 700;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.page-builder__button.is-active {
+  background: var(--active);
+  color: #111;
+}
+
+.page-builder__button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.page-builder__surface {
+  margin-top: 14px;
+  flex: 1;
+  border: 1px dashed #babec4;
+  background: rgba(240, 240, 240, 0.6);
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+
+.page-builder__column {
+  border: 1px dashed #b9bcc2;
+  background: #f3f4f5;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 160px;
+}
+
+.page-builder__column-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #575f67;
+}
+
+.page-builder__slot,
+.page-builder__empty-surface {
+  border: 1px solid #d0d2d6;
+  background: #ebeced;
+  color: #20262b;
+  padding: 12px;
+  font-size: 13px;
+}
+
+.page-builder__slot.is-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
 @media (max-width: 880px) {
   .app-shell { padding: 16px; }
   .shell-frame {
@@ -301,6 +500,11 @@ button { font: inherit; }
   .nav-marker { width: 32px; height: 32px; }
   .nav-label { font-size: 14px; }
   .configure-tab { min-width: 104px; height: 34px; font-size: 13px; }
+  .widget-object-card__grid { grid-template-columns: 1fr; }
   .source-widget__status-grid,
   .source-widget__summary-grid { grid-template-columns: 1fr; }
+  .page-builder__bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
