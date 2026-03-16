@@ -62,3 +62,10 @@
 - Commit message: `Document incident UI phase verification`
 - Short note: added the incident UI phase audit, updated the push log, and refreshed `feedback.zip` with route captures, screenshots, and verification notes
 - Verification result: `feedback.zip` contains the incident UI audit, dashboard and incident screenshots, DOM captures, next steps, and command output notes
+
+## 2026-03-16T01:27:15-07:00
+
+- Commit hash: `76d82f45b1cde52a2c576ba16d4e2d1d064db9f0`
+- Commit message: `Use the Open Fireside SVG logo in the shell`
+- Short note: replaced the placeholder brand mark with the repo-local `OF-logo.svg` asset and verified it bundles and renders from the desktop shell
+- Verification result: `npm --workspace apps/desktop run build` passed and live dashboard DOM capture showed the logo loaded from `G:/04_Dev-Tools/01_Tools/01_OpenFireside/OF-logo.svg`
