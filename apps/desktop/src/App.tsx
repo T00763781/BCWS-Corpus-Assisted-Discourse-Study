@@ -24,6 +24,7 @@ import {
   type IncidentSummary,
   type MapCatalogEntry,
 } from "./lib/api";
+import ofLogo from "../../../OF-logo.svg";
 
 const CONNECTOR_KEYS = ["bcws.catalog", "cwfis.summary", "geomet.weather", "social.seed"];
 
@@ -649,7 +650,7 @@ function WorkstationLayout({ analytics, dashboard, incidents, environment, mapsC
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">OF</div>
+          <img alt="Open Fireside logo" className="brand-mark" src={ofLogo} />
           <div>
             <div className="brand-name">Open Fireside</div>
             <div className="brand-sub">Workstation</div>

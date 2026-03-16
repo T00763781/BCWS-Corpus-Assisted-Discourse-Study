@@ -60,12 +60,11 @@ a {
 .brand-mark {
   width: 46px;
   height: 46px;
-  display: grid;
-  place-items: center;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.14);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  object-fit: contain;
+  padding: 4px;
+  box-sizing: border-box;
 }
 
 .brand-name {
