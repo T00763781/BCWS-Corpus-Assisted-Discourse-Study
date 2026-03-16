@@ -12,12 +12,20 @@
 ## Commands
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\bootstrap\bootstrap.ps1 -CreateVenv -InstallNodePackages
-.\scripts\bootstrap\run-api.ps1
-.\scripts\bootstrap\seed-demo.ps1
+.\scripts\bootstrap\bootstrap.cmd -CreateVenv -InstallNodePackages
+.\scripts\bootstrap\run-api.cmd
+.\scripts\bootstrap\seed-demo.cmd
 npm --workspace apps/desktop run dev
 ```
+
+## Expected checkpoints
+
+- `http://127.0.0.1:8765/` redirects to `/docs`
+- `http://127.0.0.1:8765/api/health` returns `{"status":"ok","app":"open-fireside-api"}`
+- `http://127.0.0.1:8765/api/connectors` returns the connector registry
+- `http://127.0.0.1:8765/api/analytics/snapshot` returns counts that increase after connector runs
+- `http://localhost:1420` loads without the earlier `Failed to fetch` state
+- `.diagnostics/latest/seed-demo.log` records the seeded connector run sequence
 
 ## What to note manually
 
