@@ -2,7 +2,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
-from open_fireside_api.routers import health, analytics, conditions, connectors
+from open_fireside_api.routers import analytics, conditions, connectors, dashboard, environment, health, incidents, maps
 from open_fireside_api.database import bootstrap_database
 from open_fireside_config.settings import get_settings
 from open_fireside_diagnostics.logging import configure_logging
@@ -30,6 +30,10 @@ api_router.include_router(health.router)
 api_router.include_router(conditions.router)
 api_router.include_router(analytics.router)
 api_router.include_router(connectors.router)
+api_router.include_router(dashboard.router)
+api_router.include_router(environment.router)
+api_router.include_router(incidents.router)
+api_router.include_router(maps.router)
 app.include_router(api_router)
 
 
