@@ -1,0 +1,1 @@
+Proprietary internal research build scaffold. Review all upstream licenses before bundling third-party components.

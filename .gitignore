@@ -1,9 +1,11 @@
-# Local archives
-99_Archive/
-99_archive/
-
-# Pilot local runtime artifacts
-pilot/instagram_bcws/.env
-pilot/instagram_bcws/secrets/
-pilot/instagram_bcws/output/
-pilot/instagram_bcws/node_modules/
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+node_modules/
+dist/
+build/
+*.log
+.diagnostics/
+data/
+apps/desktop/src-tauri/target/
