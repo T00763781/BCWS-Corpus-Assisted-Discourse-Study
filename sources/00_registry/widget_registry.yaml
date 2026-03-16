@@ -1,12 +1,12 @@
 - widget_id: bcws_perimeter_layer_candidate
   label: Perimeter map layer
-  target_page: Maps
+  target_page: Configure > Sources
   source_ids:
     - bcws_map
     - bcws_dashboard
     - bcws_list
-  status: candidate_only
-  notes: Candidate-only. Backed by the verified `BCWS_FirePerimeters_PublicView` ArcGIS layer.
+  status: configure_sources_only
+  notes: Implemented only in Configure > Sources. Not approved for promotion to Dashboard, Incidents, or Maps yet. Backed only by the verified `BCWS_FirePerimeters_PublicView` ArcGIS layer.
 
 - widget_id: bcws_road_safety_overlay_candidate
   label: Road-safety overlay
