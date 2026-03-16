@@ -1,5 +1,11 @@
 # Push Log
 
+## 2026-03-16T02:18:00-07:00
+
+- Commit message: `Clean the shell and establish Configure as the validation control plane`
+- Short note: stripped Dashboard, Incidents, Discourse, Environment, and Maps down to neutral shells, removed connector/live posture from the left rail, and rebuilt Configure around sources-first validation and page-promotion gates
+- Verification result: frontend dev server and backend health both started successfully; `pytest tests` passed; `cmd /c .\node_modules\.bin\tsc.cmd -p apps/desktop/tsconfig.json --noEmit` passed; `cmd /c npm.cmd --workspace apps/desktop run build` passed outside the sandbox; rendered DOM and screenshots confirmed the approved left-nav route structure, Configure pinned top nav, and neutralized page bodies
+
 ## 2026-03-15T23:19:34-07:00
 
 - Commit hash: `61f28ed81560bcaf131e449180516c1408b12050`
