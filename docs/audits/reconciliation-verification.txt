@@ -1,0 +1,10 @@
+Verification notes:
+
+- npm install: passed
+- npm run build: passed
+- npm run dev: passed on http://127.0.0.1:4173/
+- #/dashboard: rendered live values from BCWS-backed endpoints
+- #/incidents: rendered live BCWS incident table rows
+- #/configure: rendered live BCWS perimeter widget with object count 320
+- Broken imports: none found during build
+- Browser console errors during route checks: none

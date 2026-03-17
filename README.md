@@ -1,20 +1,12 @@
-# Open Fireside Shell v2
+# Open Fireside
 
-This package is a strict shell-only handoff for Codex.
+Open Fireside is a shell-first React/Vite workspace.
 
-## Included
-- mockup-aligned left rail
-- blank workspace routes for Dashboard, Incidents, Discourse, Environment, and Maps
-- Configure route with pinned top nav
-- blank `Configure > Sources` insertion surface
-
-## Intentionally absent
-- widgets
-- data bindings
-- summaries
-- validation prose
-- lifecycle copy
-- charts, cards, tables, maps, or diagnostics
+Current repo state:
+- `Dashboard` is wired to live BCWS public wildfire and evacuation endpoints
+- `Incidents` is wired to the live BCWS public incident list and internal detail route
+- `Configure > Sources` preserves the factual BCWS perimeter widget
+- `Weather`, `Maps`, and `Discourse` remain blank shell surfaces
 
 ## Run
 
@@ -23,7 +15,12 @@ npm install
 npm run dev
 ```
 
-Default route is `#/configure`.
+Open:
+- `http://127.0.0.1:5173/#/dashboard`
+- `http://127.0.0.1:5173/#/incidents`
 
-## Codex instruction
-Treat this as the source shell. Do not add semantics until each widget is backed by a verified real-world source.
+## Notes
+
+- The app only keeps factual endpoint-backed dashboard and incident views.
+- Stubbed dashboard panels are limited to `Discourse Signals` and `Incidents (pinned)`.
+- No fabricated summaries or placeholder data panels should be added.

@@ -17,3 +17,9 @@
 - Commit message: `Introduce widget objects and shared page builder surfaces`
 - Short note: refactored widgets into first-class objects, expanded Configure with `Widgets` plus page-builder tabs, moved the BCWS perimeter widget behind the object model, and added the same shared builder controls to Dashboard, Incidents, Discourse, Environment, and Maps without promoting any widget to those pages
 - Verification result: the shell still launched with the same routes, Configure rendered `Sources / Widgets / Dashboard / Incidents / Discourse / Environment / Maps`, the live widget object view rendered in `Configure > Widgets`, every page route exposed the same edit/add-column/add-widget controls, edit mode produced empty columns and empty widget slots on every page, no page route rendered the BCWS perimeter widget, the widget and page layout registries parsed, and feedback.zip was rebuilt with screenshots and verification JSON
+
+## 2026-03-17T00:35:05-07:00
+
+- Commit message: `Reconcile local BCWS endpoint work and remove patch residue`
+- Short note: preserved the factual BCWS-backed dashboard, incidents, incident detail, and perimeter widget work; removed dead dashboard/incidents patch modules plus zip/script residue and generated junk; restored repo docs, handoff, Vite entry handling, and package identity so the repo is coherent again
+- Verification result: `npm install`, `npm run build`, and `npm run dev -- --host 127.0.0.1 --port 4173` all passed; `#/dashboard`, `#/incidents`, and `#/configure` rendered successfully in a real headless Edge session; dashboard metrics repopulated from live endpoints, incidents loaded 500 factual rows, the perimeter widget rendered with object count 320, and no browser console errors were emitted during the route checks

@@ -1,0 +1,32 @@
+Deleted junk and conflict files/folders:
+
+- dist/
+- node_modules/ (local artifact only; ignored)
+- output/
+- open-fireside-dashboard-patch/
+- scripts/
+- apply-dashboard-interactive-patch.ps1
+- apply-dashboard-patch.ps1
+- apply-incidents-list-patch.ps1
+- apply-open-fireside-incidents-patch.ps1
+- apply-patch.ps1
+- README-dashboard-interactive-patch.md
+- README-dashboard-patch.md
+- README-incidents-list-patch.md
+- README-patch.md
+- open-fireside-dashboard-interactive-patch.zip
+- open-fireside-empty-shell-fixed.zip
+- open-fireside-incidents-dashboard-patch.zip
+- open-fireside-incidents-list-patch.zip
+- icons.zip
+- recon.zip
+- *.har captures created during patch work
+- root loose SVG/PNG patch assets
+- root fire-ban JSON patch assets
+- public/fire-bans-table-rich.json
+- public/of-logo.svg
+- public/wfnote.svg
+- src/dashboardApi.js
+- src/dashboardData.js
+- src/dashboardModel.js
+- src/incidentsData.js

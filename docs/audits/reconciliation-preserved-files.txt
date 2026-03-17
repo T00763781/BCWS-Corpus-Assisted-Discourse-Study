@@ -1,0 +1,14 @@
+Preserved factual endpoint-backed files:
+
+- src/App.jsx
+- src/bcwsApi.js
+- src/bcwsPerimeter.js
+- src/objectModel.js
+- src/main.jsx
+- src/styles.css
+- vite.config.js
+- package.json
+- package-lock.json
+- README.md
+- CODEX_HANDOFF.md
+- public/assets/logo.svg

@@ -1,17 +1,17 @@
 export const appRoutes = [
   { id: 'dashboard', label: 'Dashboard', pageId: 'dashboard' },
+  { id: 'weather', label: 'Weather', pageId: 'weather' },
   { id: 'incidents', label: 'Incidents', pageId: 'incidents' },
   { id: 'discourse', label: 'Discourse', pageId: 'discourse' },
-  { id: 'environment', label: 'Environment', pageId: 'environment' },
   { id: 'maps', label: 'Maps', pageId: 'maps' },
   { id: 'configure', label: 'Configure' },
 ];
 
 export const pageBuilderTabs = [
   { id: 'dashboard', label: 'Dashboard', pageId: 'dashboard' },
+  { id: 'weather', label: 'Weather', pageId: 'weather' },
   { id: 'incidents', label: 'Incidents', pageId: 'incidents' },
   { id: 'discourse', label: 'Discourse', pageId: 'discourse' },
-  { id: 'environment', label: 'Environment', pageId: 'environment' },
   { id: 'maps', label: 'Maps', pageId: 'maps' },
 ];
 
@@ -99,6 +99,13 @@ export const initialPageLayouts = {
     columns: [],
     widget_placements: [],
   },
+  weather: {
+    page_id: 'weather',
+    route: '/weather',
+    edit_mode: false,
+    columns: [],
+    widget_placements: [],
+  },
   incidents: {
     page_id: 'incidents',
     route: '/incidents',
@@ -109,13 +116,6 @@ export const initialPageLayouts = {
   discourse: {
     page_id: 'discourse',
     route: '/discourse',
-    edit_mode: false,
-    columns: [],
-    widget_placements: [],
-  },
-  environment: {
-    page_id: 'environment',
-    route: '/environment',
     edit_mode: false,
     columns: [],
     widget_placements: [],

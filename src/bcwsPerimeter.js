@@ -10,6 +10,7 @@ async function fetchJson(url) {
   const response = await fetch(url, {
     headers: { Accept: 'application/json' },
   });
+
   const text = await response.text();
   let data = null;
 
@@ -55,6 +56,16 @@ export async function fetchBcwsPerimeterWidget() {
       f: 'pjson',
     })
   );
+  const preview = await fetchJson(
+    buildUrl('/query', {
+      where: '1=1',
+      outFields: 'FIRE_NUMBER,FIRE_STATUS,FIRE_SIZE_HECTARES,FIRE_URL,TRACK_DATE',
+      resultRecordCount: '40',
+      returnGeometry: 'true',
+      outSR: '4326',
+      f: 'geojson',
+    })
+  );
 
   return {
     sourceUrl: SOURCE_URL,
@@ -62,11 +73,14 @@ export async function fetchBcwsPerimeterWidget() {
     metadataStatus: metadata.status,
     countStatus: count.status,
     specimenStatus: specimen.status,
+    previewStatus: preview.status,
     layerName: metadata.data?.name ?? '',
     geometryType: metadata.data?.geometryType ?? '',
     capabilities: metadata.data?.capabilities ?? '',
     objectCount: count.data?.count ?? null,
     fields: (metadata.data?.fields ?? []).map((field) => field.name),
     specimen: specimen.data ?? null,
+    previewGeoJson: preview.data ?? null,
+    previewCount: Array.isArray(preview.data?.features) ? preview.data.features.length : 0,
   };
 }
