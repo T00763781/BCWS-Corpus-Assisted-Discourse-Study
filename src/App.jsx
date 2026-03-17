@@ -2,6 +2,7 @@ import React from 'react';
 import L from 'leaflet';
 import { fetchBcwsPerimeterWidget } from './bcwsPerimeter.js';
 import {
+  DASHBOARD_FIRE_YEAR,
   FIRE_CENTRES,
   STAGE_DEFS,
   fetchDashboardData,
@@ -143,7 +144,6 @@ function DashboardPage() {
   }, [load]);
 
   const stats = state.data?.stats;
-  const fireOfNoteCount = state.data?.mapLayers?.FIRE_OF_NOTE?.length ?? 0;
   const activeCount = stats
     ? (stats.activeOutOfControlFires || 0) +
       (stats.activeBeingHeldFires || 0) +
@@ -155,55 +155,62 @@ function DashboardPage() {
       <div className="dashboard-header">
         <div>
           <div className="dashboard-kicker">
-            {state.data?.fireYear ? `Fire year ${state.data.fireYear}` : 'Dashboard'}
+            {`Fire year ${state.data?.fireYear ?? DASHBOARD_FIRE_YEAR}`}
           </div>
           <h1 className="dashboard-title">Dashboard</h1>
         </div>
-        <button type="button" className="refresh-chip" onClick={load}>Refresh</button>
+        <button type="button" className="refresh-chip" onClick={load}>
+          Refresh
+        </button>
       </div>
 
       {state.phase === 'failure' ? <div className="error-banner">{state.error}</div> : null}
 
       <div className="dashboard-grid">
-        <div className="dashboard-main-card">
-          <div className="card-title-row">
-            <div className="card-title">Wildfire Overview</div>
-            <div className="dashboard-updated">
-              {stats?.updateDate ? `Updated ${formatDateTime(stats.updateDate)}` : ''}
+        <div className="dashboard-left-column">
+          <div className="dashboard-main-card">
+            <div className="card-title-row">
+              <div className="card-title">Wildfire Overview</div>
+              <div className="dashboard-updated">
+                {stats?.updateDate ? `Updated ${formatDateTime(stats.updateDate)}` : ''}
+              </div>
+            </div>
+            <div className="stage-legend is-inline">
+              {['FIRE_OF_NOTE', 'UNDR_CNTRL', 'HOLDING', 'OUT_CNTRL'].map((code) => (
+                <div key={code} className="legend-item">
+                  <span className="legend-dot" style={{ background: STAGE_DEFS[code].color }} />
+                  <span>{STAGE_DEFS[code].label}</span>
+                </div>
+              ))}
+            </div>
+            <DashboardMap mapLayers={state.data?.mapLayers} />
+          </div>
+          <StubPanel title="Discourse Signals" className="dashboard-discourse" />
+        </div>
+
+        <div className="dashboard-right-column">
+          <div className="dashboard-side-column">
+            <div className="metrics-card-grid is-four">
+              <MetricCard label="Active" value={displayValue(activeCount)} />
+              <MetricCard label="New in 24" value={displayValue(stats?.newFires24Hours)} />
+              <MetricCard label="Out in 24" value={displayValue(stats?.outFires24Hours)} />
+              <MetricCard label="Out in 7" value={displayValue(stats?.outFires7Days)} />
+            </div>
+
+            <StageControlPanel stats={stats} />
+
+            <ResourceStubStrip />
+
+            <FireCentreTable statsList={state.data?.fireCentreStats || []} />
+
+            <div className="dashboard-evac-grid">
+              <MetricCard label="Evacuation Orders" value={displayValue(state.data?.evacuations.orders)} large />
+              <MetricCard label="Evacuation Alerts" value={displayValue(state.data?.evacuations.alerts)} large />
             </div>
           </div>
-          <div className="stage-legend is-inline">
-            {['FIRE_OF_NOTE', 'UNDR_CNTRL', 'HOLDING', 'OUT_CNTRL'].map((code) => (
-              <div key={code} className="legend-item">
-                <span className="legend-dot" style={{ background: STAGE_DEFS[code].color }} />
-                <span>{STAGE_DEFS[code].label}</span>
-              </div>
-            ))}
-          </div>
-          <DashboardMap mapLayers={state.data?.mapLayers} />
+
+          <StubPanel title="Pinned Incidents" className="dashboard-pinned" />
         </div>
-
-        <div className="dashboard-side-column">
-          <div className="metrics-card-grid is-three">
-            <MetricCard label="Active" value={displayValue(activeCount)} />
-            <MetricCard label="Wildfires of Note" value={displayValue(fireOfNoteCount)} />
-            <MetricCard label="New in 24" value={displayValue(stats?.newFires24Hours)} />
-            <MetricCard label="Out in 24" value={displayValue(stats?.outFires24Hours)} />
-            <MetricCard label="Out in 7" value={displayValue(stats?.outFires7Days)} />
-            <MetricCard label="Evacuation Orders" value={displayValue(state.data?.evacuations.orders)} />
-            <MetricCard label="Evacuation Alerts" value={displayValue(state.data?.evacuations.alerts)} />
-          </div>
-          <div className="metrics-card-grid is-three compact">
-            <StageMetric label="Out of Control" value={displayValue(stats?.activeOutOfControlFires)} pct={pct(stats?.activeOutOfControlFires, stats)} code="OUT_CNTRL" />
-            <StageMetric label="Being Held" value={displayValue(stats?.activeBeingHeldFires)} pct={pct(stats?.activeBeingHeldFires, stats)} code="HOLDING" />
-            <StageMetric label="Under Control" value={displayValue(stats?.activeUnderControlFires)} pct={pct(stats?.activeUnderControlFires, stats)} code="UNDR_CNTRL" />
-          </div>
-          <FireCentreTable statsList={state.data?.fireCentreStats || []} />
-        </div>
-
-        <StubPanel title="Discourse Signals" className="dashboard-discourse" />
-
-        <StubPanel title="Incidents (pinned)" className="dashboard-pinned" />
       </div>
     </div>
   );
@@ -279,16 +286,17 @@ function FireCentreTable({ statsList }) {
       </div>
       {FIRE_CENTRES.map((name, index) => {
         const row = statsList.find((item) => item?.fireCentre === name) || statsList[index] || null;
-        const out = Number(row?.activeOutOfControlFires || 0);
-        const held = Number(row?.activeBeingHeldFires || 0);
-        const under = Number(row?.activeUnderControlFires || 0);
+        const out = row?.activeOutOfControlFires;
+        const held = row?.activeBeingHeldFires;
+        const under = row?.activeUnderControlFires;
+        const active = row ? Number(out || 0) + Number(held || 0) + Number(under || 0) : null;
         return (
           <div key={name} className="fire-centre-table__row">
             <span>{name.replace(' Fire Centre', '')}</span>
-            <span>{out + held + under}</span>
-            <span>{out}</span>
-            <span>{held}</span>
-            <span>{under}</span>
+            <span>{displayValue(active)}</span>
+            <span>{displayValue(out)}</span>
+            <span>{displayValue(held)}</span>
+            <span>{displayValue(under)}</span>
           </div>
         );
       })}
@@ -615,9 +623,9 @@ function ResourcesAssigned({ incident }) {
   return <div>{items.length ? items.join(', ') : 'No resource assignment flags are published for this incident.'}</div>;
 }
 
-function MetricCard({ label, value }) {
+function MetricCard({ label, value, large = false }) {
   return (
-    <div className="metric-card">
+    <div className={`metric-card ${large ? 'metric-card--large' : ''}`.trim()}>
       <div className="metric-card__label">{label}</div>
       <div className="metric-card__value">{value}</div>
     </div>
@@ -627,17 +635,22 @@ function MetricCard({ label, value }) {
 function StageMetric({ label, value, pct, code }) {
   return (
     <div className="metric-card stage-metric">
-      <div className="stage-metric__label"><span className="legend-dot" style={{ background: STAGE_DEFS[code]?.color }} /> {label}</div>
-      <div className="stage-metric__numbers"><span>{value}</span><span>{pct}</span></div>
+      <div className="stage-metric__label">
+        <span className="legend-dot" style={{ background: STAGE_DEFS[code]?.color }} /> {label}
+      </div>
+      <div className="stage-metric__numbers">
+        <span>{value}</span>
+        <span>{pct}</span>
+      </div>
     </div>
   );
 }
 
-function SmallCountChip({ label, value }) {
+function BlankMetricCard({ label }) {
   return (
-    <div className="small-count-chip">
+    <div className="small-count-chip is-blank" aria-label={`${label} unavailable`}>
       <div className="small-count-chip__label">{label}</div>
-      <div className="small-count-chip__value">{value}</div>
+      <div className="small-count-chip__value">&mdash;</div>
     </div>
   );
 }
@@ -647,6 +660,69 @@ function StubPanel({ title, className = '' }) {
     <section className={`stub-panel ${className}`.trim()}>
       <h2>{title}</h2>
     </section>
+  );
+}
+
+function StageControlPanel({ stats }) {
+  const stages = [
+    {
+      code: 'UNDR_CNTRL',
+      label: 'Under Control',
+      value: stats?.activeUnderControlFires ?? null,
+    },
+    {
+      code: 'HOLDING',
+      label: 'Being Held',
+      value: stats?.activeBeingHeldFires ?? null,
+    },
+    {
+      code: 'OUT_CNTRL',
+      label: 'Out of Control',
+      value: stats?.activeOutOfControlFires ?? null,
+    },
+  ];
+
+  const total = stages.reduce((sum, stage) => sum + Number(stage.value || 0), 0);
+
+  return (
+    <section className="stage-control-panel">
+      <div className="stage-control-bar" aria-label="Stage of control distribution">
+        {stages.map((stage) => {
+          const width = total > 0 ? `${(Number(stage.value || 0) / total) * 100}%` : '0%';
+          return (
+            <div
+              key={stage.code}
+              className={`stage-control-bar__segment stage-control-bar__segment--${stage.code}`}
+              style={{ width, background: STAGE_DEFS[stage.code].color }}
+              title={`${stage.label}: ${displayValue(stage.value)} (${pct(stage.value, stats)})`}
+            />
+          );
+        })}
+      </div>
+      <div className="stage-control-grid">
+        {stages.map((stage) => (
+          <StageMetric
+            key={stage.code}
+            label={stage.label}
+            value={displayValue(stage.value)}
+            pct={pct(stage.value, stats)}
+            code={stage.code}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ResourceStubStrip() {
+  return (
+    <div className="resource-strip">
+      <BlankMetricCard label="Personnel" />
+      <BlankMetricCard label="IMT" />
+      <BlankMetricCard label="Aviation" />
+      <BlankMetricCard label="Heavy" />
+      <BlankMetricCard label="SPU" />
+    </div>
   );
 }
 

@@ -1,0 +1,12 @@
+Dashboard verification notes:
+
+- npm install: passed
+- npm run dev: passed on http://127.0.0.1:4173/
+- #/dashboard opened locally in a real headless Edge session
+- Map pan interaction: passed
+- Map zoom control: passed
+- Console errors during dashboard route check: none
+- Dashboard fetch/XHR URLs stayed within the manifest-approved endpoint families
+- Unsupported resource cards remained blank
+- Discourse Signals remained stubbed
+- Pinned Incidents remained stubbed

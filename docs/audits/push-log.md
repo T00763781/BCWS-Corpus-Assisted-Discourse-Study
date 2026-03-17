@@ -23,3 +23,15 @@
 - Commit message: `Reconcile local BCWS endpoint work and remove patch residue`
 - Short note: preserved the factual BCWS-backed dashboard, incidents, incident detail, and perimeter widget work; removed dead dashboard/incidents patch modules plus zip/script residue and generated junk; restored repo docs, handoff, Vite entry handling, and package identity so the repo is coherent again
 - Verification result: `npm install`, `npm run build`, and `npm run dev -- --host 127.0.0.1 --port 4173` all passed; `#/dashboard`, `#/incidents`, and `#/configure` rendered successfully in a real headless Edge session; dashboard metrics repopulated from live endpoints, incidents loaded 500 factual rows, the perimeter widget rendered with object count 320, and no browser console errors were emitted during the route checks
+
+## 2026-03-17T01:00:00-07:00
+
+- Commit message: `Realign dashboard layout to manifest-backed page-one target`
+- Short note: kept the pass dashboard-only, realigned the dashboard composition toward `dashboard.pdf` page 1, moved evacuation calls onto the canonical manifest path family, preserved the live wildfire overview map interaction, and left unsupported resource/discourse/pinned sections blank or stubbed
+- Verification result: `npm install` and `npm run dev -- --host 127.0.0.1 --port 4173` passed; `#/dashboard` opened locally in a real headless Edge session; the map panned and zoomed successfully; dashboard fetch/XHR URLs were limited to the manifest-approved statistics, stage feature, and evacuation query endpoints; unsupported resource cards stayed blank; and the final dashboard screenshot plus verification artifacts were captured under `docs/audits/`
+
+## 2026-03-17T01:20:00-07:00
+
+- Commit message: `Make the Open Fireside shell fill the full browser window`
+- Short note: removed the centered outer mockup frame, removed the width clamp and aspect-ratio constraint from the shell, expanded the shell to `100vw x 100vh`, kept the left rail fixed width, and let the workspace consume the remaining viewport width without changing dashboard data wiring or route logic
+- Verification result: `npm run dev -- --host 127.0.0.1 --port 4173` passed; `#/dashboard` rendered with `app-shell` and `shell-frame` both measuring `1440 x 900` in a `1440 x 900` viewport; the left rail stayed fixed at `150px`; no centered letterboxed frame remained; and the dashboard map still panned successfully after the shell change

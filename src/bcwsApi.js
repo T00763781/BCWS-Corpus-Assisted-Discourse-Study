@@ -1,6 +1,8 @@
 const BCWS_API = '/bcws-api';
 const BCWS_SITE = '/bcws-site';
+const DASHBOARD_EVACUATION_API = '/arcgis/evacuation';
 const WFNEWS_ARCGIS = '/wfnews-arcgis/services6/ubm4tcTYICKBpist/ArcGIS/rest/services';
+export const DASHBOARD_FIRE_YEAR = 2025;
 
 export const STAGE_DEFS = {
   FIRE_OF_NOTE: { label: 'Wildfire of Note', color: '#c01855' },
@@ -111,30 +113,11 @@ export async function fetchStatistics(fireCentre = 'BC', fireYear = new Date().g
   return Array.isArray(list) ? list[0] ?? null : null;
 }
 
-function activeCountForStats(stats) {
-  return Number(stats?.activeOutOfControlFires || 0) +
-    Number(stats?.activeBeingHeldFires || 0) +
-    Number(stats?.activeUnderControlFires || 0);
-}
-
-async function selectDashboardFireYear() {
-  const currentYear = new Date().getFullYear();
-  const candidateYears = [currentYear, currentYear - 1];
-  const candidates = await Promise.all(
-    candidateYears.map(async (fireYear) => ({
-      fireYear,
-      stats: await fetchStatistics('BC', fireYear),
-    }))
-  );
-
-  return candidates.sort((a, b) => activeCountForStats(b.stats) - activeCountForStats(a.stats))[0];
-}
-
 export async function fetchDashboardData() {
-  const selected = await selectDashboardFireYear();
-  const fireYear = selected?.fireYear ?? new Date().getFullYear();
-  const [fireCentreStats, fireOfNote, outCntrl, holding, underControl, evacuations] =
+  const fireYear = DASHBOARD_FIRE_YEAR;
+  const [stats, fireCentreStats, fireOfNote, outCntrl, holding, underControl, evacuations] =
     await Promise.all([
+      fetchStatistics('BC', fireYear),
       Promise.all(FIRE_CENTRES.map((name) => fetchStatistics(name, fireYear))),
       fetchStageFeatures('FIRE_OF_NOTE'),
       fetchStageFeatures('OUT_CNTRL'),
@@ -145,7 +128,7 @@ export async function fetchDashboardData() {
 
   return {
     fireYear,
-    stats: selected?.stats ?? null,
+    stats: stats ?? null,
     fireCentreStats: fireCentreStats.filter(Boolean),
     mapLayers: {
       FIRE_OF_NOTE: fireOfNote.features || [],
@@ -162,24 +145,27 @@ export async function fetchStageFeatures(stageCode) {
 }
 
 export async function fetchEvacuationSummary() {
-  const response = await fetchJson(
-    `${WFNEWS_ARCGIS}/Evacuation_Orders_and_Alerts/FeatureServer/0/query?${toQuery({
-      where: "ORDER_ALERT_STATUS <> 'All Clear' and (EVENT_TYPE = 'Fire' or EVENT_TYPE = 'Wildfire')",
-      outFields: '*',
-      returnGeometry: false,
-      f: 'pjson',
-    })}`
-  );
-  const features = response.features || [];
-  let orders = 0;
-  let alerts = 0;
-  features.forEach((feature) => {
-    const attrs = feature.attributes || {};
-    const status = String(attrs.ORDER_ALERT_STATUS || '').toLowerCase();
-    if (status.includes('order')) orders += 1;
-    if (status.includes('alert')) alerts += 1;
-  });
-  return { orders, alerts };
+  const [ordersPayload, alertsPayload] = await Promise.all([
+    fetchJson(
+      `${DASHBOARD_EVACUATION_API}/FeatureServer/0/query?${toQuery({
+        where: "ORDER_ALERT_STATUS='Order'",
+        returnCountOnly: true,
+        f: 'json',
+      })}`
+    ),
+    fetchJson(
+      `${DASHBOARD_EVACUATION_API}/FeatureServer/0/query?${toQuery({
+        where: "ORDER_ALERT_STATUS='Alert'",
+        returnCountOnly: true,
+        f: 'json',
+      })}`
+    ),
+  ]);
+
+  return {
+    orders: Number(ordersPayload.count ?? 0),
+    alerts: Number(alertsPayload.count ?? 0),
+  };
 }
 
 export async function fetchIncidentDetail(fireYear, incidentNumber) {
