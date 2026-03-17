@@ -7,6 +7,7 @@ Dashboard verification notes:
 - Map zoom control: passed
 - Console errors during dashboard route check: none
 - Dashboard fetch/XHR URLs stayed within the manifest-approved endpoint families
+- Fire-centre rows bound by exact fire-centre name only
 - Unsupported resource cards remained blank
 - Discourse Signals remained stubbed
 - Pinned Incidents remained stubbed

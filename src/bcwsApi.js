@@ -1,6 +1,5 @@
 const BCWS_API = '/bcws-api';
 const BCWS_SITE = '/bcws-site';
-const DASHBOARD_EVACUATION_API = '/arcgis/evacuation';
 const WFNEWS_ARCGIS = '/wfnews-arcgis/services6/ubm4tcTYICKBpist/ArcGIS/rest/services';
 export const DASHBOARD_FIRE_YEAR = 2025;
 
@@ -145,26 +144,28 @@ export async function fetchStageFeatures(stageCode) {
 }
 
 export async function fetchEvacuationSummary() {
-  const [ordersPayload, alertsPayload] = await Promise.all([
-    fetchJson(
-      `${DASHBOARD_EVACUATION_API}/FeatureServer/0/query?${toQuery({
-        where: "ORDER_ALERT_STATUS='Order'",
-        returnCountOnly: true,
-        f: 'json',
-      })}`
-    ),
-    fetchJson(
-      `${DASHBOARD_EVACUATION_API}/FeatureServer/0/query?${toQuery({
-        where: "ORDER_ALERT_STATUS='Alert'",
-        returnCountOnly: true,
-        f: 'json',
-      })}`
-    ),
-  ]);
+  const payload = await fetchJson(
+    `${WFNEWS_ARCGIS}/Evacuation_Orders_and_Alerts/FeatureServer/0/query?${toQuery({
+      where: "ORDER_ALERT_STATUS <> 'All Clear' and (EVENT_TYPE = 'Fire' or EVENT_TYPE = 'Wildfire')",
+      outFields: '*',
+      returnGeometry: false,
+      f: 'pjson',
+    })}`
+  );
+
+  const features = payload.features || [];
+  let orders = 0;
+  let alerts = 0;
+
+  features.forEach((feature) => {
+    const status = String(feature?.attributes?.ORDER_ALERT_STATUS || '').toLowerCase();
+    if (status.includes('order')) orders += 1;
+    if (status.includes('alert')) alerts += 1;
+  });
 
   return {
-    orders: Number(ordersPayload.count ?? 0),
-    alerts: Number(alertsPayload.count ?? 0),
+    orders,
+    alerts,
   };
 }
 

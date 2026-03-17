@@ -9,7 +9,7 @@
 ## Source of truth used
 
 - `dashboard.pdf` page 1 for layout target
-- `open_fireside_dashboard_endpoints_v1.yaml` for canonical dashboard endpoint usage
+- `open_fireside_dashboard_endpoints_v2.yaml` for canonical dashboard endpoint usage
 
 ## What changed
 
@@ -24,10 +24,10 @@
   - Pinned Incidents stub lower-right
 - Removed the unsupported `Wildfires of Note` right-side stat card from the live layout.
 - Kept the wildfire-of-note category only in the map legend and marker layer, which matches the manifest and PDF.
-- Changed dashboard evacuation calls to the canonical manifest path family:
-  - `/arcgis/evacuation/FeatureServer/0/query`
-- Locked dashboard stats/fire-centre calls to the manifest fire year:
+- Kept dashboard evacuation calls within the canonical `wfnews-arcgis` family and used the manifest-approved query shape.
+- Locked dashboard stats and fire-centre calls to the manifest fire year:
   - `fireYear=2025`
+- Removed positional fire-centre fallback logic so rows bind by exact fire-centre name only.
 - Left unsupported sections blank with em dashes only:
   - Personnel
   - IMT
@@ -46,8 +46,7 @@ Dashboard data calls are limited to manifest-approved families:
 - `/bcws-api/wfnews-api/publicPublishedIncident/features?stageOfControl=OUT_CNTRL`
 - `/bcws-api/wfnews-api/publicPublishedIncident/features?stageOfControl=HOLDING`
 - `/bcws-api/wfnews-api/publicPublishedIncident/features?stageOfControl=UNDR_CNTRL`
-- `/arcgis/evacuation/FeatureServer/0/query?where=ORDER_ALERT_STATUS='Order'&returnCountOnly=true&f=json`
-- `/arcgis/evacuation/FeatureServer/0/query?where=ORDER_ALERT_STATUS='Alert'&returnCountOnly=true&f=json`
+- `/wfnews-arcgis/services6/ubm4tcTYICKBpist/ArcGIS/rest/services/Evacuation_Orders_and_Alerts/FeatureServer/0/query?where=ORDER_ALERT_STATUS <> 'All Clear' and (EVENT_TYPE = 'Fire' or EVENT_TYPE = 'Wildfire')&outFields=*&returnGeometry=false&f=pjson`
 
 ## Verification run
 
@@ -58,14 +57,22 @@ Dashboard data calls are limited to manifest-approved families:
 5. Confirmed zoom control still worked
 6. Confirmed dashboard fetch/XHR URLs stayed within the manifest-approved endpoint set
 7. Confirmed unsupported resource cards remained blank and no fabricated values appeared
-8. Captured final dashboard screenshot at `docs/audits/dashboard-final.png`
+8. Confirmed fire-centre rows were bound by exact name only
+9. Captured final dashboard screenshot for `feedback.zip`
 
 ## Verification results
 
 - Map interaction preserved:
-  - map pane transform changed from `matrix(1, 0, 0, 1, 0, 0)` to `matrix(1, 0, 0, 1, -76, -22)` after drag
+  - map pane transform changed from `matrix(1, 0, 0, 1, 0, 0)` to `matrix(1, 0, 0, 1, -115, -19)` after drag
 - Browser console errors during dashboard verification: none
 - Dashboard data request set matched the manifest families only
+- Fire-centre rows matched the exact approved display order and exact fire-centre names only:
+  - Cariboo
+  - Coastal
+  - Kamloops
+  - Northwest
+  - Prince George
+  - Southeast
 - Layout is materially closer to `dashboard.pdf` page 1 than the previous dashboard state
 
 ## Files changed in this pass

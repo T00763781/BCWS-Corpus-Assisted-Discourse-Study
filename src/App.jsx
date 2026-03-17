@@ -285,7 +285,7 @@ function FireCentreTable({ statsList }) {
         <span>Under</span>
       </div>
       {FIRE_CENTRES.map((name, index) => {
-        const row = statsList.find((item) => item?.fireCentre === name) || statsList[index] || null;
+        const row = statsList.find((item) => item?.fireCentre === name) || null;
         const out = row?.activeOutOfControlFires;
         const held = row?.activeBeingHeldFires;
         const under = row?.activeUnderControlFires;

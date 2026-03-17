@@ -35,3 +35,9 @@
 - Commit message: `Make the Open Fireside shell fill the full browser window`
 - Short note: removed the centered outer mockup frame, removed the width clamp and aspect-ratio constraint from the shell, expanded the shell to `100vw x 100vh`, kept the left rail fixed width, and let the workspace consume the remaining viewport width without changing dashboard data wiring or route logic
 - Verification result: `npm run dev -- --host 127.0.0.1 --port 4173` passed; `#/dashboard` rendered with `app-shell` and `shell-frame` both measuring `1440 x 900` in a `1440 x 900` viewport; the left rail stayed fixed at `150px`; no centered letterboxed frame remained; and the dashboard map still panned successfully after the shell change
+
+## 2026-03-17T01:40:00-07:00
+
+- Commit message: `Constrain dashboard layout to v2 manifest families and exact row binding`
+- Short note: kept the pass dashboard-only, moved the evacuation count logic back under the canonical `wfnews-arcgis` endpoint family and query shape from the v2 manifest, removed positional fire-centre fallback logic so rows bind by exact fire-centre name only, preserved the current dashboard layout, and kept unsupported dashboard sections blank or stubbed
+- Verification result: `npm install` and `npm run dev -- --host 127.0.0.1 --port 4173` passed; `#/dashboard` opened locally in a real headless Edge session; the map still panned and zoomed; all dashboard fetch/XHR calls stayed within the v2 manifest endpoint families; fire-centre rows matched exact names only; unsupported resource cards remained blank; stub panels remained stubbed; and the final screenshot plus verification notes were rebuilt into `feedback.zip`
