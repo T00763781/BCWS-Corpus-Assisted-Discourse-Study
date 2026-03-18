@@ -1,0 +1,44 @@
+Dashboard and incidents UX verification
+Date: 2026-03-18
+
+Commands run:
+- npm install
+- npm run dev -- --host 127.0.0.1 --port 4173
+
+Pages opened locally:
+- http://127.0.0.1:4173/#/dashboard
+- http://127.0.0.1:4173/#/incidents
+- http://127.0.0.1:4173/#/incidents/2025/C41741
+
+Dashboard checks:
+- canonical logo source confirmed: /assets/logo.svg
+- source-health chips rendered from the existing dashboard fetch state only
+- observed source-health chip texts:
+  - Stats Ready
+  - Map Ready
+  - Evac Ready
+- map pane transform changed from:
+  - matrix(1, 0, 0, 1, -32, 29)
+  - to matrix(1, 0, 0, 1, 97.957, 68.9854)
+- dashboard requests remained within approved existing families:
+  - /bcws-api/wfnews-api/statistics
+  - /bcws-api/wfnews-api/publicPublishedIncident/features
+  - /wfnews-arcgis/.../Evacuation_Orders_and_Alerts/FeatureServer/0/query
+
+Incident list checks:
+- sort-by dropdown worked
+- filter dropdown worked
+- clicking `Being Held` reduced the visible list to `Being Held` rows only
+- clickable header sorting rendered sort state labels in the header row
+
+Gallery checks:
+- tested incident: C41741 / fire year 2025
+- live attachment metadata loaded through the existing attachment path
+- gallery now shows `Live image unavailable` instead of broken empty images when the live URL fails
+- sampled current live attachment image URLs for C41741, C41742, K71095, and R90700 returned HTTP 401
+
+Artifacts captured:
+- tmp/ux-pass/dashboard.png
+- tmp/ux-pass/incidents.png
+- tmp/ux-pass/gallery.png
+- tmp/ux-pass/verification.json

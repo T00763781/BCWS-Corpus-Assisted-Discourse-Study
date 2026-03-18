@@ -156,6 +156,7 @@ function DashboardPage() {
       (stats.activeBeingHeldFires || 0) +
       (stats.activeUnderControlFires || 0)
     : null;
+  const sourceSignals = React.useMemo(() => buildDashboardSourceSignals(state), [state]);
 
   return (
     <div className="dashboard-page">
@@ -166,9 +167,16 @@ function DashboardPage() {
           </div>
           <h1 className="dashboard-title">Dashboard</h1>
         </div>
-        <button type="button" className="refresh-chip" onClick={load}>
-          Refresh
-        </button>
+        <div className="dashboard-header__actions">
+          <div className="source-health-row" aria-label="Dashboard source status">
+            {sourceSignals.map((signal) => (
+              <SourceHealthChip key={signal.label} label={signal.label} status={signal.status} />
+            ))}
+          </div>
+          <button type="button" className="refresh-chip" onClick={load}>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {state.phase === 'failure' ? <div className="error-banner">{state.error}</div> : null}
@@ -235,6 +243,9 @@ function DashboardMap({ mapLayers }) {
     }).addTo(map);
     markerLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
+    requestAnimationFrame(() => {
+      map.invalidateSize();
+    });
     return () => {
       map.remove();
       mapRef.current = null;
@@ -310,9 +321,21 @@ function FireCentreTable({ statsList }) {
 function IncidentsListPage() {
   const [search, setSearch] = React.useState('');
   const [fireCentre, setFireCentre] = React.useState('');
+  const [quickFilter, setQuickFilter] = React.useState('all');
   const [selectedStages, setSelectedStages] = React.useState(['OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL', 'OUT']);
-  const [sortKey, setSortKey] = React.useState('lastUpdated');
+  const [sortState, setSortState] = React.useState({ key: 'updatedDate', direction: 'desc' });
   const [state, setState] = React.useState({ phase: 'loading', error: '', rows: [] });
+  const columnDefs = React.useMemo(
+    () => ({
+      incidentName: { label: 'Wildfire Name', type: 'text' },
+      stage: { label: 'Stage of Control', type: 'text' },
+      fireCentre: { label: 'Fire Centre', type: 'text' },
+      location: { label: 'Location', type: 'text' },
+      discoveryDate: { label: 'Discovery Date', type: 'date' },
+      updatedDate: { label: 'Last Updated', type: 'date' },
+    }),
+    []
+  );
 
   const load = React.useCallback(async () => {
     setState((current) => ({ ...current, phase: 'loading', error: '' }));
@@ -329,23 +352,61 @@ function IncidentsListPage() {
   }, [load]);
 
   const rows = React.useMemo(() => {
-    const next = [...state.rows];
-    next.sort((a, b) => {
-      if (sortKey === 'name') return String(a.incidentName).localeCompare(String(b.incidentName));
-      return Number(b.updatedDate || 0) - Number(a.updatedDate || 0);
+    const filtered = quickFilter === 'fireOfNote'
+      ? state.rows.filter((row) => row.fireOfNote)
+      : [...state.rows];
+    filtered.sort((a, b) => compareRows(a, b, sortState, columnDefs));
+    return filtered;
+  }, [columnDefs, quickFilter, sortState, state.rows]);
+
+  const sortOptions = React.useMemo(
+    () => [
+      { value: 'updatedDate:desc', label: 'Last Updated (Newest)' },
+      { value: 'updatedDate:asc', label: 'Last Updated (Oldest)' },
+      { value: 'discoveryDate:desc', label: 'Discovery Date (Newest)' },
+      { value: 'discoveryDate:asc', label: 'Discovery Date (Oldest)' },
+      { value: 'incidentName:asc', label: 'Wildfire Name (A-Z)' },
+      { value: 'incidentName:desc', label: 'Wildfire Name (Z-A)' },
+      { value: 'fireCentre:asc', label: 'Fire Centre (A-Z)' },
+      { value: 'fireCentre:desc', label: 'Fire Centre (Z-A)' },
+    ],
+    []
+  );
+
+  const handleSortDropdownChange = (event) => {
+    const [key, direction] = event.target.value.split(':');
+    setSortState({ key, direction });
+  };
+
+  const handleHeaderSort = (key) => {
+    setSortState((current) => {
+      if (current.key === key) {
+        return { key, direction: current.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return {
+        key,
+        direction: columnDefs[key]?.type === 'text' ? 'asc' : 'desc',
+      };
     });
-    return next;
-  }, [state.rows, sortKey]);
+  };
 
   const toggleStage = (code) => {
     setSelectedStages((current) => {
-      if (current.includes(code)) {
-        const next = current.filter((item) => item !== code);
-        return next.length ? next : current;
+      if (current.length === 1 && current[0] === code) {
+        return ['OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL', 'OUT'];
       }
-      return [...current, code];
+      return [code];
     });
   };
+
+  const stageIsExclusive = (code) => selectedStages.length === 1 && selectedStages[0] === code;
+  const activeFilters = [];
+  if (quickFilter === 'fireOfNote') activeFilters.push('Fire of note only');
+  if (fireCentre) activeFilters.push(fireCentre);
+  if (selectedStages.length === 1) activeFilters.push(stageLabel(selectedStages[0]));
+  const resultsLabel = activeFilters.length ? `Filtered by ${activeFilters.join(' | ')}` : 'All active incidents';
+  const noResultsMessage =
+    state.phase === 'loading' ? 'Loading incidents...' : 'No incidents matched the current filters.';
 
   return (
     <div className="incidents-page">
@@ -356,15 +417,25 @@ function IncidentsListPage() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+        <select className="toolbar-input" value={quickFilter} onChange={(event) => setQuickFilter(event.target.value)}>
+          <option value="all">Filter: All incidents</option>
+          <option value="fireOfNote">Filter: Fire of note only</option>
+        </select>
         <select className="toolbar-input" value={fireCentre} onChange={(event) => setFireCentre(event.target.value)}>
-          <option value="">Fire Centre</option>
+          <option value="">All fire centres</option>
           {FIRE_CENTRES.map((name) => (
             <option key={name} value={name}>{name}</option>
           ))}
         </select>
-        <button className="toolbar-button toolbar-button--sort" type="button" onClick={() => setSortKey((current) => current === 'lastUpdated' ? 'name' : 'lastUpdated')}>
-          Sort By
-        </button>
+        <select className="toolbar-input toolbar-select" value={`${sortState.key}:${sortState.direction}`} onChange={handleSortDropdownChange}>
+          {sortOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="list-results-row">
+        <div className="list-results-label">{resultsLabel}</div>
       </div>
 
       <div className="stage-toggle-row">
@@ -372,7 +443,7 @@ function IncidentsListPage() {
           <button
             key={code}
             type="button"
-            className={`stage-toggle ${selectedStages.includes(code) ? 'is-active' : ''}`}
+            className={`stage-toggle ${stageIsExclusive(code) ? 'is-active' : ''}`}
             data-stage={code}
             onClick={() => toggleStage(code)}
           >
@@ -387,12 +458,18 @@ function IncidentsListPage() {
         <table className="incident-table">
           <thead>
             <tr>
-              <th>Wildfire Name</th>
-              <th>Stage of Control</th>
-              <th>Fire Centre</th>
-              <th>Location</th>
-              <th>Discovery Date</th>
-              <th>Last Updated</th>
+              {Object.entries(columnDefs).map(([key, column]) => (
+                <th key={key}>
+                  <button
+                    type="button"
+                    className={`table-sort ${sortState.key === key ? 'is-active' : ''}`}
+                    onClick={() => handleHeaderSort(key)}
+                  >
+                    <span>{column.label}</span>
+                    <span className="table-sort__direction">{sortIndicator(sortState, key, column.type)}</span>
+                  </button>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -530,7 +607,7 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
             <div className="gallery-grid">
               {state.data.attachments.map((asset) => (
                 <article key={asset.attachmentGuid} className="gallery-card">
-                  {asset.imageUrl ? <img src={asset.imageUrl} alt={asset.title} className="gallery-card__image" /> : null}
+                  <GalleryImage asset={asset} />
                   <div className="gallery-card__title">{asset.title}</div>
                   <div className="gallery-card__date">{formatDate(asset.uploadedTimestamp)}</div>
                 </article>
@@ -631,6 +708,15 @@ function MetricCard({ label, value, large = false }) {
     <div className={`metric-card ${large ? 'metric-card--large' : ''}`.trim()}>
       <div className="metric-card__label">{label}</div>
       <div className="metric-card__value">{value}</div>
+    </div>
+  );
+}
+
+function SourceHealthChip({ label, status }) {
+  return (
+    <div className={`source-health-chip is-${status}`.trim()}>
+      <span className="source-health-chip__label">{label}</span>
+      <span className="source-health-chip__state">{sourceHealthLabel(status)}</span>
     </div>
   );
 }
@@ -743,6 +829,29 @@ function DetailCard({ title, children }) {
       <h3>{title}</h3>
       {children}
     </section>
+  );
+}
+
+function GalleryImage({ asset }) {
+  const [failed, setFailed] = React.useState(false);
+
+  if (!asset.imageUrl) {
+    return <div className="gallery-card__empty">No live image URL</div>;
+  }
+
+  if (failed) {
+    return <div className="gallery-card__empty">Live image unavailable</div>;
+  }
+
+  return (
+    <img
+      src={asset.imageUrl}
+      alt={asset.title}
+      className="gallery-card__image"
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+    />
   );
 }
 
@@ -1045,4 +1154,65 @@ function displayValue(value) {
     return '--';
   }
   return Number(value).toLocaleString('en-CA');
+}
+
+function buildDashboardSourceSignals(state) {
+  if (state.phase === 'loading') {
+    return [
+      { label: 'Stats', status: 'loading' },
+      { label: 'Map', status: 'loading' },
+      { label: 'Evac', status: 'loading' },
+    ];
+  }
+
+  if (state.phase === 'failure') {
+    return [
+      { label: 'Stats', status: 'error' },
+      { label: 'Map', status: 'error' },
+      { label: 'Evac', status: 'error' },
+    ];
+  }
+
+  const statsReady = Boolean(state.data?.stats);
+  const mapReady = ['FIRE_OF_NOTE', 'OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL'].every(
+    (code) => Array.isArray(state.data?.mapLayers?.[code])
+  );
+  const evacReady =
+    Number.isFinite(Number(state.data?.evacuations?.orders)) &&
+    Number.isFinite(Number(state.data?.evacuations?.alerts));
+
+  return [
+    { label: 'Stats', status: statsReady ? 'ready' : 'error' },
+    { label: 'Map', status: mapReady ? 'ready' : 'error' },
+    { label: 'Evac', status: evacReady ? 'ready' : 'error' },
+  ];
+}
+
+function sourceHealthLabel(status) {
+  if (status === 'ready') return 'Ready';
+  if (status === 'loading') return 'Loading';
+  return 'Error';
+}
+
+function compareRows(a, b, sortState, columnDefs) {
+  const column = columnDefs[sortState.key];
+  if (!column) return 0;
+  const direction = sortState.direction === 'asc' ? 1 : -1;
+  const left = a[sortState.key];
+  const right = b[sortState.key];
+
+  if (column.type === 'date' || column.type === 'number') {
+    return (Number(left || 0) - Number(right || 0)) * direction;
+  }
+
+  return String(left || '').localeCompare(String(right || ''), 'en', { sensitivity: 'base' }) * direction;
+}
+
+function sortIndicator(sortState, key, type) {
+  if (sortState.key !== key) {
+    return type === 'text' ? 'A-Z' : 'Newest';
+  }
+  if (type === 'text') return sortState.direction === 'asc' ? 'A-Z' : 'Z-A';
+  if (type === 'number') return sortState.direction === 'asc' ? 'Low-High' : 'High-Low';
+  return sortState.direction === 'asc' ? 'Oldest' : 'Newest';
 }
