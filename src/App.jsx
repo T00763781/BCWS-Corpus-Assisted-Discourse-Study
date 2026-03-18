@@ -32,6 +32,13 @@ const ROUTES = [
   { id: 'configure', label: 'Configure' },
 ];
 
+const STAGE_ICON_SRC = {
+  FIRE_OF_NOTE: '/fire-of-note.svg',
+  UNDR_CNTRL: '/under-control.svg',
+  HOLDING: '/being-held.svg',
+  OUT_CNTRL: '/out-of-control.svg',
+};
+
 function parseHashRoute() {
   const hash = window.location.hash.replace(/^#\/?/, '');
   if (!hash) return { id: 'dashboard' };
@@ -167,50 +174,46 @@ function DashboardPage() {
       {state.phase === 'failure' ? <div className="error-banner">{state.error}</div> : null}
 
       <div className="dashboard-grid">
-        <div className="dashboard-left-column">
-          <div className="dashboard-main-card">
-            <div className="card-title-row">
-              <div className="card-title">Wildfire Overview</div>
-              <div className="dashboard-updated">
-                {stats?.updateDate ? `Updated ${formatDateTime(stats.updateDate)}` : ''}
+        <section className="dashboard-main-card dashboard-grid__map">
+          <div className="card-title-row">
+            <div className="card-title">Wildfire Overview</div>
+            <div className="dashboard-updated">
+              {stats?.updateDate ? `Updated ${formatDateTime(stats.updateDate)}` : ''}
+            </div>
+          </div>
+          <div className="stage-legend is-inline">
+            {['FIRE_OF_NOTE', 'UNDR_CNTRL', 'HOLDING', 'OUT_CNTRL'].map((code) => (
+              <div key={code} className="legend-item">
+                <StageGlyph code={code} />
+                <span>{STAGE_DEFS[code].label}</span>
               </div>
-            </div>
-            <div className="stage-legend is-inline">
-              {['FIRE_OF_NOTE', 'UNDR_CNTRL', 'HOLDING', 'OUT_CNTRL'].map((code) => (
-                <div key={code} className="legend-item">
-                  <span className="legend-dot" style={{ background: STAGE_DEFS[code].color }} />
-                  <span>{STAGE_DEFS[code].label}</span>
-                </div>
-              ))}
-            </div>
-            <DashboardMap mapLayers={state.data?.mapLayers} />
+            ))}
           </div>
-          <StubPanel title="Discourse Signals" className="dashboard-discourse" />
-        </div>
+          <DashboardMap mapLayers={state.data?.mapLayers} />
+        </section>
 
-        <div className="dashboard-right-column">
-          <div className="dashboard-side-column">
-            <div className="metrics-card-grid is-four">
-              <MetricCard label="Active" value={displayValue(activeCount)} />
-              <MetricCard label="New in 24" value={displayValue(stats?.newFires24Hours)} />
-              <MetricCard label="Out in 24" value={displayValue(stats?.outFires24Hours)} />
-              <MetricCard label="Out in 7" value={displayValue(stats?.outFires7Days)} />
-            </div>
-
-            <StageControlPanel stats={stats} />
-
-            <ResourceStubStrip />
-
-            <FireCentreTable statsList={state.data?.fireCentreStats || []} />
-
-            <div className="dashboard-evac-grid">
-              <MetricCard label="Evacuation Orders" value={displayValue(state.data?.evacuations.orders)} large />
-              <MetricCard label="Evacuation Alerts" value={displayValue(state.data?.evacuations.alerts)} large />
-            </div>
+        <div className="dashboard-overview-stack dashboard-grid__overview">
+          <div className="metrics-card-grid is-four">
+            <MetricCard label="Active" value={displayValue(activeCount)} />
+            <MetricCard label="New in 24" value={displayValue(stats?.newFires24Hours)} />
+            <MetricCard label="Out in 24" value={displayValue(stats?.outFires24Hours)} />
+            <MetricCard label="Out in 7" value={displayValue(stats?.outFires7Days)} />
           </div>
 
-          <StubPanel title="Pinned Incidents" className="dashboard-pinned" />
+          <StageControlPanel stats={stats} />
+
+          <FireCentreTable statsList={state.data?.fireCentreStats || []} />
+
+          <ResourceStubStrip />
+
+          <div className="dashboard-evac-grid">
+            <MetricCard label="Evacuation Orders" value={displayValue(state.data?.evacuations.orders)} large />
+            <MetricCard label="Evacuation Alerts" value={displayValue(state.data?.evacuations.alerts)} large />
+          </div>
         </div>
+
+        <StubPanel title="Discourse Signals" className="dashboard-discourse dashboard-grid__discourse" />
+        <StubPanel title="Pinned Incidents" className="dashboard-pinned dashboard-grid__pinned" />
       </div>
     </div>
   );
@@ -632,11 +635,19 @@ function MetricCard({ label, value, large = false }) {
   );
 }
 
+function StageGlyph({ code }) {
+  const src = STAGE_ICON_SRC[code];
+  if (!src) {
+    return <span className="legend-dot" style={{ background: STAGE_DEFS[code]?.color }} />;
+  }
+  return <img src={src} alt="" className="stage-glyph" aria-hidden="true" />;
+}
+
 function StageMetric({ label, value, pct, code }) {
   return (
     <div className="metric-card stage-metric">
       <div className="stage-metric__label">
-        <span className="legend-dot" style={{ background: STAGE_DEFS[code]?.color }} /> {label}
+        <StageGlyph code={code} /> {label}
       </div>
       <div className="stage-metric__numbers">
         <span>{value}</span>

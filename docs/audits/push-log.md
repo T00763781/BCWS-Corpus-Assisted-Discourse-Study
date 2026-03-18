@@ -47,3 +47,9 @@
 - Commit message: `Tighten dashboard layout proportions against page-one PDF`
 - Short note: kept the pass dashboard-only and CSS-only, preserving the current live wiring while increasing the title, map, right-side card stack, and lower stub panel proportions so the dashboard reads closer to `dashboard.pdf` page 1 inside the full-window shell
 - Verification result: `npm install` and `npm run dev -- --host 127.0.0.1 --port 4173` passed; `#/dashboard` opened locally in a real headless Edge session; the map still panned and zoomed; all dashboard fetch/XHR calls remained within the approved v2 families; unsupported sections stayed blank/stubbed; no fabricated values appeared; and the final screenshot plus verification notes were rebuilt into `feedback.zip`
+
+## 2026-03-17T23:20:00-07:00
+
+- Commit message: `Realign dashboard into explicit 2x2 workspace`
+- Short note: kept the pass dashboard-only, reshaped the dashboard into explicit top-left, top-right, bottom-left, and bottom-right regions, preserved the current live wiring and exact-name fire-centre binding, and reused the provided stage marker assets to better match `dashboard.pdf` page 1 without inventing any unsupported content
+- Verification result: `npm install` and `npm run dev -- --host 127.0.0.1 --port 4173` passed; `#/dashboard` opened locally in a real browser session; the map still panned and zoomed; the dashboard measured as a clear 2x2 layout; all dashboard fetch/XHR calls remained within the approved v2 families; unsupported sections stayed blank/stubbed; no fabricated values appeared; and the final screenshot plus verification notes were rebuilt into `feedback.zip`

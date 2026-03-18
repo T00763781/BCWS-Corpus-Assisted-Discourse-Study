@@ -1,0 +1,44 @@
+Dashboard 2x2 layout verification
+Date: 2026-03-17
+
+Commands run:
+- npm install
+- npm run dev -- --host 127.0.0.1 --port 4173
+
+Live browser checks:
+- Opened http://127.0.0.1:4173/#/dashboard
+- Confirmed the dashboard rendered as a clear 2x2 composition:
+  - map panel upper-left
+  - stats/stage/fire-centre/resource/evac block upper-right
+  - discourse stub lower-left
+  - pinned stub lower-right
+- Confirmed map pan/zoom remained live
+  - map pane transform changed from matrix(1, 0, 0, 1, 0, 0)
+  - to matrix(1, 0, 0, 1, 139.954, 40)
+- Confirmed exact fire-centre display order:
+  - Cariboo
+  - Coastal
+  - Kamloops
+  - Northwest
+  - Prince George
+  - Southeast
+- Confirmed resource-strip cells remained blank with em dashes only
+- Confirmed Discourse Signals and Pinned Incidents remained stubbed
+- Confirmed no console errors were emitted
+
+Approved dashboard network calls observed:
+- /bcws-api/wfnews-api/statistics?fireYear=2025&fireCentre=BC
+- /bcws-api/wfnews-api/statistics?fireYear=2025&fireCentre=Cariboo+Fire+Centre
+- /bcws-api/wfnews-api/statistics?fireYear=2025&fireCentre=Coastal+Fire+Centre
+- /bcws-api/wfnews-api/statistics?fireYear=2025&fireCentre=Kamloops+Fire+Centre
+- /bcws-api/wfnews-api/statistics?fireYear=2025&fireCentre=Northwest+Fire+Centre
+- /bcws-api/wfnews-api/statistics?fireYear=2025&fireCentre=Prince+George+Fire+Centre
+- /bcws-api/wfnews-api/statistics?fireYear=2025&fireCentre=Southeast+Fire+Centre
+- /bcws-api/wfnews-api/publicPublishedIncident/features?stageOfControl=FIRE_OF_NOTE
+- /bcws-api/wfnews-api/publicPublishedIncident/features?stageOfControl=HOLDING
+- /bcws-api/wfnews-api/publicPublishedIncident/features?stageOfControl=OUT_CNTRL
+- /bcws-api/wfnews-api/publicPublishedIncident/features?stageOfControl=UNDR_CNTRL
+- /wfnews-arcgis/services6/ubm4tcTYICKBpist/ArcGIS/rest/services/Evacuation_Orders_and_Alerts/FeatureServer/0/query?where=ORDER_ALERT_STATUS+%3C%3E+%27All+Clear%27+and+%28EVENT_TYPE+%3D+%27Fire%27+or+EVENT_TYPE+%3D+%27Wildfire%27%29&outFields=*&returnGeometry=false&f=pjson
+
+Screenshot captured:
+- tmp/dashboard-2x2/dashboard-final.png
