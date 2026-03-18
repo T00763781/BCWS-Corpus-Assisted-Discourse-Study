@@ -11,3 +11,4 @@ Dashboard verification notes:
 - Unsupported resource cards remained blank
 - Discourse Signals remained stubbed
 - Pinned Incidents remained stubbed
+- Layout proportions were visually tightened toward dashboard.pdf page 1

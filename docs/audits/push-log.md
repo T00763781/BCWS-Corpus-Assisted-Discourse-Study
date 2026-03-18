@@ -41,3 +41,9 @@
 - Commit message: `Constrain dashboard layout to v2 manifest families and exact row binding`
 - Short note: kept the pass dashboard-only, moved the evacuation count logic back under the canonical `wfnews-arcgis` endpoint family and query shape from the v2 manifest, removed positional fire-centre fallback logic so rows bind by exact fire-centre name only, preserved the current dashboard layout, and kept unsupported dashboard sections blank or stubbed
 - Verification result: `npm install` and `npm run dev -- --host 127.0.0.1 --port 4173` passed; `#/dashboard` opened locally in a real headless Edge session; the map still panned and zoomed; all dashboard fetch/XHR calls stayed within the v2 manifest endpoint families; fire-centre rows matched exact names only; unsupported resource cards remained blank; stub panels remained stubbed; and the final screenshot plus verification notes were rebuilt into `feedback.zip`
+
+## 2026-03-17T02:05:00-07:00
+
+- Commit message: `Tighten dashboard layout proportions against page-one PDF`
+- Short note: kept the pass dashboard-only and CSS-only, preserving the current live wiring while increasing the title, map, right-side card stack, and lower stub panel proportions so the dashboard reads closer to `dashboard.pdf` page 1 inside the full-window shell
+- Verification result: `npm install` and `npm run dev -- --host 127.0.0.1 --port 4173` passed; `#/dashboard` opened locally in a real headless Edge session; the map still panned and zoomed; all dashboard fetch/XHR calls remained within the approved v2 families; unsupported sections stayed blank/stubbed; no fabricated values appeared; and the final screenshot plus verification notes were rebuilt into `feedback.zip`

@@ -13,7 +13,7 @@
 
 ## What changed
 
-- Realigned the dashboard layout toward the PDF page-1 composition:
+- Refined the dashboard layout toward the PDF page-1 composition:
   - wildfire overview map upper-left
   - four top-right stats cards: Active, New in 24, Out in 24, Out in 7
   - stage-of-control panel directly below the top stats
@@ -28,6 +28,7 @@
 - Locked dashboard stats and fire-centre calls to the manifest fire year:
   - `fireYear=2025`
 - Removed positional fire-centre fallback logic so rows bind by exact fire-centre name only.
+- Tightened the dashboard proportions in CSS only so the title block, map, right-side stack, and lower stub panels read closer to `dashboard.pdf` page 1 in the full-window shell.
 - Left unsupported sections blank with em dashes only:
   - Personnel
   - IMT
@@ -77,9 +78,6 @@ Dashboard data calls are limited to manifest-approved families:
 
 ## Files changed in this pass
 
-- `src/App.jsx`
-- `src/bcwsApi.js`
 - `src/styles.css`
-- `vite.config.js`
 - `docs/audits/dashboard-layout-realignment.md`
 - `docs/audits/push-log.md`
