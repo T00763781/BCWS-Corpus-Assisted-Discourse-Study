@@ -1,67 +1,71 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse, json, pathlib, sys
-from typing import Iterable
-try:
-    import yaml
-except Exception as exc:
-    print(f"YAML dependency missing: {exc}", file=sys.stderr)
-    sys.exit(2)
+
+import argparse
+import pathlib
+import sys
+
+from _repo_preflight import (
+    PreflightError,
+    get_current_branch,
+    iter_files,
+    repo_root_from,
+    validate_branch_name,
+    validate_custom_agents,
+    validate_seed_manifest,
+    validate_sqlite_schema,
+    validate_structured_files,
+    validate_taxonomy_contract,
+    validate_validation_targets,
+)
 
 REQUIRED_DOC_COUNT = 26  # 000 plus 001-025
 
-def iter_files(root: pathlib.Path) -> Iterable[pathlib.Path]:
-    for path in root.rglob('*'):
-        if path.is_file():
-            yield path
-
-def validate_yaml(path: pathlib.Path) -> list[str]:
-    errors = []
-    try:
-        yaml.safe_load(path.read_text(encoding='utf-8'))
-    except Exception as exc:
-        errors.append(f'YAML parse failed for {path}: {exc}')
-    return errors
-
-def validate_json(path: pathlib.Path) -> list[str]:
-    errors = []
-    try:
-        json.loads(path.read_text(encoding='utf-8'))
-    except Exception as exc:
-        errors.append(f'JSON parse failed for {path}: {exc}')
-    return errors
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument('root')
+    parser = argparse.ArgumentParser(description="Validate the FiresideListeners control-plane package.")
+    parser.add_argument("root", help="Repository root to validate.")
+    parser.add_argument("--branch", help="Override git branch detection.")
+    parser.add_argument(
+        "--allow-main",
+        action="store_true",
+        help="Disable main/master rejection for read-only validation scenarios.",
+    )
     args = parser.parse_args()
-    root = pathlib.Path(args.root).resolve()
-    vt_path = root / 'validation/validation_targets.yaml'
-    if not vt_path.exists():
-        print('Missing validation_targets.yaml', file=sys.stderr)
+
+    try:
+        root = repo_root_from(args.root)
+        branch_name = args.branch or get_current_branch(root)
+    except PreflightError as exc:
+        print(str(exc), file=sys.stderr)
         return 2
-    data = yaml.safe_load(vt_path.read_text(encoding='utf-8'))
+
     errors = []
-    for key in ['required_files','required_playbooks','required_docs','required_examples','required_contracts']:
-        for rel in data.get(key, []):
-            if not (root / rel).exists():
-                errors.append(f'Missing required path: {rel}')
-    docs = list((root / 'Auto Run Docs/FiresideListeners').glob('*.md'))
+    if not args.allow_main:
+        errors.extend(validate_branch_name(branch_name))
+
+    errors.extend(validate_validation_targets(root))
+    errors.extend(f"Missing seed manifest path: {rel}" for rel in validate_seed_manifest(root))
+    errors.extend(validate_custom_agents(root))
+    errors.extend(validate_taxonomy_contract(root))
+    errors.extend(validate_sqlite_schema(root))
+    docs = list((root / "Auto Run Docs/FiresideListeners").glob("*.md"))
     if len(docs) != REQUIRED_DOC_COUNT:
-        errors.append(f'Expected {REQUIRED_DOC_COUNT} top-level docs in Auto Run Docs/FiresideListeners, found {len(docs)}')
-    for path in iter_files(root):
-        if path.suffix.lower() in {'.yaml','.yml'}:
-            errors.extend(validate_yaml(path))
-        elif path.suffix.lower() == '.json':
-            errors.extend(validate_json(path))
-    print(f'Scanned files: {sum(1 for _ in iter_files(root))}')
+        errors.append(
+            f"Expected {REQUIRED_DOC_COUNT} top-level docs in Auto Run Docs/FiresideListeners, found {len(docs)}"
+        )
+    errors.extend(validate_structured_files(root))
+
+    print(f"Scanned files: {sum(1 for _ in iter_files(root))}")
+    print(f"Branch checked: {branch_name}")
     if errors:
-        print('Validation errors:')
+        print("Validation errors:")
         for err in errors:
-            print(f'- {err}')
+            print(f"- {err}")
         return 1
-    print('Validation checks passed.')
+    print("Validation checks passed.")
     return 0
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     raise SystemExit(main())

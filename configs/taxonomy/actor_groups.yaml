@@ -1,0 +1,30 @@
+actor_groups:
+- municipality
+- provincial_agency
+- first_nation
+- media
+- industry_union
+- emergency_service
+- community_group
+
+geography_levels:
+- province
+- region
+- municipality
+- community
+
+slotting_rules:
+- geography_level: province
+  allowed_actor_groups:
+  - provincial_agency
+  - media
+  - industry_union
+- geography_level: municipality
+  allowed_actor_groups:
+  - municipality
+  - emergency_service
+  - community_group
+- geography_level: community
+  allowed_actor_groups:
+  - first_nation
+  - community_group

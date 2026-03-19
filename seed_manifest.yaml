@@ -1,0 +1,18 @@
+manifest_name: firesidelisteners_control_plane_seed
+description: Deterministic path inventory for the control-plane release candidate.
+required_paths:
+- AGENTS.md
+- .codex/config.toml
+- .codex/agents/account_verifier.toml
+- .codex/agents/collector_engineer.toml
+- .codex/agents/docs_researcher.toml
+- .codex/agents/qa_auditor.toml
+- .codex/agents/registry_researcher.toml
+- docs/runbooks/codex-usage.md
+- docs/runbooks/release-readiness.md
+- configs/taxonomy/actor_groups.yaml
+- sql/control_plane_state.sql
+- scripts/check_control_plane.py
+- scripts/runtime_preflight.py
+- scripts/validate_seed.py
+- validation/validation_targets.yaml

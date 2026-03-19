@@ -1,0 +1,9 @@
+model = "gpt-5.4"
+model_reasoning_effort = "medium"
+
+[agents]
+max_threads = 4
+max_depth = 1
+
+[projects.'G:\04_Dev-Tools\01_Tools\01_FiresideListeners']
+trust_level = "trusted"

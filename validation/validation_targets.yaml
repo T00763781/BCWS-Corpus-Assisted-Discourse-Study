@@ -1,11 +1,25 @@
 required_files:
+- AGENTS.md
+- seed_manifest.yaml
 - README.md
 - package_manifest.yaml
 - local-manifest.yaml
 - machine_tree.yaml
 - agent_script_split.yaml
+- .codex/config.toml
+- .codex/agents/account_verifier.toml
+- .codex/agents/collector_engineer.toml
+- .codex/agents/docs_researcher.toml
+- .codex/agents/qa_auditor.toml
+- .codex/agents/registry_researcher.toml
+- docs/runbooks/codex-usage.md
+- docs/runbooks/release-readiness.md
+- configs/taxonomy/actor_groups.yaml
+- sql/control_plane_state.sql
 - skills/registry.yaml
 - agents/registry.yaml
+- scripts/check_control_plane.py
+- scripts/runtime_preflight.py
 - scripts/validate_seed.py
 - phases/phase-packaging.md
 required_playbooks:

@@ -1,8 +1,8 @@
 package_id: firesidelisteners_maestro_autorun_pack
 version: 1.0.0
 built_at_utc: '2026-03-18T23:43:57Z'
-purpose: Maestro-native Auto Run control pack for FiresideListeners build, canary,
-  corpus, and runtime-handoff milestones.
+purpose: Maestro-native Auto Run control pack release candidate for FiresideListeners
+  build, canary, corpus, and runtime-handoff milestones.
 canonical_assumptions:
   wildfire_year_start: '2025-04-01'
   wildfire_year_end: '2026-03-31'

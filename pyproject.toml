@@ -1,0 +1,16 @@
+[project]
+name = "firesidelisteners-control-plane"
+version = "0.1.0"
+description = "Validation and release-readiness utilities for the FiresideListeners control-plane release candidate."
+requires-python = ">=3.10"
+dependencies = [
+  "PyYAML>=6,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

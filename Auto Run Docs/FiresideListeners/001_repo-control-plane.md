@@ -7,6 +7,7 @@ Freeze repo control plane, PM relay rules, branch safety, and validation before 
 In scope:
 - AGENTS.md
 - .codex/config.toml
+- .codex/agents/*.toml
 - docs/runbooks/codex-usage.md
 
 Out of scope:
@@ -16,6 +17,7 @@ Out of scope:
 
 ## Checklist
 - [ ] Read current repo control files.
+- [ ] Confirm custom-agent files use the supported Codex schema.
 - [ ] Confirm branch discipline and A-H handoff contract remain explicit.
 - [ ] Patch control surfaces only if drift or ambiguity exists.
 - [ ] Update validator expectations if grounded in repo contracts.
@@ -34,6 +36,7 @@ Out of scope:
 
 ## Gate
 - Repository control surfaces are explicit.
+- Custom-agent files use supported Codex fields only.
 - Validation and handoff rules are documented.
 - No work on main is allowed.
 

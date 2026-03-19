@@ -7,6 +7,7 @@ Create the non-swarm runtime handoff package and rehearsal plan for May 1, 2026 
 In scope:
 - bounded corpus outputs
 - runtime docs
+- runtime preflight validation
 
 Out of scope:
 - unrelated milestone files
@@ -19,6 +20,7 @@ Out of scope:
 - [ ] Define dress rehearsal checks and rollback criteria.
 - [ ] Record go-live blockers instead of guessing.
 - [ ] Validate package completeness.
+- [ ] Carry forward unresolved authoritative-input blockers.
 - [ ] Commit and push only if validations pass.
 
 ## Required Output
@@ -34,6 +36,7 @@ Out of scope:
 - Runtime package is explicitly non-swarm.
 - Handoff assets, runbooks, and rehearsal checks exist.
 - Go-live dependencies are explicit.
+- GEO-001 and SRC-001 remain blocked until authoritative inputs resolve them.
 
 ## Escalation
 Stop and append a blocker if required evidence conflicts, a schema field would need to be invented, or the doc cannot be completed safely from current repo and local inputs.
