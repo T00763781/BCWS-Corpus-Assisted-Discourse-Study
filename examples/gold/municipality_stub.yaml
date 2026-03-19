@@ -1,0 +1,6 @@
+actor_stub:
+  coverage_status: expected
+  label: Example Municipality Baseline Stub
+  provenance: data-notes-2019.xlsx
+  seed_status: reference_seed_2019
+  verification_status: unconfirmed

@@ -1,0 +1,26 @@
+agent_id: collector_engineer
+role: formalize platform canary contracts and collection rules
+responsibilities:
+- formalize platform canary contracts and collection rules
+reads_before_writes: true
+allowed_paths:
+- Auto Run Docs/FiresideListeners
+- contracts
+- skills
+- agents
+- validation
+- scripts
+allowed_skills:
+- platform-canary-qc
+- bounded-backfill
+escalation_triggers:
+- conflicting evidence
+- invented schema risk
+- untrusted current geography assumption
+handoff_targets:
+- qa_auditor
+- PM
+success_criteria:
+- changes stay within scope
+- validator passes
+- blockers appended instead of guessed

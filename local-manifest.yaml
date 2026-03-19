@@ -1,0 +1,13 @@
+manifest_version: 1
+workspace_name: FiresideListeners
+autorun_root: Auto Run Docs/FiresideListeners
+default_playbooks:
+- foundation
+- source_lanes_and_mapping
+- platform_canaries
+- scale_corpus_runtime
+notes:
+- Use worktrees for parallel lane and canary docs when available.
+- Do not treat workbook-derived seeds as authoritative current geography.
+- Do not stage or commit local zip bundles or data-notes-2019.xlsx unless explicitly
+  instructed.

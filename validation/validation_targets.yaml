@@ -1,0 +1,54 @@
+required_files:
+- README.md
+- package_manifest.yaml
+- local-manifest.yaml
+- machine_tree.yaml
+- agent_script_split.yaml
+- skills/registry.yaml
+- agents/registry.yaml
+- scripts/validate_seed.py
+- phases/phase-packaging.md
+required_playbooks:
+- playbooks/foundation.yaml
+- playbooks/source_lanes_and_mapping.yaml
+- playbooks/platform_canaries.yaml
+- playbooks/scale_corpus_runtime.yaml
+required_docs:
+- Auto Run Docs/FiresideListeners/000_manifest.md
+- Auto Run Docs/FiresideListeners/001_repo-control-plane.md
+- Auto Run Docs/FiresideListeners/002_validation-and-handoff.md
+- Auto Run Docs/FiresideListeners/003_workbook-ingestion.md
+- Auto Run Docs/FiresideListeners/004_municipality-baseline-stubs.md
+- Auto Run Docs/FiresideListeners/005_actor-type-taxonomy-and-slotting.md
+- Auto Run Docs/FiresideListeners/006_base-1500-seed-build.md
+- Auto Run Docs/FiresideListeners/007_source-lane-registry.md
+- Auto Run Docs/FiresideListeners/008_deterministic-discovery-scripts.md
+- Auto Run Docs/FiresideListeners/009_osint-doctrine-and-evidence-classes.md
+- Auto Run Docs/FiresideListeners/010_municipal-source-lane.md
+- Auto Run Docs/FiresideListeners/011_provincial-source-lane.md
+- Auto Run Docs/FiresideListeners/012_media-source-lane.md
+- Auto Run Docs/FiresideListeners/013_industry-union-source-lane.md
+- Auto Run Docs/FiresideListeners/014_linktree-and-bio-links-lane.md
+- Auto Run Docs/FiresideListeners/015_surface-verification-and-registry-admission.md
+- Auto Run Docs/FiresideListeners/016_facebook-bcws-canary.md
+- Auto Run Docs/FiresideListeners/017_instagram-bcws-canary.md
+- Auto Run Docs/FiresideListeners/018_youtube-bcws-canary.md
+- Auto Run Docs/FiresideListeners/019_tiktok-ravi-parmar-canary.md
+- Auto Run Docs/FiresideListeners/020_linkedin-ravi-parmar-canary.md
+- Auto Run Docs/FiresideListeners/021_reddit-kamloops-canary.md
+- Auto Run Docs/FiresideListeners/022_facebook-group-kamloops-hiking-canary.md
+- Auto Run Docs/FiresideListeners/023_cross-platform-actor-community-gate.md
+- Auto Run Docs/FiresideListeners/024_bounded-backfill-and-dictionaries.md
+- Auto Run Docs/FiresideListeners/025_runtime-handoff-and-dress-rehearsal.md
+required_examples:
+- examples/gold/municipality_stub.yaml
+- examples/min/municipality_stub.yaml
+- examples/gold/canary_report.md
+- examples/min/canary_report.md
+required_contracts:
+- contracts/acceptance_gates.yaml
+- contracts/work_breakdown.yaml
+- contracts/evidence_classes.yaml
+- contracts/source_lanes.yaml
+- contracts/content_shapes.yaml
+- contracts/relationship_types.yaml

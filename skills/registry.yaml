@@ -1,0 +1,19 @@
+skills:
+- skill_id: workbook-import
+  path: skills/workbook-import/SKILL.md
+- skill_id: actor-slot-generator
+  path: skills/actor-slot-generator/SKILL.md
+- skill_id: source-lane-discovery
+  path: skills/source-lane-discovery/SKILL.md
+- skill_id: surface-verification
+  path: skills/surface-verification/SKILL.md
+- skill_id: registry-admission
+  path: skills/registry-admission/SKILL.md
+- skill_id: platform-canary-qc
+  path: skills/platform-canary-qc/SKILL.md
+- skill_id: bounded-backfill
+  path: skills/bounded-backfill/SKILL.md
+- skill_id: phase-gate-audit
+  path: skills/phase-gate-audit/SKILL.md
+- skill_id: runtime-handoff-auditor
+  path: skills/runtime-handoff-auditor/SKILL.md

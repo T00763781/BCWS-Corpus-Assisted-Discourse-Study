@@ -1,0 +1,11 @@
+root: firesidelisteners-maestro-autorun-pack
+contains:
+- Auto Run Docs/FiresideListeners
+- playbooks
+- agents
+- skills
+- contracts
+- examples
+- phases
+- validation
+- scripts

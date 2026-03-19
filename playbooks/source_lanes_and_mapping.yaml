@@ -1,0 +1,13 @@
+playbook_id: source_lanes_and_mapping
+mode: serial
+reset_on_completion: true
+docs:
+- Auto Run Docs/FiresideListeners/007_source-lane-registry.md
+- Auto Run Docs/FiresideListeners/008_deterministic-discovery-scripts.md
+- Auto Run Docs/FiresideListeners/009_osint-doctrine-and-evidence-classes.md
+- Auto Run Docs/FiresideListeners/010_municipal-source-lane.md
+- Auto Run Docs/FiresideListeners/011_provincial-source-lane.md
+- Auto Run Docs/FiresideListeners/012_media-source-lane.md
+- Auto Run Docs/FiresideListeners/013_industry-union-source-lane.md
+- Auto Run Docs/FiresideListeners/014_linktree-and-bio-links-lane.md
+- Auto Run Docs/FiresideListeners/015_surface-verification-and-registry-admission.md

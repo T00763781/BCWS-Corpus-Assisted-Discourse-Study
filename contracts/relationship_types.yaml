@@ -1,0 +1,8 @@
+relationship_types:
+- original_authored
+- shared_external_url
+- reposted_native_content
+- quoted_with_commentary
+- crossposted
+- screenshots
+- replies_to

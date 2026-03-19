@@ -1,0 +1,9 @@
+content_shapes:
+- text_only
+- image_only
+- video_only
+- text_image
+- text_video
+- carousel
+- link_share
+- mixed

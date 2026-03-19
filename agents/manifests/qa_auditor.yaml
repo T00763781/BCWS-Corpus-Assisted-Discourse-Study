@@ -1,0 +1,26 @@
+agent_id: qa_auditor
+role: audit outputs, gates, and blockers
+responsibilities:
+- audit outputs, gates, and blockers
+reads_before_writes: true
+allowed_paths:
+- Auto Run Docs/FiresideListeners
+- contracts
+- skills
+- agents
+- validation
+- scripts
+allowed_skills:
+- phase-gate-audit
+- runtime-handoff-auditor
+escalation_triggers:
+- conflicting evidence
+- invented schema risk
+- untrusted current geography assumption
+handoff_targets:
+- qa_auditor
+- PM
+success_criteria:
+- changes stay within scope
+- validator passes
+- blockers appended instead of guessed

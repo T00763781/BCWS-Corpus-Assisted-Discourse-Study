@@ -1,0 +1,20 @@
+package_id: firesidelisteners_maestro_autorun_pack
+version: 1.0.0
+built_at_utc: '2026-03-18T23:43:57Z'
+purpose: Maestro-native Auto Run control pack for FiresideListeners build, canary,
+  corpus, and runtime-handoff milestones.
+canonical_assumptions:
+  wildfire_year_start: '2025-04-01'
+  wildfire_year_end: '2026-03-31'
+  realtime_go_live_target: '2026-05-01'
+  swarm_scope: build_and_backfill_only
+  runtime_scope: non_swarm_realtime_operations
+playbooks:
+- playbooks/foundation.yaml
+- playbooks/source_lanes_and_mapping.yaml
+- playbooks/platform_canaries.yaml
+- playbooks/scale_corpus_runtime.yaml
+skill_registry: skills/registry.yaml
+agent_registry: agents/registry.yaml
+validation_targets: validation/validation_targets.yaml
+autorun_docs_root: Auto Run Docs/FiresideListeners

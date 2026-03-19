@@ -1,0 +1,9 @@
+phases:
+- range: 001-006
+  name: foundation_and_baseline
+- range: 007-015
+  name: source_lanes_and_osint_mapping
+- range: 016-022
+  name: platform_canaries
+- range: 023-025
+  name: scale_corpus_and_runtime_handoff

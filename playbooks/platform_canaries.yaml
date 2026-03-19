@@ -1,0 +1,11 @@
+playbook_id: platform_canaries
+mode: serial
+reset_on_completion: true
+docs:
+- Auto Run Docs/FiresideListeners/016_facebook-bcws-canary.md
+- Auto Run Docs/FiresideListeners/017_instagram-bcws-canary.md
+- Auto Run Docs/FiresideListeners/018_youtube-bcws-canary.md
+- Auto Run Docs/FiresideListeners/019_tiktok-ravi-parmar-canary.md
+- Auto Run Docs/FiresideListeners/020_linkedin-ravi-parmar-canary.md
+- Auto Run Docs/FiresideListeners/021_reddit-kamloops-canary.md
+- Auto Run Docs/FiresideListeners/022_facebook-group-kamloops-hiking-canary.md

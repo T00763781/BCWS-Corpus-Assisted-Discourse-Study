@@ -1,0 +1,26 @@
+agent_id: account_verifier
+role: resolve and verify candidate surfaces
+responsibilities:
+- resolve and verify candidate surfaces
+reads_before_writes: true
+allowed_paths:
+- Auto Run Docs/FiresideListeners
+- contracts
+- skills
+- agents
+- validation
+- scripts
+allowed_skills:
+- surface-verification
+- registry-admission
+escalation_triggers:
+- conflicting evidence
+- invented schema risk
+- untrusted current geography assumption
+handoff_targets:
+- qa_auditor
+- PM
+success_criteria:
+- changes stay within scope
+- validator passes
+- blockers appended instead of guessed

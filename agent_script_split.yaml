@@ -1,0 +1,19 @@
+agents_should_handle:
+- ambiguous actor matching
+- surface verification judgment
+- spoof/parody/dormant decisions
+- cross-platform corroboration
+- community vs actor adjudication
+- registry admission on conflicting evidence
+- escalation to PM or HILT
+scripts_should_handle:
+- workbook import
+- slot generation
+- queue generation
+- URL normalization
+- linktree and bio-link extraction
+- candidate dedupe pre-pass
+- validator checks
+- batch summaries
+- fixture generation
+- artifact count checks

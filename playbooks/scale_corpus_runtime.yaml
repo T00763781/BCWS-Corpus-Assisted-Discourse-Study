@@ -1,0 +1,7 @@
+playbook_id: scale_corpus_runtime
+mode: serial
+reset_on_completion: true
+docs:
+- Auto Run Docs/FiresideListeners/023_cross-platform-actor-community-gate.md
+- Auto Run Docs/FiresideListeners/024_bounded-backfill-and-dictionaries.md
+- Auto Run Docs/FiresideListeners/025_runtime-handoff-and-dress-rehearsal.md

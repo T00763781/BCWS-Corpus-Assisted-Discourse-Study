@@ -1,0 +1,26 @@
+agents:
+- agent_id: registry_researcher
+  role: find candidate actors, communities, and surfaces
+  allowed_skills:
+  - workbook-import
+  - actor-slot-generator
+  - source-lane-discovery
+- agent_id: account_verifier
+  role: resolve and verify candidate surfaces
+  allowed_skills:
+  - surface-verification
+  - registry-admission
+- agent_id: collector_engineer
+  role: formalize platform canary contracts and collection rules
+  allowed_skills:
+  - platform-canary-qc
+  - bounded-backfill
+- agent_id: qa_auditor
+  role: audit outputs, gates, and blockers
+  allowed_skills:
+  - phase-gate-audit
+  - runtime-handoff-auditor
+- agent_id: docs_researcher
+  role: inspect current docs and contracts for drift
+  allowed_skills:
+  - phase-gate-audit

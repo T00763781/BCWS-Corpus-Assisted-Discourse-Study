@@ -1,0 +1,23 @@
+gates:
+  foundation_gate:
+  - control plane explicit
+  - validator passes
+  - A-H handoff explicit
+  baseline_gate:
+  - workbook-derived seeds parse cleanly
+  - one municipality baseline stub minimum
+  - all baseline records remain unconfirmed
+  osint_gate:
+  - source lanes explicit
+  - evidence classes explicit
+  - registry admission explicit
+  canary_gate:
+  - platform-specific canary passes
+  - modality extraction explicit
+  - actor/community continuity preserved
+  scale_gate:
+  - registry expansion uses verified surfaces only
+  - coverage gaps tracked explicitly
+  runtime_gate:
+  - runtime package non-swarm
+  - dress rehearsal criteria explicit

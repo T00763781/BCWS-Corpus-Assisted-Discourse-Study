@@ -1,0 +1,10 @@
+playbook_id: foundation
+mode: serial
+reset_on_completion: true
+docs:
+- Auto Run Docs/FiresideListeners/001_repo-control-plane.md
+- Auto Run Docs/FiresideListeners/002_validation-and-handoff.md
+- Auto Run Docs/FiresideListeners/003_workbook-ingestion.md
+- Auto Run Docs/FiresideListeners/004_municipality-baseline-stubs.md
+- Auto Run Docs/FiresideListeners/005_actor-type-taxonomy-and-slotting.md
+- Auto Run Docs/FiresideListeners/006_base-1500-seed-build.md
