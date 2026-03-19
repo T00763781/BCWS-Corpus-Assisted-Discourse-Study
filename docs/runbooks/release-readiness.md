@@ -1,7 +1,7 @@
 # Release Readiness
 
 ## Control-plane release candidate readiness
-Ready for controlled deployment review when all of the following are true:
+This branch is ready for controlled deployment review of control-plane hardening only when all of the following are true:
 - `.codex/config.toml` parses cleanly and only uses supported fields.
 - `.codex/agents/*.toml` parse cleanly and use the documented custom-agent schema.
 - `AGENTS.md`, `docs/runbooks/codex-usage.md`, and the numbered control docs agree on scope and validation rules.
@@ -14,6 +14,11 @@ These remain blockers for production ingest and realtime operations:
 
 - `GEO-001`: authoritative current geography inputs are not checked in. The repo still relies on package assumptions and workbook-derived reference seeds, which are not authoritative current geography.
 - `SRC-001`: authoritative source inventory and verified live account inventory are not present. The repository defines source lanes and verification doctrine, but it does not contain resolved, authoritative production sources.
+
+## Fail-closed posture
+- If authoritative geography inputs are absent, production ingest must be treated as blocked.
+- If authoritative source inventory or verified live account inventory is absent, production ingest must be treated as blocked.
+- Control-plane validation passing does not clear production ingest blockers.
 
 ## Current scope statement
 - This repo is honest as a control-plane release candidate.

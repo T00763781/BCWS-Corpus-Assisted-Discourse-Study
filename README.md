@@ -1,6 +1,6 @@
 # FiresideListeners Maestro Auto Run Pack
 
-This repository is a reviewable release candidate for the FiresideListeners Codex control plane. It rebuilds milestones 001 through 025 as Auto Run docs, grouped playbooks, embedded package assets, and machine-readable validation contracts.
+This repository is a reviewable release candidate for the FiresideListeners Codex control plane. It rebuilds milestones 001 through 025 as Auto Run docs, grouped playbooks, embedded package assets, and machine-readable validation contracts for control-plane hardening only.
 
 Purpose:
 - hand off a controlled-release Codex control pack that reduces drift
@@ -20,9 +20,13 @@ Package highlights:
 Operational assumptions:
 - official wildfire-year build corpus window: April 1, 2025 through March 31, 2026
 - swarm is used to build FiresideListeners and collect/test against the wildfire-year corpus
-- realtime deployment target: May 1, 2026
+- May 1, 2026 remains a planning target only and does not imply production ingest readiness
 - `data-notes-2019.xlsx` is a local reference seed, not authoritative current truth
 
 Production-ingest blockers:
 - `GEO-001`: authoritative current geography inputs are not present in this repository
 - `SRC-001`: authoritative source inventory and verified live account inventory are not present in this repository
+
+Fail-closed posture:
+- without authoritative geography inputs, production ingest is not ready
+- without authoritative source inventory and verified account inventory, production ingest is not ready
