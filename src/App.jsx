@@ -32,11 +32,13 @@ const ROUTES = [
   { id: 'configure', label: 'Configure' },
 ];
 
+const STATIC_ASSET_BASE = import.meta.env.BASE_URL;
+
 const STAGE_ICON_SRC = {
-  FIRE_OF_NOTE: '/fire-of-note.svg',
-  UNDR_CNTRL: '/under-control.svg',
-  HOLDING: '/being-held.svg',
-  OUT_CNTRL: '/out-of-control.svg',
+  FIRE_OF_NOTE: `${STATIC_ASSET_BASE}fire-of-note.svg`,
+  UNDR_CNTRL: `${STATIC_ASSET_BASE}under-control.svg`,
+  HOLDING: `${STATIC_ASSET_BASE}being-held.svg`,
+  OUT_CNTRL: `${STATIC_ASSET_BASE}out-of-control.svg`,
 };
 
 function parseHashRoute() {
@@ -90,7 +92,7 @@ export default function App() {
       <main className="shell-frame">
         <aside className="left-rail">
           <div className="brand-block">
-            <img src="/assets/logo.svg" alt="Open Fireside" className="brand-logo" />
+            <img src={`${STATIC_ASSET_BASE}assets/logo.svg`} alt="Open Fireside" className="brand-logo" />
           </div>
           <nav className="route-nav" aria-label="Primary navigation">
             {ROUTES.map((item) => {

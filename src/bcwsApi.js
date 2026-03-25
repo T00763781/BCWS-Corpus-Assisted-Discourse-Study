@@ -1,6 +1,12 @@
-const BCWS_API = '/bcws-api';
-const BCWS_SITE = '/bcws-site';
-const WFNEWS_ARCGIS = '/wfnews-arcgis/services6/ubm4tcTYICKBpist/ArcGIS/rest/services';
+const BCWS_API = import.meta.env.DEV
+  ? '/bcws-api'
+  : 'https://wildfiresituation.nrs.gov.bc.ca';
+const BCWS_SITE = import.meta.env.DEV
+  ? '/bcws-site'
+  : 'https://wildfiresituation.nrs.gov.bc.ca';
+const WFNEWS_ARCGIS = import.meta.env.DEV
+  ? '/wfnews-arcgis/services6/ubm4tcTYICKBpist/ArcGIS/rest/services'
+  : 'https://wfnews-prd.bcwildfireservices.com/services6/ubm4tcTYICKBpist/ArcGIS/rest/services';
 export const DASHBOARD_FIRE_YEAR = 2025;
 
 export const STAGE_DEFS = {
@@ -352,6 +358,7 @@ export function formatDateTime(value) {
     minute: '2-digit',
   });
 }
+
 
 
 
