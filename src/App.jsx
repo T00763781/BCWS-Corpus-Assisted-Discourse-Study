@@ -66,10 +66,36 @@ function navigateTo(next) {
   window.location.hash = next.startsWith('#') ? next.slice(1) : next;
 }
 
+function hasDesktopDbBridge() {
+  return Boolean(window.openFiresideDesktop?.db);
+}
+
+async function fetchDesktopDbStatus() {
+  if (!hasDesktopDbBridge()) {
+    return {
+      hasActiveDb: false,
+      dbStateLabel: 'No DB',
+      name: null,
+      path: null,
+      createdAt: null,
+      lastOpenedAt: null,
+    };
+  }
+  return window.openFiresideDesktop.db.getStatus();
+}
+
 export default function App() {
   const route = useHashRoute();
   const [configureTab, setConfigureTab] = React.useState('sources');
   const [pageLayouts, setPageLayouts] = React.useState(initialPageLayouts);
+  const [dbStatus, setDbStatus] = React.useState({
+    hasActiveDb: false,
+    dbStateLabel: 'No DB',
+    name: null,
+    path: null,
+    createdAt: null,
+    lastOpenedAt: null,
+  });
 
   const updatePageLayout = React.useCallback((pageId, recipe) => {
     setPageLayouts((current) => ({
@@ -86,6 +112,15 @@ export default function App() {
     }),
     [updatePageLayout]
   );
+
+  const refreshDbStatus = React.useCallback(async () => {
+    const next = await fetchDesktopDbStatus();
+    setDbStatus(next);
+  }, []);
+
+  React.useEffect(() => {
+    refreshDbStatus();
+  }, [refreshDbStatus]);
 
   return (
     <div className="app-shell">
@@ -113,7 +148,7 @@ export default function App() {
         </aside>
 
         <section className="workspace">
-          {route.id === 'dashboard' ? <DashboardPage /> : null}
+          {route.id === 'dashboard' ? <DashboardPage dbStatus={dbStatus} /> : null}
           {route.id === 'incidents' ? <IncidentsListPage /> : null}
           {route.id === 'incident-detail' ? (
             <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} />
@@ -121,14 +156,14 @@ export default function App() {
           {route.id === 'weather' ? <PlaceholderPage title="Weather" message="Not wired in this browser runtime." /> : null}
           {route.id === 'maps' ? <BlankRoute /> : null}
           {route.id === 'discourse' ? <PlaceholderPage title="Discourse" message="Not wired in this browser runtime." /> : null}
-          {route.id === 'configure' ? <SettingsHonestyPage /> : null}
+          {route.id === 'configure' ? <SettingsHonestyPage dbStatus={dbStatus} onDbStatusChange={refreshDbStatus} /> : null}
         </section>
       </main>
     </div>
   );
 }
 
-function DashboardPage() {
+function DashboardPage({ dbStatus }) {
   const [state, setState] = React.useState({ phase: 'loading', error: '', data: null });
 
   const load = React.useCallback(async () => {
@@ -156,9 +191,9 @@ function DashboardPage() {
       { label: 'Incident', status: 'browser_fallback' },
       { label: 'Weather', status: 'not_wired' },
       { label: 'Discourse', status: 'not_wired' },
-      { label: 'Storage', status: 'no_db' },
+      { label: 'Storage', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
     ],
-    []
+    [dbStatus.hasActiveDb]
   );
 
   return (
@@ -880,14 +915,70 @@ function PlaceholderPage({ title, message }) {
   );
 }
 
-function SettingsHonestyPage() {
+function SettingsHonestyPage({ dbStatus, onDbStatusChange }) {
   const desktopActive = Boolean(window.openFiresideDesktop?.isElectron);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  const runDbAction = async (action) => {
+    if (!hasDesktopDbBridge()) return;
+    setBusy(true);
+    setError('');
+    try {
+      const result = await action();
+      if (result?.error) {
+        setError(result.error);
+      }
+      await onDbStatusChange();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'DB action failed');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="stub-page">
       <h1>Settings</h1>
-      <p>Current runtime: {desktopActive ? 'Electron desktop shell with no DB.' : 'browser fallback with no DB.'}</p>
+      <p>Current runtime: {desktopActive ? 'Electron desktop shell.' : 'browser fallback with no DB.'}</p>
       <p>Incident capture is browser fallback. Weather and Discourse are not wired in this runtime.</p>
+      <p>Storage state: {dbStatus.hasActiveDb ? 'DB selected' : 'No DB selected'}.</p>
+      {dbStatus.hasActiveDb ? (
+        <div className="mini-list">
+          <div>Active DB: {dbStatus.name}</div>
+          <div>Path: {dbStatus.path}</div>
+          <div>Created: {dbStatus.createdAt ? formatDateTime(Date.parse(dbStatus.createdAt)) : '--'}</div>
+          <div>Last opened: {dbStatus.lastOpenedAt ? formatDateTime(Date.parse(dbStatus.lastOpenedAt)) : '--'}</div>
+        </div>
+      ) : null}
+      <div className="stage-toggle-row">
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={!desktopActive || busy}
+          onClick={() => runDbAction(() => window.openFiresideDesktop.db.create())}
+        >
+          Create DB
+        </button>
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={!desktopActive || busy}
+          onClick={() => runDbAction(() => window.openFiresideDesktop.db.select())}
+        >
+          Select DB
+        </button>
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+          onClick={() => runDbAction(() => window.openFiresideDesktop.db.deleteActive())}
+        >
+          Delete DB
+        </button>
+      </div>
+      {!desktopActive ? <p>DB lifecycle controls are available only in desktop runtime.</p> : null}
+      {error ? <div className="error-banner">{error}</div> : null}
     </div>
   );
 }
@@ -1181,6 +1272,7 @@ function displayValue(value) {
 }
 
 function sourceHealthLabel(status) {
+  if (status === 'db_selected') return 'DB selected';
   if (status === 'browser_fallback') return 'Browser fallback';
   if (status === 'not_wired') return 'Not wired';
   if (status === 'no_db') return 'No DB';

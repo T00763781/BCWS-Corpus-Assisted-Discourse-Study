@@ -1,7 +1,8 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
+import { createDbLifecycleManager } from './db-lifecycle.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,6 +11,7 @@ const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 const IS_DEV = Boolean(DEV_SERVER_URL);
 const CAPTURE_DIR = process.env.OF_SCREENSHOT_DIR;
 const SMOKE_MODE = process.env.OF_SMOKE === '1';
+const dbLifecycle = createDbLifecycleManager({ app, dialog, BrowserWindow });
 
 function createWindow() {
   return new BrowserWindow({
@@ -60,6 +62,25 @@ app.whenReady().then(async () => {
     setTimeout(() => app.quit(), 25000);
   }
 
+  await dbLifecycle.autoLoadLastUsed();
+
+  if (process.env.OF_DB_CREATE_PATH) {
+    await dbLifecycle.createDbAtPath(process.env.OF_DB_CREATE_PATH);
+  }
+  if (process.env.OF_DB_SELECT_PATH) {
+    await dbLifecycle.selectDbAtPath(process.env.OF_DB_SELECT_PATH);
+  }
+  if (process.env.OF_DB_DELETE_ACTIVE === '1') {
+    await dbLifecycle.deleteActiveDb();
+  }
+
+  ipcMain.handle('db:get-status', async () => dbLifecycle.getStatus());
+  ipcMain.handle('db:create', async () => dbLifecycle.createNewDb());
+  ipcMain.handle('db:select', async () => dbLifecycle.chooseExistingDb());
+  ipcMain.handle('db:delete-active', async () => dbLifecycle.deleteActiveDb());
+  ipcMain.handle('db:create-at-path', async (_event, dbPath) => dbLifecycle.createDbAtPath(dbPath));
+  ipcMain.handle('db:select-path', async (_event, dbPath) => dbLifecycle.selectDbAtPath(dbPath));
+
   const win = createWindow();
   await loadRenderer(win);
 
@@ -82,6 +103,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  dbLifecycle.closeActive();
   if (process.platform !== 'darwin') {
     app.quit();
   }
