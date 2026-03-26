@@ -1,0 +1,11 @@
+appId: ca.openfireside.desktop
+productName: Open Fireside
+directories:
+  output: release
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+win:
+  target:
+    - nsis

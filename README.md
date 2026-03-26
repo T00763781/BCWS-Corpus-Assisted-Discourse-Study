@@ -1,26 +1,51 @@
-# Open Fireside
+# Open Fireside (Desktop Local-First)
 
-Open Fireside is a shell-first React/Vite workspace.
+Open Fireside targets a **Windows 11 desktop runtime** with a **local SQLite database** as the canonical source of truth.
 
-Current repo state:
-- `Dashboard` is wired to live BCWS public wildfire and evacuation endpoints
-- `Incidents` is wired to the live BCWS public incident list and internal detail route
-- `Configure > Sources` preserves the factual BCWS perimeter widget
-- `Weather`, `Maps`, and `Discourse` remain blank shell surfaces
+Architecture baseline:
+
+- official sources -> main-process ingest -> local SQLite -> renderer via IPC
+- renderer does not directly fetch BCWS or other official sources
+- incident updates are append-only historical rows (newest-first in UI)
 
 ## Run
 
 ```bash
 npm install
-npm run dev
+npm run dev:desktop
 ```
 
-Open:
-- `http://127.0.0.1:5173/#/dashboard`
-- `http://127.0.0.1:5173/#/incidents`
+## Build
 
-## Notes
+```bash
+npm run build
+```
 
-- The app only keeps factual endpoint-backed dashboard and incident views.
-- Stubbed dashboard panels are limited to `Discourse Signals` and `Incidents (pinned)`.
-- No fabricated summaries or placeholder data panels should be added.
+## DB + Ingest utilities
+
+```bash
+npm run db:migrate
+npm run db:seed
+```
+
+## Current ingest behavior (Phase 3 baseline)
+
+- `sync.run` performs list/detail ingestion in Electron main process.
+- list ingest upserts incident master rows and inserts snapshots when state hash changes.
+- detail ingest captures attachments, links, perimeters, evacuation notices, and raw source artifacts.
+- ingest runs are logged in `ingest_runs` and raw payload provenance in `raw_source_records`.
+- official update insertion is append-only via content hash.
+- when API + HTML extraction returns no update text, ingest attempts Playwright fallback extraction using local Chromium/Edge if available.
+- ingest configuration is runtime-adjustable in Configure (`detailTargetLimit`, `playwrightFallbackBudget`).
+
+## Added local research tooling
+
+- Incident detail includes latest-two-update diff and dossier export (`json` / `markdown`).
+- Configure includes run history, parser diagnostics, and raw source record drilldown.
+
+Default local paths:
+
+- DB: `%LOCALAPPDATA%/OpenFireside/openfireside.db`
+- Storage root: `%LOCALAPPDATA%/OpenFireside/storage`
+
+Both can be changed in Configure with copy-then-switch behavior.
