@@ -64,6 +64,8 @@ body { color: #0d1419; }
 .source-health-chip.is-not_wired { border-color: #6b7380; }
 .source-health-chip.is-no_db { border-color: #8a6e57; }
 .source-health-chip.is-db_selected { border-color: #4aa86e; }
+.source-health-chip.is-never_captured { border-color: #8a6e57; }
+.source-health-chip.is-capture_running { border-color: #2d7bd8; }
 .source-health-chip.is-healthy { border-color: #4aa86e; }
 .source-health-chip.is-error { border-color: #c76041; }
 .stage-legend { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }

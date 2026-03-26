@@ -11,6 +11,7 @@ const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 const IS_DEV = Boolean(DEV_SERVER_URL);
 const CAPTURE_DIR = process.env.OF_SCREENSHOT_DIR;
 const SMOKE_MODE = process.env.OF_SMOKE === '1';
+const PHASE4_AUTO_CAPTURE = process.env.OF_PHASE4_AUTO_CAPTURE === '1';
 const dbLifecycle = createDbLifecycleManager({ app, dialog, BrowserWindow });
 
 function createWindow() {
@@ -45,7 +46,12 @@ async function loadRenderer(win, hash = '#/dashboard') {
 async function captureView(win, hash, fileName) {
   if (!CAPTURE_DIR) return;
   await loadRenderer(win, hash);
-  await new Promise((resolve) => setTimeout(resolve, 900));
+  await captureCurrentView(win, fileName, 900);
+}
+
+async function captureCurrentView(win, fileName, waitMs = 900) {
+  if (!CAPTURE_DIR) return;
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
   let png = Buffer.alloc(0);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const image = await win.webContents.capturePage();
@@ -80,9 +86,64 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:delete-active', async () => dbLifecycle.deleteActiveDb());
   ipcMain.handle('db:create-at-path', async (_event, dbPath) => dbLifecycle.createDbAtPath(dbPath));
   ipcMain.handle('db:select-path', async (_event, dbPath) => dbLifecycle.selectDbAtPath(dbPath));
+  ipcMain.handle('db:capture-mark-running', async () => dbLifecycle.markCaptureRunning());
+  ipcMain.handle('db:capture-mark-error', async (_event, message) => dbLifecycle.markCaptureError(message));
+  ipcMain.handle('db:capture-save', async (_event, payload) => dbLifecycle.saveIncidentCapture(payload));
+  ipcMain.handle('db:incidents-list-local', async () => dbLifecycle.getIncidentListLocal());
+  ipcMain.handle('db:incident-detail-local', async (_event, fireYear, incidentNumber) =>
+    dbLifecycle.getIncidentDetailLocal(fireYear, incidentNumber)
+  );
 
   const win = createWindow();
   await loadRenderer(win);
+
+  if (PHASE4_AUTO_CAPTURE) {
+    await captureView(win, '#/configure', 'phase4-settings-before-capture.png');
+    await win.webContents.executeJavaScript(
+      `
+        (async () => {
+          const started = Date.now();
+          while (Date.now() - started < 20000) {
+            const button = [...document.querySelectorAll('button')].find(
+              (item) => item.textContent && item.textContent.trim() === 'Capture incidents'
+            );
+            if (button && !button.disabled) {
+              button.click();
+              return true;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+          return false;
+        })();
+      `,
+      true
+    );
+    await win.webContents.executeJavaScript(
+      `
+        (async () => {
+          const started = Date.now();
+          while (Date.now() - started < 120000) {
+            const summary = [...document.querySelectorAll('.list-results-label')].some(
+              (node) => node.textContent && node.textContent.includes('Captured ')
+            );
+            const failed = Boolean(document.querySelector('.error-banner'));
+            if (summary || failed) return summary;
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+          return false;
+        })();
+      `,
+      true
+    );
+    await captureView(win, '#/incidents', 'phase4-incidents-after-capture.png');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase4-g70422-after-capture.png', 4000);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
 
   if (CAPTURE_DIR) {
     await captureView(win, '#/configure', 'phase2-desktop-settings.png');

@@ -75,13 +75,32 @@ async function fetchDesktopDbStatus() {
     return {
       hasActiveDb: false,
       dbStateLabel: 'No DB',
+      captureStateLabel: 'No DB',
+      captureStateCode: 'no_db',
       name: null,
       path: null,
       createdAt: null,
       lastOpenedAt: null,
+      lastCapturedAt: null,
+      lastCaptureError: null,
+      capturedIncidentCount: 0,
     };
   }
   return window.openFiresideDesktop.db.getStatus();
+}
+
+async function fetchLocalIncidentList() {
+  if (!hasDesktopDbBridge()) {
+    return { ok: false, rows: [], totalRowCount: 0, hasLocalData: false };
+  }
+  return window.openFiresideDesktop.db.getIncidentListLocal();
+}
+
+async function fetchLocalIncidentDetail(fireYear, incidentNumber) {
+  if (!hasDesktopDbBridge()) {
+    return { ok: false, found: false };
+  }
+  return window.openFiresideDesktop.db.getIncidentDetailLocal(fireYear, incidentNumber);
 }
 
 export default function App() {
@@ -91,10 +110,15 @@ export default function App() {
   const [dbStatus, setDbStatus] = React.useState({
     hasActiveDb: false,
     dbStateLabel: 'No DB',
+    captureStateLabel: 'No DB',
+    captureStateCode: 'no_db',
     name: null,
     path: null,
     createdAt: null,
     lastOpenedAt: null,
+    lastCapturedAt: null,
+    lastCaptureError: null,
+    capturedIncidentCount: 0,
   });
 
   const updatePageLayout = React.useCallback((pageId, recipe) => {
@@ -116,6 +140,7 @@ export default function App() {
   const refreshDbStatus = React.useCallback(async () => {
     const next = await fetchDesktopDbStatus();
     setDbStatus(next);
+    return next;
   }, []);
 
   React.useEffect(() => {
@@ -149,9 +174,9 @@ export default function App() {
 
         <section className="workspace">
           {route.id === 'dashboard' ? <DashboardPage dbStatus={dbStatus} /> : null}
-          {route.id === 'incidents' ? <IncidentsListPage /> : null}
+          {route.id === 'incidents' ? <IncidentsListPage dbStatus={dbStatus} /> : null}
           {route.id === 'incident-detail' ? (
-            <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} />
+            <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} dbStatus={dbStatus} />
           ) : null}
           {route.id === 'weather' ? <PlaceholderPage title="Weather" message="Not wired in this browser runtime." /> : null}
           {route.id === 'maps' ? <BlankRoute /> : null}
@@ -188,12 +213,15 @@ function DashboardPage({ dbStatus }) {
     : null;
   const sourceSignals = React.useMemo(
     () => [
-      { label: 'Incident', status: 'browser_fallback' },
+      {
+        label: 'Incident',
+        status: dbStatus.hasActiveDb ? dbStatus.captureStateCode : 'no_db',
+      },
       { label: 'Weather', status: 'not_wired' },
       { label: 'Discourse', status: 'not_wired' },
       { label: 'Storage', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
     ],
-    [dbStatus.hasActiveDb]
+    [dbStatus.captureStateCode, dbStatus.hasActiveDb]
   );
 
   return (
@@ -356,13 +384,13 @@ function FireCentreTable({ statsList }) {
   );
 }
 
-function IncidentsListPage() {
+function IncidentsListPage({ dbStatus }) {
   const [search, setSearch] = React.useState('');
   const [fireCentre, setFireCentre] = React.useState('');
   const [quickFilter, setQuickFilter] = React.useState('all');
   const [selectedStages, setSelectedStages] = React.useState(['OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL', 'OUT']);
   const [sortState, setSortState] = React.useState({ key: 'updatedDate', direction: 'desc' });
-  const [state, setState] = React.useState({ phase: 'loading', error: '', rows: [] });
+  const [state, setState] = React.useState({ phase: 'loading', error: '', rows: [], source: 'live' });
   const columnDefs = React.useMemo(
     () => ({
       incidentName: { label: 'Wildfire Name', type: 'text' },
@@ -378,10 +406,17 @@ function IncidentsListPage() {
   const load = React.useCallback(async () => {
     setState((current) => ({ ...current, phase: 'loading', error: '' }));
     try {
+      if (hasDesktopDbBridge()) {
+        const local = await fetchLocalIncidentList();
+        if (local?.ok && local?.hasLocalData) {
+          setState({ phase: 'success', error: '', rows: local.rows, source: 'local' });
+          return;
+        }
+      }
       const data = await fetchIncidentList({ search, fireCentre, stageCodes: selectedStages, pageRowCount: 500 });
-      setState({ phase: 'success', error: '', rows: data.rows });
+      setState({ phase: 'success', error: '', rows: data.rows, source: 'live' });
     } catch (error) {
-      setState({ phase: 'failure', error: error.message || 'Failed to load incidents', rows: [] });
+      setState({ phase: 'failure', error: error.message || 'Failed to load incidents', rows: [], source: 'live' });
     }
   }, [search, fireCentre, selectedStages]);
 
@@ -390,12 +425,18 @@ function IncidentsListPage() {
   }, [load]);
 
   const rows = React.useMemo(() => {
-    const filtered = quickFilter === 'fireOfNote'
-      ? state.rows.filter((row) => row.fireOfNote)
-      : [...state.rows];
+    const searchNeedle = search.trim().toLowerCase();
+    const filtered = [...state.rows].filter((row) => {
+      if (quickFilter === 'fireOfNote' && !row.fireOfNote) return false;
+      if (fireCentre && row.fireCentre !== fireCentre) return false;
+      if (selectedStages.length && !selectedStages.includes(row.stage)) return false;
+      if (!searchNeedle) return true;
+      const haystack = `${row.incidentName || ''} ${row.incidentNumber || ''} ${row.location || ''}`.toLowerCase();
+      return haystack.includes(searchNeedle);
+    });
     filtered.sort((a, b) => compareRows(a, b, sortState, columnDefs));
     return filtered;
-  }, [columnDefs, quickFilter, sortState, state.rows]);
+  }, [columnDefs, fireCentre, quickFilter, search, selectedStages, sortState, state.rows]);
 
   const sortOptions = React.useMemo(
     () => [
@@ -443,8 +484,12 @@ function IncidentsListPage() {
   if (fireCentre) activeFilters.push(fireCentre);
   if (selectedStages.length === 1) activeFilters.push(stageLabel(selectedStages[0]));
   const resultsLabel = activeFilters.length ? `Filtered by ${activeFilters.join(' | ')}` : 'All active incidents';
-  const noResultsMessage =
-    state.phase === 'loading' ? 'Loading incidents...' : 'No incidents matched the current filters.';
+  const sourceLabel =
+    state.source === 'local'
+      ? 'Local DB incidents'
+      : dbStatus.hasActiveDb
+      ? 'Live BCWS fallback (no local incident rows)'
+      : 'Live BCWS incidents';
 
   return (
     <div className="incidents-page">
@@ -473,7 +518,7 @@ function IncidentsListPage() {
       </div>
 
       <div className="list-results-row">
-        <div className="list-results-label">{resultsLabel}</div>
+        <div className="list-results-label">{`${resultsLabel} | ${sourceLabel}`}</div>
       </div>
 
       <div className="stage-toggle-row">
@@ -540,17 +585,24 @@ function IncidentsListPage() {
   );
 }
 
-function IncidentDetailPage({ fireYear, incidentNumber }) {
+function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
   const [tab, setTab] = React.useState('response');
-  const [state, setState] = React.useState({ phase: 'loading', error: '', data: null });
+  const [state, setState] = React.useState({ phase: 'loading', error: '', data: null, source: 'live' });
 
   const load = React.useCallback(async () => {
-    setState({ phase: 'loading', error: '', data: null });
+    setState({ phase: 'loading', error: '', data: null, source: 'live' });
     try {
+      if (hasDesktopDbBridge()) {
+        const local = await fetchLocalIncidentDetail(fireYear, incidentNumber);
+        if (local?.ok && local?.found) {
+          setState({ phase: 'success', error: '', data: local.data, source: 'local' });
+          return;
+        }
+      }
       const data = await fetchIncidentDetail(fireYear, incidentNumber);
-      setState({ phase: 'success', error: '', data });
+      setState({ phase: 'success', error: '', data, source: 'live' });
     } catch (error) {
-      setState({ phase: 'failure', error: error.message || 'Failed to load incident', data: null });
+      setState({ phase: 'failure', error: error.message || 'Failed to load incident', data: null, source: 'live' });
     }
   }, [fireYear, incidentNumber]);
 
@@ -568,6 +620,13 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
       <div className="incident-hero">
         <div className="incident-summary-card">
           <div className="incident-summary-card__title">{incident?.incidentName || incidentNumber}</div>
+          <div className="list-results-label">
+            {state.source === 'local'
+              ? 'Detail source: Local DB capture'
+              : dbStatus.hasActiveDb
+              ? 'Detail source: Live BCWS fallback (no local detail record)'
+              : 'Detail source: Live BCWS'}
+          </div>
           <div className="incident-summary-card__list">
             <SummaryRow label={stageLabel(incident?.stage)} color={STAGE_DEFS[incident?.stage]?.color} />
             <SummaryRow label={`Fire Number ${incident?.incidentNumber || incidentNumber}`} />
@@ -919,6 +978,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange }) {
   const desktopActive = Boolean(window.openFiresideDesktop?.isElectron);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState('');
+  const [captureSummary, setCaptureSummary] = React.useState('');
 
   const runDbAction = async (action) => {
     if (!hasDesktopDbBridge()) return;
@@ -937,18 +997,75 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange }) {
     }
   };
 
+  const runManualCapture = async () => {
+    if (!desktopActive || !hasDesktopDbBridge() || !dbStatus.hasActiveDb) return;
+    setBusy(true);
+    setError('');
+    setCaptureSummary('');
+    const now = new Date().toISOString();
+    try {
+      await window.openFiresideDesktop.db.markCaptureRunning();
+      await onDbStatusChange();
+
+      const listPayload = await fetchIncidentList({ pageRowCount: 500 });
+      const listRows = listPayload.rows || [];
+      const keyed = new Map();
+      const addTarget = (row) => {
+        if (!row?.incidentNumber || !row?.fireYear) return;
+        keyed.set(`${row.fireYear}:${row.incidentNumber}`, row);
+      };
+      const g70422 = listRows.find((row) => String(row.incidentNumber).toUpperCase() === 'G70422');
+      addTarget(g70422);
+      listRows.slice(0, 3).forEach(addTarget);
+
+      const detailRecords = [];
+      for (const row of keyed.values()) {
+        try {
+          const detail = await fetchIncidentDetail(row.fireYear, row.incidentNumber);
+          detailRecords.push(detail);
+        } catch {}
+      }
+
+      const saved = await window.openFiresideDesktop.db.saveCapture({
+        capturedAt: now,
+        listRows,
+        detailRecords,
+      });
+
+      if (!saved?.ok) {
+        throw new Error(saved?.error || 'Capture write failed.');
+      }
+
+      await onDbStatusChange();
+      setCaptureSummary(
+        `Captured ${saved.capturedListCount} incidents and ${saved.capturedDetailCount} detail records.`
+      );
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : 'Incident capture failed';
+      await window.openFiresideDesktop.db.markCaptureError(message);
+      await onDbStatusChange();
+      setError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="stub-page">
       <h1>Settings</h1>
       <p>Current runtime: {desktopActive ? 'Electron desktop shell.' : 'browser fallback with no DB.'}</p>
-      <p>Incident capture is browser fallback. Weather and Discourse are not wired in this runtime.</p>
+      <p>Incident capture is manual in desktop runtime. Weather and Discourse are not wired in this runtime.</p>
       <p>Storage state: {dbStatus.hasActiveDb ? 'DB selected' : 'No DB selected'}.</p>
+      <p>Incident capture state: {dbStatus.captureStateLabel}.</p>
       {dbStatus.hasActiveDb ? (
         <div className="mini-list">
           <div>Active DB: {dbStatus.name}</div>
           <div>Path: {dbStatus.path}</div>
           <div>Created: {dbStatus.createdAt ? formatDateTime(Date.parse(dbStatus.createdAt)) : '--'}</div>
           <div>Last opened: {dbStatus.lastOpenedAt ? formatDateTime(Date.parse(dbStatus.lastOpenedAt)) : '--'}</div>
+          <div>Last capture: {dbStatus.lastCapturedAt ? formatDateTime(Date.parse(dbStatus.lastCapturedAt)) : '--'}</div>
+          <div>Captured incidents: {displayValue(dbStatus.capturedIncidentCount)}</div>
+          <div>Last capture error: {dbStatus.lastCaptureError || '--'}</div>
         </div>
       ) : null}
       <div className="stage-toggle-row">
@@ -972,12 +1089,21 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange }) {
           type="button"
           className="toolbar-button"
           disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+          onClick={runManualCapture}
+        >
+          Capture incidents
+        </button>
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
           onClick={() => runDbAction(() => window.openFiresideDesktop.db.deleteActive())}
         >
           Delete DB
         </button>
       </div>
       {!desktopActive ? <p>DB lifecycle controls are available only in desktop runtime.</p> : null}
+      {captureSummary ? <div className="list-results-label">{captureSummary}</div> : null}
       {error ? <div className="error-banner">{error}</div> : null}
     </div>
   );
