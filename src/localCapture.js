@@ -1,5 +1,5 @@
 const DB_NAME = 'open-fireside-local-capture';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
@@ -27,6 +27,10 @@ function openDb() {
         const raw = db.createObjectStore('raw_source_records', { keyPath: 'id' });
         raw.createIndex('by_source_kind', 'sourceKind', { unique: false });
         raw.createIndex('by_fetched_at', 'fetchedAt', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('incident_attachments')) {
+        const attachments = db.createObjectStore('incident_attachments', { keyPath: 'id' });
+        attachments.createIndex('by_incident_id', 'incidentId', { unique: false });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -74,26 +78,8 @@ async function putRawSourceRecord({ sourceKind, fetchUrl, bodyText, parseStatus 
 }
 
 async function upsertIncidentAndSnapshot(incident, observedAt) {
-  const db = await openDb();
   const incidentId = makeIncidentId(incident.fireYear, incident.incidentNumber);
   const now = Date.now();
-  const tx = db.transaction(['incidents', 'incident_snapshots'], 'readwrite');
-  const incidents = tx.objectStore('incidents');
-  const snapshots = tx.objectStore('incident_snapshots');
-
-  incidents.put({
-    id: incidentId,
-    fireYear: incident.fireYear,
-    incidentNumber: incident.incidentNumber,
-    incidentName: incident.incidentName || '',
-    fireCentre: incident.fireCentre || '',
-    incidentGuid: incident.incidentGuid || '',
-    publishedIncidentDetailGuid: incident.publishedIncidentDetailGuid || '',
-    latitude: Number.isFinite(incident.latitude) ? incident.latitude : null,
-    longitude: Number.isFinite(incident.longitude) ? incident.longitude : null,
-    updatedAt: now,
-  });
-
   const snapshotPayload = {
     incidentId,
     observedAt,
@@ -107,11 +93,30 @@ async function upsertIncidentAndSnapshot(incident, observedAt) {
   };
   const snapshotHash = await sha256(JSON.stringify(snapshotPayload));
   const snapshotId = `${incidentId}:${snapshotHash}`;
-  snapshots.put({
+  const incidentRow = {
+    id: incidentId,
+    fireYear: incident.fireYear,
+    incidentNumber: incident.incidentNumber,
+    incidentName: incident.incidentName || '',
+    fireCentre: incident.fireCentre || '',
+    incidentGuid: incident.incidentGuid || '',
+    publishedIncidentDetailGuid: incident.publishedIncidentDetailGuid || '',
+    latitude: Number.isFinite(incident.latitude) ? incident.latitude : null,
+    longitude: Number.isFinite(incident.longitude) ? incident.longitude : null,
+    updatedAt: now,
+  };
+  const snapshotRow = {
     id: snapshotId,
     ...snapshotPayload,
     snapshotHash,
-  });
+  };
+
+  const db = await openDb();
+  const tx = db.transaction(['incidents', 'incident_snapshots'], 'readwrite');
+  const incidents = tx.objectStore('incidents');
+  const snapshots = tx.objectStore('incident_snapshots');
+  incidents.put(incidentRow);
+  snapshots.put(snapshotRow);
 
   await txDone(tx);
   return { incidentId, snapshotHash };
@@ -121,17 +126,13 @@ async function addIncidentUpdatesAppendOnly(incidentId, updates, publishedAt = n
   if (!incidentId || !Array.isArray(updates) || !updates.length) {
     return { inserted: 0 };
   }
-  const db = await openDb();
-  const tx = db.transaction(['incident_updates'], 'readwrite');
-  const store = tx.objectStore('incident_updates');
-  let inserted = 0;
-
+  const preparedRows = [];
   for (const rawUpdate of updates) {
     const updateText = String(rawUpdate || '').trim();
     if (!updateText) continue;
     const updateHash = await sha256(updateText);
     const id = `${incidentId}:${updateHash}`;
-    store.put({
+    preparedRows.push({
       id,
       incidentId,
       observedAt,
@@ -139,11 +140,47 @@ async function addIncidentUpdatesAppendOnly(incidentId, updates, publishedAt = n
       updateText,
       updateHash,
     });
-    inserted += 1;
+  }
+
+  if (!preparedRows.length) {
+    return { inserted: 0 };
+  }
+
+  const db = await openDb();
+  const tx = db.transaction(['incident_updates'], 'readwrite');
+  const store = tx.objectStore('incident_updates');
+  for (const row of preparedRows) {
+    store.put(row);
   }
 
   await txDone(tx);
-  return { inserted };
+  return { inserted: preparedRows.length };
+}
+
+async function upsertIncidentAttachments(incidentId, attachments = [], observedAt = Date.now()) {
+  if (!incidentId || !Array.isArray(attachments)) {
+    return { attachmentCount: 0 };
+  }
+  const db = await openDb();
+  const tx = db.transaction(['incident_attachments'], 'readwrite');
+  const store = tx.objectStore('incident_attachments');
+  for (const item of attachments) {
+    const sourceId = item.attachmentGuid || item.id || `${item.title || 'attachment'}:${item.imageUrl || item.url || ''}`;
+    const id = `${incidentId}:${sourceId}`;
+    store.put({
+      id,
+      incidentId,
+      attachmentGuid: item.attachmentGuid || null,
+      title: item.title || item.fileName || 'Untitled',
+      description: item.description || '',
+      imageUrl: item.imageUrl || item.url || '',
+      mimeType: item.mimeType || '',
+      uploadedTimestamp: item.uploadedTimestamp || null,
+      observedAt,
+    });
+  }
+  await txDone(tx);
+  return { attachmentCount: attachments.length };
 }
 
 async function listIncidentUpdatesNewestFirst(incidentId) {
@@ -168,6 +205,53 @@ async function getIncidentCaptureMeta(incidentId) {
   return {
     updateCount: updates.length,
     latestUpdateObservedAt: latestObservedAt,
+  };
+}
+
+async function getIncidentRecordCounts(incidentId) {
+  if (!incidentId) {
+    return {
+      incidentCount: 0,
+      snapshotCount: 0,
+      updateCount: 0,
+      attachmentCount: 0,
+    };
+  }
+  const db = await openDb();
+  const tx = db.transaction(['incidents', 'incident_snapshots', 'incident_updates', 'incident_attachments'], 'readonly');
+  const incidents = tx.objectStore('incidents');
+  const snapshotsIndex = tx.objectStore('incident_snapshots').index('by_incident_observed');
+  const updatesIndex = tx.objectStore('incident_updates').index('by_incident_observed');
+  const attachmentsIndex = tx.objectStore('incident_attachments').index('by_incident_id');
+
+  const incident = await new Promise((resolve, reject) => {
+    const req = incidents.get(incidentId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+
+  const snapshotRows = await new Promise((resolve, reject) => {
+    const req = snapshotsIndex.getAll(IDBKeyRange.bound([incidentId, 0], [incidentId, Number.MAX_SAFE_INTEGER]));
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+  const updateRows = await new Promise((resolve, reject) => {
+    const req = updatesIndex.getAll(IDBKeyRange.bound([incidentId, 0], [incidentId, Number.MAX_SAFE_INTEGER]));
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+  const attachmentRows = await new Promise((resolve, reject) => {
+    const req = attachmentsIndex.getAll(IDBKeyRange.only(incidentId));
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+  await txDone(tx);
+
+  return {
+    incidentCount: incident ? 1 : 0,
+    snapshotCount: snapshotRows.length,
+    updateCount: updateRows.length,
+    attachmentCount: attachmentRows.length,
   };
 }
 
@@ -229,14 +313,25 @@ export async function captureIncidentDetailResult({
     incident?.updatedDate || null,
     observedAt
   );
+  const attachmentInsert = await upsertIncidentAttachments(incidentId, (attachmentsPayload?.collection || []).map((item) => ({
+    attachmentGuid: item.attachmentGuid,
+    title: item.attachmentTitle || item.fileName || 'Untitled asset',
+    description: item.attachmentDescription || '',
+    imageUrl: item.imageURL ? `https://wildfiresituation.nrs.gov.bc.ca${item.imageURL}` : '',
+    mimeType: item.mimeType || '',
+    uploadedTimestamp: item.uploadedTimestamp || null,
+  })), observedAt);
   const localUpdates = await listIncidentUpdatesNewestFirst(incidentId);
   const meta = await getIncidentCaptureMeta(incidentId);
+  const recordCounts = await getIncidentRecordCounts(incidentId);
 
   return {
     incidentId,
     capturedAt: observedAt,
     updatesInserted: updateInsert.inserted,
+    attachmentCount: attachmentInsert.attachmentCount,
     localOfficialUpdates: localUpdates,
+    recordCounts,
     ...meta,
   };
 }

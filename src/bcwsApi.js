@@ -73,6 +73,7 @@ function normalizeIncidentRow(row) {
     longitude: Number(row.longitude),
     causeDetail: row.incidentCauseDetail,
     responseTypeDetail: row.responseTypeDetail,
+    incidentOverview: row.incidentOverview,
     responseTypeCode: row.responseTypeCode,
     resources: {
       personnel: Boolean(row.wildfireCrewResourcesInd),
@@ -127,6 +128,30 @@ export async function fetchIncidentList({
     rows,
     localCapture,
   };
+}
+
+function htmlToText(html) {
+  if (!html) return '';
+  if (typeof DOMParser !== 'undefined') {
+    const doc = new DOMParser().parseFromString(String(html), 'text/html');
+    const text = String(doc.body?.innerText || doc.body?.textContent || '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    return text;
+  }
+  return String(html)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 export async function fetchStatistics(fireCentre = 'BC', fireYear = new Date().getFullYear()) {
@@ -203,6 +228,7 @@ export async function fetchIncidentDetail(fireYear, incidentNumber) {
     throw new Error(`Unable to find incident ${incidentNumber} for ${fireYear}.`);
   }
 
+  const detailIncidentUrl = `${BCWS_API}/wfnews-api/publicPublishedIncident/${encodeURIComponent(String(incidentNumber))}?fireYear=${encodeURIComponent(String(fireYear))}`;
   const attachmentsUrl = `${BCWS_API}/wfnews-api/publicPublishedIncidentAttachment/${incident.incidentGuid}/attachments`;
   const externalUrl = `${BCWS_API}/wfnews-api/publicExternalUri?${toQuery({
     incidentGuid: incident.incidentGuid,
@@ -211,8 +237,9 @@ export async function fetchIncidentDetail(fireYear, incidentNumber) {
   })}`;
   const detailUrl = `${BCWS_SITE}/incidents?${toQuery({ fireYear, incidentNumber, source: 'list' })}`;
 
-  const [attachmentsPayload, externalPayload, responsePageHtml, perimeterData, tiedEvac] =
+  const [detailPayload, attachmentsPayload, externalPayload, responsePageHtml, perimeterData, tiedEvac] =
     await Promise.all([
+      fetchJson(detailIncidentUrl).catch(() => null),
       fetchJson(attachmentsUrl).catch(() => ({ collection: [] })),
       fetchJson(externalUrl).catch(() => ({ collection: [] })),
       fetchText(detailUrl).catch(() => ''),
@@ -221,6 +248,11 @@ export async function fetchIncidentDetail(fireYear, incidentNumber) {
     ]);
 
   const parsed = parseIncidentResponsePage(responsePageHtml);
+  const officialResponseText = htmlToText(detailPayload?.incidentOverview || detailPayload?.responseTypeDetail || '');
+  const responseUpdates = officialResponseText
+    ? [officialResponseText]
+    : parsed.responseUpdates;
+  const detailIncident = detailPayload ? normalizeIncidentRow(detailPayload) : incident;
   const attachments = (attachmentsPayload.collection || []).map((item) => ({
     attachmentGuid: item.attachmentGuid,
     title: item.attachmentTitle || item.fileName || 'Untitled asset',
@@ -239,11 +271,14 @@ export async function fetchIncidentDetail(fireYear, incidentNumber) {
   let localCapture = null;
   try {
     localCapture = await captureIncidentDetailResult({
-      incident,
-      response: parsed,
+      incident: detailIncident,
+      response: {
+        ...parsed,
+        responseUpdates,
+      },
       responsePageHtml,
       requestContext: {
-        detailUrl,
+        detailUrl: detailIncidentUrl,
         enrichmentUrl: externalUrl,
       },
       attachmentsPayload,
@@ -259,9 +294,10 @@ export async function fetchIncidentDetail(fireYear, incidentNumber) {
   }
 
   return {
-    incident,
+    incident: detailIncident,
     response: {
       ...parsed,
+      responseUpdates,
       localOfficialUpdates: localCapture?.localOfficialUpdates || [],
     },
     attachments,
