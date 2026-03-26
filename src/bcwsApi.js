@@ -40,18 +40,66 @@ function toQuery(params) {
 }
 
 async function fetchJson(url) {
-  const response = await fetch(url);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  const response = await fetch(url, { signal: controller.signal });
+  clearTimeout(timer);
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   return response.json();
 }
 
 async function fetchText(url) {
-  const response = await fetch(url);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  const response = await fetch(url, { signal: controller.signal });
+  clearTimeout(timer);
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   return response.text();
 }
 
-function normalizeIncidentRow(row) {
+async function fetchWithTimeout(url, mode, timeoutMs = 4000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return mode === 'text' ? response.text() : response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchJsonWithMeta(url) {
+  try {
+    const payload = await fetchWithTimeout(url, 'json');
+    return { ok: true, status: 'ok', url, payload, error: '' };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'error',
+      url,
+      payload: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function fetchTextWithMeta(url) {
+  try {
+    const payload = await fetchWithTimeout(url, 'text');
+    return { ok: true, status: 'ok', url, payload, error: '' };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'error',
+      url,
+      payload: '',
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function normalizeIncidentRow(row, rawSource = null) {
   return {
     incidentGuid: row.incidentGuid,
     publishedIncidentDetailGuid: row.publishedIncidentDetailGuid,
@@ -83,6 +131,7 @@ function normalizeIncidentRow(row) {
       spuCount: row.structureProtectionResourceCount,
     },
     raw: row,
+    rawSource,
   };
 }
 
@@ -102,9 +151,9 @@ export async function fetchIncidentList({
     searchText: search || null,
     orderBy: 'lastUpdatedTimestamp DESC',
   });
-
-  const payload = await fetchJson(`${BCWS_API}/wfnews-api/publicPublishedIncident?${query}`);
-  const rows = (payload.collection || []).map(normalizeIncidentRow);
+  const sourceUrl = `${BCWS_API}/wfnews-api/publicPublishedIncident?${query}`;
+  const payload = await fetchJson(sourceUrl);
+  const rows = (payload.collection || []).map((row) => normalizeIncidentRow(row, { url: sourceUrl, status: 'ok' }));
   return {
     totalRowCount: payload.totalRowCount ?? rows.length,
     rows,
@@ -175,27 +224,39 @@ export async function fetchEvacuationSummary() {
   };
 }
 
-export async function fetchIncidentDetail(fireYear, incidentNumber) {
-  const { rows } = await fetchIncidentList({ pageRowCount: 1000 });
-  const incident = rows.find(
-    (row) => String(row.fireYear) === String(fireYear) && String(row.incidentNumber) === String(incidentNumber)
-  );
+export async function fetchIncidentDetail(fireYear, incidentNumber, seedIncident = null) {
+  const incident = seedIncident
+    ? seedIncident
+    : (await fetchIncidentList({ pageRowCount: 1000 })).rows.find(
+        (row) =>
+          String(row.fireYear) === String(fireYear) &&
+          String(row.incidentNumber) === String(incidentNumber)
+      );
 
   if (!incident) {
     throw new Error(`Unable to find incident ${incidentNumber} for ${fireYear}.`);
   }
 
-  const [attachmentsPayload, externalPayload, responsePageHtml, perimeterData, tiedEvac] =
-    await Promise.all([
-      fetchJson(`${BCWS_API}/wfnews-api/publicPublishedIncidentAttachment/${incident.incidentGuid}/attachments`).catch(() => ({ collection: [] })),
-      fetchJson(`${BCWS_API}/wfnews-api/publicExternalUri?${toQuery({ incidentGuid: incident.incidentGuid, pageNumber: 1, pageRowCount: 100 })}`).catch(() => ({ collection: [] })),
-      fetchText(`${BCWS_SITE}/incidents?${toQuery({ fireYear, incidentNumber, source: 'list' })}`).catch(() => ''),
-      fetchPerimeterByFireNumber(incident.incidentNumber).catch(() => null),
-      fetchTiedEvacuations(incident).catch(() => ({ orders: [], alerts: [] })),
-    ]);
+  const attachmentsUrl = `${BCWS_API}/wfnews-api/publicPublishedIncidentAttachment/${incident.incidentGuid}/attachments`;
+  const externalUrl = `${BCWS_API}/wfnews-api/publicExternalUri?${toQuery({
+    incidentGuid: incident.incidentGuid,
+    pageNumber: 1,
+    pageRowCount: 100,
+  })}`;
+  const responsePageUrl = `${BCWS_SITE}/incidents?${toQuery({ fireYear, incidentNumber, source: 'list' })}`;
+  const perimeterUrl = buildPerimeterQueryUrl(incident.incidentNumber);
+  const tiedEvacUrl = buildTiedEvacQueryUrl(incident);
 
-  const parsed = parseIncidentResponsePage(responsePageHtml);
-  const attachments = (attachmentsPayload.collection || []).map((item) => ({
+  const [attachmentsResult, externalResult, responsePageResult, perimeterResult, tiedEvacResult] = await Promise.all([
+    fetchJsonWithMeta(attachmentsUrl),
+    fetchJsonWithMeta(externalUrl),
+    fetchTextWithMeta(responsePageUrl),
+    fetchJsonWithMeta(perimeterUrl),
+    fetchJsonWithMeta(tiedEvacUrl),
+  ]);
+
+  const parsed = parseIncidentResponsePage(responsePageResult.payload || '');
+  const attachments = ((attachmentsResult.payload?.collection) || []).map((item) => ({
     attachmentGuid: item.attachmentGuid,
     title: item.attachmentTitle || item.fileName || 'Untitled asset',
     description: item.attachmentDescription,
@@ -203,12 +264,14 @@ export async function fetchIncidentDetail(fireYear, incidentNumber) {
     mimeType: item.mimeType,
     uploadedTimestamp: item.uploadedTimestamp,
   }));
-  const externalLinks = (externalPayload.collection || []).map((item) => ({
+  const externalLinks = ((externalResult.payload?.collection) || []).map((item) => ({
     id: item.externalUriGuid,
     category: item.externalUriCategoryTag,
     label: item.externalUriDisplayLabel,
     url: item.externalUri,
   }));
+  const perimeterData = perimeterResult.ok ? perimeterResult.payload : null;
+  const tiedEvac = parseTiedEvacPayload(tiedEvacResult.ok ? tiedEvacResult.payload : null);
 
   return {
     incident,
@@ -217,37 +280,50 @@ export async function fetchIncidentDetail(fireYear, incidentNumber) {
     externalLinks,
     perimeterData,
     tiedEvac,
+    rawSources: {
+      attachments: attachmentsResult,
+      external: externalResult,
+      responsePage: responsePageResult,
+      perimeter: perimeterResult,
+      tiedEvac: tiedEvacResult,
+    },
   };
 }
 
-async function fetchPerimeterByFireNumber(fireNumber) {
+function buildPerimeterQueryUrl(fireNumber) {
   const where = `FIRE_NUMBER='${String(fireNumber).replace(/'/g, "''")}'`;
-  return fetchJson(
-    `${WFNEWS_ARCGIS}/BCWS_FirePerimeters_PublicView/FeatureServer/0/query?${toQuery({
-      where,
-      outFields: '*',
-      returnGeometry: true,
-      outSR: 4326,
-      f: 'geojson',
-    })}`
-  );
+  return `${WFNEWS_ARCGIS}/BCWS_FirePerimeters_PublicView/FeatureServer/0/query?${toQuery({
+    where,
+    outFields: '*',
+    returnGeometry: true,
+    outSR: 4326,
+    f: 'geojson',
+  })}`;
 }
 
-async function fetchTiedEvacuations(incident) {
+async function fetchPerimeterByFireNumber(fireNumber) {
+  return fetchJson(buildPerimeterQueryUrl(fireNumber));
+}
+
+function buildTiedEvacQueryUrl(incident) {
   const { xmin, ymin, xmax, ymax } = buildEnvelopeForIncident(incident);
-  const payload = await fetchJson(
-    `${WFNEWS_ARCGIS}/Evacuation_Orders_and_Alerts/FeatureServer/0/query?${toQuery({
-      returnGeometry: false,
-      where: "ORDER_ALERT_STATUS <> 'All Clear' and (EVENT_TYPE = 'Fire' or EVENT_TYPE = 'Wildfire')",
-      outFields: '*',
-      inSR: 4326,
-      outSR: 4326,
-      geometry: JSON.stringify({ xmin, ymin, xmax, ymax, spatialReference: { wkid: 4326 } }),
-      geometryType: 'esriGeometryEnvelope',
-      spatialRel: 'esriSpatialRelIntersects',
-      f: 'pjson',
-    })}`
-  );
+  return `${WFNEWS_ARCGIS}/Evacuation_Orders_and_Alerts/FeatureServer/0/query?${toQuery({
+    returnGeometry: false,
+    where: "ORDER_ALERT_STATUS <> 'All Clear' and (EVENT_TYPE = 'Fire' or EVENT_TYPE = 'Wildfire')",
+    outFields: '*',
+    inSR: 4326,
+    outSR: 4326,
+    geometry: JSON.stringify({ xmin, ymin, xmax, ymax, spatialReference: { wkid: 4326 } }),
+    geometryType: 'esriGeometryEnvelope',
+    spatialRel: 'esriSpatialRelIntersects',
+    f: 'pjson',
+  })}`;
+}
+
+function parseTiedEvacPayload(payload) {
+  if (!payload || !Array.isArray(payload.features)) {
+    return { orders: [], alerts: [] };
+  }
 
   const orders = [];
   const alerts = [];
@@ -264,6 +340,11 @@ async function fetchTiedEvacuations(incident) {
     else if (lower.includes('alert')) alerts.push(row);
   });
   return { orders, alerts };
+}
+
+async function fetchTiedEvacuations(incident) {
+  const payload = await fetchJson(buildTiedEvacQueryUrl(incident));
+  return parseTiedEvacPayload(payload);
 }
 
 function buildEnvelopeForIncident(incident) {
