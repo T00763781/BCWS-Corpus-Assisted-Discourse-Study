@@ -25,3 +25,7 @@ being-held.svg
 out-of-control.svg
 under-control.svg
 wildfire.png
+
+dist-electron/
+release/
+
