@@ -388,7 +388,7 @@ function IncidentsListPage({ pipelineStatus, onTriggerPipeline }) {
       }} />
       <div className="page-title-block">
         <h1>Incidents</h1>
-        <p>Live BCWS incident table with local-ready structure and manual ingest controls.</p>
+        <p>Live BCWS incident table with local capture structure and manual ingest controls.</p>
       </div>
       <div className="list-toolbar list-toolbar--mock">
         <input className="toolbar-input" placeholder="Search incident name or number" value={search} onChange={(e) => setSearch(e.target.value)} />
