@@ -522,6 +522,10 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
 
   const incident = state.data?.incident;
   const response = state.data?.response;
+  const localUpdates = response?.localOfficialUpdates || [];
+  const renderedUpdates = localUpdates.length
+    ? localUpdates.map((item) => item.updateText)
+    : (response?.responseUpdates || []);
 
   return (
     <div className="incident-detail-page">
@@ -566,8 +570,11 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
         <div className="incident-tab-panel incident-response-layout">
           <section className="response-big-card">
             <h2>Response Update</h2>
-            {response?.responseUpdates?.length ? (
-              response.responseUpdates.map((item, index) => (
+            {state.data?.localCapture?.capturedAt ? (
+              <div className="text-muted">Stored locally: {formatDateTime(state.data.localCapture.capturedAt)}</div>
+            ) : null}
+            {renderedUpdates.length ? (
+              renderedUpdates.map((item, index) => (
                 <article key={`resp-${index}`} className="response-update-block">
                   <pre>{item}</pre>
                 </article>

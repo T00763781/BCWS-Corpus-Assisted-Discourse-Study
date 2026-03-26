@@ -7,6 +7,10 @@ const BCWS_SITE = import.meta.env.DEV
 const WFNEWS_ARCGIS = import.meta.env.DEV
   ? '/wfnews-arcgis/services6/ubm4tcTYICKBpist/ArcGIS/rest/services'
   : 'https://wfnews-prd.bcwildfireservices.com/services6/ubm4tcTYICKBpist/ArcGIS/rest/services';
+import {
+  captureIncidentDetailResult,
+  captureIncidentListResult,
+} from './localCapture.js';
 export const DASHBOARD_FIRE_YEAR = 2025;
 
 export const STAGE_DEFS = {
@@ -103,11 +107,25 @@ export async function fetchIncidentList({
     orderBy: 'lastUpdatedTimestamp DESC',
   });
 
-  const payload = await fetchJson(`${BCWS_API}/wfnews-api/publicPublishedIncident?${query}`);
+  const requestUrl = `${BCWS_API}/wfnews-api/publicPublishedIncident?${query}`;
+  const payload = await fetchJson(requestUrl);
   const rows = (payload.collection || []).map(normalizeIncidentRow);
+  let localCapture = null;
+  try {
+    localCapture = await captureIncidentListResult({
+      rows,
+      requestUrl,
+      rawPayload: payload,
+    });
+  } catch (error) {
+    localCapture = {
+      captureError: error instanceof Error ? error.message : String(error),
+    };
+  }
   return {
     totalRowCount: payload.totalRowCount ?? rows.length,
     rows,
+    localCapture,
   };
 }
 
@@ -185,11 +203,19 @@ export async function fetchIncidentDetail(fireYear, incidentNumber) {
     throw new Error(`Unable to find incident ${incidentNumber} for ${fireYear}.`);
   }
 
+  const attachmentsUrl = `${BCWS_API}/wfnews-api/publicPublishedIncidentAttachment/${incident.incidentGuid}/attachments`;
+  const externalUrl = `${BCWS_API}/wfnews-api/publicExternalUri?${toQuery({
+    incidentGuid: incident.incidentGuid,
+    pageNumber: 1,
+    pageRowCount: 100,
+  })}`;
+  const detailUrl = `${BCWS_SITE}/incidents?${toQuery({ fireYear, incidentNumber, source: 'list' })}`;
+
   const [attachmentsPayload, externalPayload, responsePageHtml, perimeterData, tiedEvac] =
     await Promise.all([
-      fetchJson(`${BCWS_API}/wfnews-api/publicPublishedIncidentAttachment/${incident.incidentGuid}/attachments`).catch(() => ({ collection: [] })),
-      fetchJson(`${BCWS_API}/wfnews-api/publicExternalUri?${toQuery({ incidentGuid: incident.incidentGuid, pageNumber: 1, pageRowCount: 100 })}`).catch(() => ({ collection: [] })),
-      fetchText(`${BCWS_SITE}/incidents?${toQuery({ fireYear, incidentNumber, source: 'list' })}`).catch(() => ''),
+      fetchJson(attachmentsUrl).catch(() => ({ collection: [] })),
+      fetchJson(externalUrl).catch(() => ({ collection: [] })),
+      fetchText(detailUrl).catch(() => ''),
       fetchPerimeterByFireNumber(incident.incidentNumber).catch(() => null),
       fetchTiedEvacuations(incident).catch(() => ({ orders: [], alerts: [] })),
     ]);
@@ -210,13 +236,39 @@ export async function fetchIncidentDetail(fireYear, incidentNumber) {
     url: item.externalUri,
   }));
 
+  let localCapture = null;
+  try {
+    localCapture = await captureIncidentDetailResult({
+      incident,
+      response: parsed,
+      responsePageHtml,
+      requestContext: {
+        detailUrl,
+        enrichmentUrl: externalUrl,
+      },
+      attachmentsPayload,
+      externalPayload,
+      perimeterData,
+      tiedEvac,
+    });
+  } catch (error) {
+    localCapture = {
+      captureError: error instanceof Error ? error.message : String(error),
+      localOfficialUpdates: [],
+    };
+  }
+
   return {
     incident,
-    response: parsed,
+    response: {
+      ...parsed,
+      localOfficialUpdates: localCapture?.localOfficialUpdates || [],
+    },
     attachments,
     externalLinks,
     perimeterData,
     tiedEvac,
+    localCapture,
   };
 }
 
