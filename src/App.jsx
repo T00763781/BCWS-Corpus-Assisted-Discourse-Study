@@ -881,10 +881,12 @@ function PlaceholderPage({ title, message }) {
 }
 
 function SettingsHonestyPage() {
+  const desktopActive = Boolean(window.openFiresideDesktop?.isElectron);
+
   return (
     <div className="stub-page">
       <h1>Settings</h1>
-      <p>Current runtime: browser fallback with no DB.</p>
+      <p>Current runtime: {desktopActive ? 'Electron desktop shell with no DB.' : 'browser fallback with no DB.'}</p>
       <p>Incident capture is browser fallback. Weather and Discourse are not wired in this runtime.</p>
     </div>
   );
