@@ -13,6 +13,7 @@ const CAPTURE_DIR = process.env.OF_SCREENSHOT_DIR;
 const SMOKE_MODE = process.env.OF_SMOKE === '1';
 const PHASE4_AUTO_CAPTURE = process.env.OF_PHASE4_AUTO_CAPTURE === '1';
 const dbLifecycle = createDbLifecycleManager({ app, dialog, BrowserWindow });
+let autoCheckTimer = null;
 
 function createWindow() {
   return new BrowserWindow({
@@ -63,6 +64,31 @@ async function captureCurrentView(win, fileName, waitMs = 900) {
   fs.writeFileSync(path.join(CAPTURE_DIR, fileName), png);
 }
 
+function restartAutoCheckTimer() {
+  if (autoCheckTimer) {
+    clearInterval(autoCheckTimer);
+    autoCheckTimer = null;
+  }
+  const status = dbLifecycle.getStatus();
+  const intervalMinutes = Number(status.autoCheckMinutes || 0);
+  if (!status.hasActiveDb || intervalMinutes <= 0) return;
+  const tickMs = Math.max(60_000, intervalMinutes * 60_000);
+  autoCheckTimer = setInterval(() => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('db:auto-check-tick', {
+          intervalMinutes,
+          triggeredAt: nowIso(),
+        });
+      }
+    }
+  }, tickMs);
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
 app.whenReady().then(async () => {
   if (SMOKE_MODE) {
     setTimeout(() => app.quit(), 25000);
@@ -79,13 +105,43 @@ app.whenReady().then(async () => {
   if (process.env.OF_DB_DELETE_ACTIVE === '1') {
     await dbLifecycle.deleteActiveDb();
   }
+  if (process.env.OF_SET_AUTOCHECK_MINUTES) {
+    dbLifecycle.setAutoCheckMinutes(process.env.OF_SET_AUTOCHECK_MINUTES);
+  }
+  restartAutoCheckTimer();
 
   ipcMain.handle('db:get-status', async () => dbLifecycle.getStatus());
-  ipcMain.handle('db:create', async () => dbLifecycle.createNewDb());
-  ipcMain.handle('db:select', async () => dbLifecycle.chooseExistingDb());
-  ipcMain.handle('db:delete-active', async () => dbLifecycle.deleteActiveDb());
-  ipcMain.handle('db:create-at-path', async (_event, dbPath) => dbLifecycle.createDbAtPath(dbPath));
-  ipcMain.handle('db:select-path', async (_event, dbPath) => dbLifecycle.selectDbAtPath(dbPath));
+  ipcMain.handle('db:create', async () => {
+    const result = await dbLifecycle.createNewDb();
+    restartAutoCheckTimer();
+    return result;
+  });
+  ipcMain.handle('db:select', async () => {
+    const result = await dbLifecycle.chooseExistingDb();
+    restartAutoCheckTimer();
+    return result;
+  });
+  ipcMain.handle('db:delete-active', async () => {
+    const result = await dbLifecycle.deleteActiveDb();
+    restartAutoCheckTimer();
+    return result;
+  });
+  ipcMain.handle('db:create-at-path', async (_event, dbPath) => {
+    const result = await dbLifecycle.createDbAtPath(dbPath);
+    restartAutoCheckTimer();
+    return result;
+  });
+  ipcMain.handle('db:select-path', async (_event, dbPath) => {
+    const result = await dbLifecycle.selectDbAtPath(dbPath);
+    restartAutoCheckTimer();
+    return result;
+  });
+  ipcMain.handle('db:set-auto-check-minutes', async (_event, minutes) => {
+    const result = dbLifecycle.setAutoCheckMinutes(minutes);
+    restartAutoCheckTimer();
+    return result;
+  });
+  ipcMain.handle('db:get-capture-metrics', async () => dbLifecycle.getCaptureMetrics());
   ipcMain.handle('db:capture-mark-running', async () => dbLifecycle.markCaptureRunning());
   ipcMain.handle('db:capture-mark-error', async (_event, message) => dbLifecycle.markCaptureError(message));
   ipcMain.handle('db:capture-save', async (_event, payload) => dbLifecycle.saveIncidentCapture(payload));
@@ -98,7 +154,7 @@ app.whenReady().then(async () => {
   await loadRenderer(win);
 
   if (PHASE4_AUTO_CAPTURE) {
-    await captureView(win, '#/configure', 'phase4-settings-before-capture.png');
+    await captureView(win, '#/configure', 'phase4b-settings-before-capture.png');
     await win.webContents.executeJavaScript(
       `
         (async () => {
@@ -135,9 +191,10 @@ app.whenReady().then(async () => {
       `,
       true
     );
-    await captureView(win, '#/incidents', 'phase4-incidents-after-capture.png');
+    await captureView(win, '#/configure', 'phase4b-settings-after-capture.png');
+    await captureView(win, '#/incidents', 'phase4b-incidents-after-capture.png');
     await loadRenderer(win, '#/incidents/2025/G70422');
-    await captureCurrentView(win, 'phase4-g70422-after-capture.png', 4000);
+    await captureCurrentView(win, 'phase4b-g70422-after-capture.png', 4000);
     if (SMOKE_MODE) {
       app.quit();
       return;
@@ -164,6 +221,10 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  if (autoCheckTimer) {
+    clearInterval(autoCheckTimer);
+    autoCheckTimer = null;
+  }
   dbLifecycle.closeActive();
   if (process.platform !== 'darwin') {
     app.quit();
