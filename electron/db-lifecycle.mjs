@@ -187,6 +187,8 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     ensureColumn(database, 'incident_snapshots', 'snapshot_hash', 'snapshot_hash TEXT');
     ensureColumn(database, 'incident_snapshots', 'snapshot_json', 'snapshot_json TEXT');
     ensureColumn(database, 'incident_updates', 'update_hash', 'update_hash TEXT');
+    ensureColumn(database, 'incident_updates', 'update_published_at', 'update_published_at TEXT');
+    ensureColumn(database, 'incident_updates', 'source_kind', "source_kind TEXT DEFAULT 'capture-detail'");
   };
 
   const flushDb = () => {
@@ -386,13 +388,119 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     );
   };
 
-  const latestUpdateHash = (fireYear, incidentNumber, updateIndex) => {
+  const hasUpdateHashForIncident = (fireYear, incidentNumber, updateHash) => {
     const rows = db.exec(
-      'SELECT update_hash FROM incident_updates WHERE fire_year = ? AND incident_number = ? AND update_index = ? ORDER BY id DESC LIMIT 1',
-      [String(fireYear), String(incidentNumber), Number(updateIndex)]
+      'SELECT 1 FROM incident_updates WHERE fire_year = ? AND incident_number = ? AND update_hash = ? LIMIT 1',
+      [String(fireYear), String(incidentNumber), String(updateHash)]
     );
-    if (!rows.length || !rows[0].values.length) return null;
-    return String(rows[0].values[0][0]);
+    return Boolean(rows.length && rows[0].values.length);
+  };
+
+  const decodeHtml = (value) =>
+    String(value || '')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&#39;/g, "'")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#x2F;/gi, '/');
+
+  const normalizeUpdateText = (value) =>
+    decodeHtml(value)
+      .replace(/\r/g, '\n')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+  const parseDatePrefix = (text) => {
+    const value = String(text || '').trim();
+    const dateMatch = value.match(
+      /^(?:updated\s+)?((?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2},\s+\d{4})/i
+    );
+    return dateMatch ? dateMatch[1] : null;
+  };
+
+  const extractUpdatesFromArchivedHtml = (html) => {
+    const source = String(html || '');
+    if (!source.trim()) return { updates: [], reason: 'empty_html' };
+
+    const scriptJsonMatches = [...source.matchAll(/"responseUpdates?"\s*:\s*(\[[\s\S]*?\])/gi)];
+    const scriptCandidates = [];
+    for (const match of scriptJsonMatches) {
+      const parsed = safeJsonParse(match[1], null);
+      if (!Array.isArray(parsed)) continue;
+      for (const item of parsed) {
+        const normalized = normalizeUpdateText(item);
+        if (normalized) {
+          scriptCandidates.push({
+            text: normalized,
+            publishedAt: parseDatePrefix(normalized),
+          });
+        }
+      }
+    }
+    if (scriptCandidates.length) {
+      return { updates: scriptCandidates, reason: 'script_json' };
+    }
+
+    const noScripts = source
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ');
+    const plain = decodeHtml(
+      noScripts
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<[^>]+>/g, ' ')
+    );
+
+    if (!/response update/i.test(plain)) {
+      return { updates: [], reason: 'no_response_update_heading' };
+    }
+
+    const cleanedLines = plain
+      .split('\n')
+      .map((line) => line.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    const stopHeadings = [
+      'evacuations',
+      'suspected cause',
+      'resources assigned',
+      'map downloads',
+      'gallery',
+      'discourse',
+    ];
+    const updates = [];
+    for (let index = 0; index < cleanedLines.length; index += 1) {
+      if (!/^response update$/i.test(cleanedLines[index])) continue;
+      const block = [];
+      for (let cursor = index + 1; cursor < cleanedLines.length; cursor += 1) {
+        const current = cleanedLines[cursor];
+        if (stopHeadings.some((heading) => current.toLowerCase().startsWith(heading))) break;
+        if (/^response update$/i.test(current)) break;
+        block.push(current);
+      }
+      const normalized = normalizeUpdateText(block.join('\n'));
+      if (normalized) {
+        updates.push({
+          text: normalized,
+          publishedAt: parseDatePrefix(normalized),
+        });
+      }
+    }
+
+    const deduped = [];
+    const seen = new Set();
+    for (const row of updates) {
+      const key = hashPayload(row.text);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(row);
+    }
+
+    return { updates: deduped, reason: deduped.length ? 'heading_blocks' : 'no_blocks_after_heading' };
   };
 
   const writeCaptureRecords = ({ listRows, detailRecords, capturedAt }) => {
@@ -548,15 +656,37 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           }
         }
 
-        const updates = Array.isArray(detail?.response?.responseUpdates) ? detail.response.responseUpdates : [];
-        updates.forEach((updateText, updateIndex) => {
-          const nextText = String(updateText || '').trim();
+        const parsedUpdates = [];
+        const inlineUpdates = Array.isArray(detail?.response?.responseUpdates) ? detail.response.responseUpdates : [];
+        inlineUpdates.forEach((item) => {
+          const text = normalizeUpdateText(item);
+          if (!text) return;
+          parsedUpdates.push({ text, publishedAt: parseDatePrefix(text), sourceKind: 'capture-detail' });
+        });
+
+        if (!parsedUpdates.length) {
+          const archivedHtml = detail?.rawSources?.responsePage?.payload;
+          const recovered = extractUpdatesFromArchivedHtml(archivedHtml);
+          recovered.updates.forEach((item) => {
+            parsedUpdates.push({
+              text: item.text,
+              publishedAt: item.publishedAt || null,
+              sourceKind: 'capture-archived-html',
+            });
+          });
+        }
+
+        parsedUpdates.forEach((updateRow, updateIndex) => {
+          const nextText = normalizeUpdateText(updateRow.text);
           if (!nextText) return;
           const nextHash = hashPayload(nextText);
-          const prevHash = latestUpdateHash(incident.fireYear, incident.incidentNumber, updateIndex);
-          if (prevHash === nextHash) return;
+          if (hasUpdateHashForIncident(incident.fireYear, incident.incidentNumber, nextHash)) return;
           db.run(
-            'INSERT INTO incident_updates (fire_year, incident_number, captured_at, update_index, update_hash, update_text) VALUES (?, ?, ?, ?, ?, ?)',
+            `
+            INSERT INTO incident_updates (
+              fire_year, incident_number, captured_at, update_index, update_hash, update_text, update_published_at, source_kind
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `,
             [
               String(incident.fireYear),
               String(incident.incidentNumber),
@@ -564,6 +694,8 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
               Number(updateIndex),
               nextHash,
               nextText,
+              updateRow.publishedAt || null,
+              updateRow.sourceKind || 'capture-detail',
             ]
           );
           insertedUpdates += 1;
@@ -603,6 +735,91 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     }
   };
 
+  const recoverResponseHistoryFromArchivedRaw = () => {
+    if (!db) return { ok: false, error: 'No active DB selected.', status: getStatus() };
+    const rawRows = db.exec(
+      `
+      SELECT id, fire_year, incident_number, captured_at, payload_text
+      FROM raw_source_records
+      WHERE source_kind = 'incident_detail_html'
+      ORDER BY captured_at ASC, id ASC
+      `
+    );
+    const records = rawRows.length ? rawRows[0].values : [];
+    let scannedRecords = 0;
+    let parsedRecords = 0;
+    let insertedUpdates = 0;
+    let g70422Reason = '';
+    let g70422ParsedBlocks = 0;
+    let g70422Inserted = 0;
+
+    db.run('BEGIN TRANSACTION');
+    try {
+      for (const row of records) {
+        scannedRecords += 1;
+        const fireYear = String(row[1]);
+        const incidentNumber = String(row[2]);
+        const capturedAt = String(row[3] || nowIso());
+        const html = String(row[4] || '');
+        const recovered = extractUpdatesFromArchivedHtml(html);
+        if (incidentNumber.toUpperCase() === 'G70422') {
+          g70422Reason = recovered.reason;
+        }
+        if (!recovered.updates.length) continue;
+        parsedRecords += 1;
+        if (incidentNumber.toUpperCase() === 'G70422') {
+          g70422ParsedBlocks += recovered.updates.length;
+        }
+        recovered.updates.forEach((item, updateIndex) => {
+          const text = normalizeUpdateText(item.text);
+          if (!text) return;
+          const updateHash = hashPayload(text);
+          if (hasUpdateHashForIncident(fireYear, incidentNumber, updateHash)) return;
+          db.run(
+            `
+            INSERT INTO incident_updates (
+              fire_year, incident_number, captured_at, update_index, update_hash, update_text, update_published_at, source_kind
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+            [
+              fireYear,
+              incidentNumber,
+              capturedAt,
+              Number(updateIndex),
+              updateHash,
+              text,
+              item.publishedAt || null,
+              'recovery-archived-html',
+            ]
+          );
+          insertedUpdates += 1;
+          if (incidentNumber.toUpperCase() === 'G70422') {
+            g70422Inserted += 1;
+          }
+        });
+      }
+
+      db.run('COMMIT');
+      flushDb();
+      return {
+        ok: true,
+        status: getStatus(),
+        scannedRecords,
+        parsedRecords,
+        insertedUpdates,
+        g70422: {
+          parsedBlocks: g70422ParsedBlocks,
+          inserted: g70422Inserted,
+          reason: g70422Reason || 'no_g70422_raw_record',
+        },
+      };
+    } catch (error) {
+      db.run('ROLLBACK');
+      const message = error instanceof Error ? error.message : 'Recovery failed';
+      return { ok: false, error: message, status: getStatus() };
+    }
+  };
+
   const getIncidentListLocal = () => {
     if (!db) return { ok: false, error: 'No active DB selected.', rows: [], hasLocalData: false };
     const rows = db.exec(
@@ -638,7 +855,12 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     if (!parsed) return { ok: true, found: false };
     const effectiveFireYear = parsed?.incident?.fireYear ? String(parsed.incident.fireYear) : String(fireYear);
     const updatesQuery = db.exec(
-      'SELECT update_text FROM incident_updates WHERE fire_year = ? AND incident_number = ? ORDER BY update_index ASC',
+      `
+      SELECT update_text
+      FROM incident_updates
+      WHERE fire_year = ? AND incident_number = ?
+      ORDER BY COALESCE(update_published_at, captured_at) ASC, update_index ASC, id ASC
+      `,
       [effectiveFireYear, String(incidentNumber)]
     );
     const storedUpdates = updatesQuery.length
@@ -699,6 +921,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     markCaptureError,
     setAutoCheckMinutes,
     saveIncidentCapture,
+    recoverResponseHistoryFromArchivedRaw,
     getIncidentListLocal,
     getIncidentDetailLocal,
     getCaptureMetrics,

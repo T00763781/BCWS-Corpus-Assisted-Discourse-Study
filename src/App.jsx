@@ -1064,6 +1064,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState('');
   const [captureSummary, setCaptureSummary] = React.useState('');
+  const [recoverySummary, setRecoverySummary] = React.useState('');
   const [autoCheckMinutesDraft, setAutoCheckMinutesDraft] = React.useState(String(dbStatus.autoCheckMinutes || 0));
 
   React.useEffect(() => {
@@ -1092,6 +1093,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
     setBusy(true);
     setError('');
     setCaptureSummary('');
+    setRecoverySummary('');
     try {
       const result = await onCaptureIncidents({ trigger: 'manual' });
       if (!result?.ok) {
@@ -1103,6 +1105,27 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : 'Incident capture failed';
       setError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runRecovery = async () => {
+    if (!desktopActive || !hasDesktopDbBridge() || !dbStatus.hasActiveDb) return;
+    setBusy(true);
+    setError('');
+    setRecoverySummary('');
+    try {
+      const result = await window.openFiresideDesktop.db.recoverResponseHistory();
+      if (!result?.ok) {
+        throw new Error(result?.error || 'Recovery failed');
+      }
+      await onDbStatusChange();
+      setRecoverySummary(
+        `Recovered ${result.insertedUpdates} response updates from ${result.scannedRecords} archived detail records (G70422 parsed blocks: ${result.g70422?.parsedBlocks ?? 0}, inserted: ${result.g70422?.inserted ?? 0}, reason: ${result.g70422?.reason || 'n/a'}).`
+      );
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to recover response history');
     } finally {
       setBusy(false);
     }
@@ -1193,6 +1216,14 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
           type="button"
           className="toolbar-button"
           disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+          onClick={runRecovery}
+        >
+          Recover response history
+        </button>
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
           onClick={() => runDbAction(() => window.openFiresideDesktop.db.deleteActive())}
         >
           Delete DB
@@ -1200,6 +1231,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
       </div>
       {!desktopActive ? <p>DB lifecycle controls are available only in desktop runtime.</p> : null}
       {captureSummary ? <div className="list-results-label">{captureSummary}</div> : null}
+      {recoverySummary ? <div className="list-results-label">{recoverySummary}</div> : null}
       {error ? <div className="error-banner">{error}</div> : null}
     </div>
   );

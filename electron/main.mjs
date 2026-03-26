@@ -12,6 +12,7 @@ const IS_DEV = Boolean(DEV_SERVER_URL);
 const CAPTURE_DIR = process.env.OF_SCREENSHOT_DIR;
 const SMOKE_MODE = process.env.OF_SMOKE === '1';
 const PHASE4_AUTO_CAPTURE = process.env.OF_PHASE4_AUTO_CAPTURE === '1';
+const PHASE4C_AUTO_RECOVER = process.env.OF_PHASE4C_AUTO_RECOVER === '1';
 const dbLifecycle = createDbLifecycleManager({ app, dialog, BrowserWindow });
 let autoCheckTimer = null;
 
@@ -142,6 +143,7 @@ app.whenReady().then(async () => {
     return result;
   });
   ipcMain.handle('db:get-capture-metrics', async () => dbLifecycle.getCaptureMetrics());
+  ipcMain.handle('db:recover-response-history', async () => dbLifecycle.recoverResponseHistoryFromArchivedRaw());
   ipcMain.handle('db:capture-mark-running', async () => dbLifecycle.markCaptureRunning());
   ipcMain.handle('db:capture-mark-error', async (_event, message) => dbLifecycle.markCaptureError(message));
   ipcMain.handle('db:capture-save', async (_event, payload) => dbLifecycle.saveIncidentCapture(payload));
@@ -195,6 +197,19 @@ app.whenReady().then(async () => {
     await captureView(win, '#/incidents', 'phase4b-incidents-after-capture.png');
     await loadRenderer(win, '#/incidents/2025/G70422');
     await captureCurrentView(win, 'phase4b-g70422-after-capture.png', 4000);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE4C_AUTO_RECOVER) {
+    await captureView(win, '#/configure', 'phase4c-settings-before-recovery.png');
+    await dbLifecycle.recoverResponseHistoryFromArchivedRaw();
+    await captureView(win, '#/configure', 'phase4c-settings-after-recovery.png');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase4c-g70422-after-recovery.png', 3000);
     if (SMOKE_MODE) {
       app.quit();
       return;

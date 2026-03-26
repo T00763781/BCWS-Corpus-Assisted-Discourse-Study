@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('openFiresideDesktop', {
     markCaptureError: (message) => ipcRenderer.invoke('db:capture-mark-error', message),
     setAutoCheckMinutes: (minutes) => ipcRenderer.invoke('db:set-auto-check-minutes', minutes),
     getCaptureMetrics: () => ipcRenderer.invoke('db:get-capture-metrics'),
+    recoverResponseHistory: () => ipcRenderer.invoke('db:recover-response-history'),
     saveCapture: (payload) => ipcRenderer.invoke('db:capture-save', payload),
     getIncidentListLocal: () => ipcRenderer.invoke('db:incidents-list-local'),
     getIncidentDetailLocal: (fireYear, incidentNumber) =>
