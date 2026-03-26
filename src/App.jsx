@@ -29,7 +29,7 @@ const ROUTES = [
   { id: 'incidents', label: 'Incidents' },
   { id: 'maps', label: 'Maps' },
   { id: 'discourse', label: 'Discourse' },
-  { id: 'configure', label: 'Configure' },
+  { id: 'configure', label: 'Settings' },
 ];
 
 const STATIC_ASSET_BASE = import.meta.env.BASE_URL;
@@ -118,17 +118,10 @@ export default function App() {
           {route.id === 'incident-detail' ? (
             <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} />
           ) : null}
-          {route.id === 'weather' ? <BlankRoute /> : null}
+          {route.id === 'weather' ? <PlaceholderPage title="Weather" message="Not wired in this browser runtime." /> : null}
           {route.id === 'maps' ? <BlankRoute /> : null}
-          {route.id === 'discourse' ? <BlankRoute /> : null}
-          {route.id === 'configure' ? (
-            <ConfigureWorkspace
-              configureTab={configureTab}
-              setConfigureTab={setConfigureTab}
-              pageLayouts={pageLayouts}
-              builderActions={builderActions}
-            />
-          ) : null}
+          {route.id === 'discourse' ? <PlaceholderPage title="Discourse" message="Not wired in this browser runtime." /> : null}
+          {route.id === 'configure' ? <SettingsHonestyPage /> : null}
         </section>
       </main>
     </div>
@@ -158,7 +151,15 @@ function DashboardPage() {
       (stats.activeBeingHeldFires || 0) +
       (stats.activeUnderControlFires || 0)
     : null;
-  const sourceSignals = React.useMemo(() => buildDashboardSourceSignals(state), [state]);
+  const sourceSignals = React.useMemo(
+    () => [
+      { label: 'Incident', status: 'browser_fallback' },
+      { label: 'Weather', status: 'not_wired' },
+      { label: 'Discourse', status: 'not_wired' },
+      { label: 'Storage', status: 'no_db' },
+    ],
+    []
+  );
 
   return (
     <div className="dashboard-page">
@@ -870,6 +871,27 @@ function BlankRoute() {
   return <div className="blank-workspace" aria-hidden="true" />;
 }
 
+function PlaceholderPage({ title, message }) {
+  return (
+    <div className="stub-page">
+      <h1>{title}</h1>
+      <p>{message}</p>
+    </div>
+  );
+}
+
+function SettingsHonestyPage() {
+  const desktopActive = Boolean(window.openFiresideDesktop?.isElectron);
+
+  return (
+    <div className="stub-page">
+      <h1>Settings</h1>
+      <p>Current runtime: {desktopActive ? 'Electron desktop shell with no DB.' : 'browser fallback with no DB.'}</p>
+      <p>Incident capture is browser fallback. Weather and Discourse are not wired in this runtime.</p>
+    </div>
+  );
+}
+
 
 
 
@@ -1158,41 +1180,14 @@ function displayValue(value) {
   return Number(value).toLocaleString('en-CA');
 }
 
-function buildDashboardSourceSignals(state) {
-  if (state.phase === 'loading') {
-    return [
-      { label: 'Stats', status: 'loading' },
-      { label: 'Map', status: 'loading' },
-      { label: 'Evac', status: 'loading' },
-    ];
-  }
-
-  if (state.phase === 'failure') {
-    return [
-      { label: 'Stats', status: 'error' },
-      { label: 'Map', status: 'error' },
-      { label: 'Evac', status: 'error' },
-    ];
-  }
-
-  const statsReady = Boolean(state.data?.stats);
-  const mapReady = ['FIRE_OF_NOTE', 'OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL'].every(
-    (code) => Array.isArray(state.data?.mapLayers?.[code])
-  );
-  const evacReady =
-    Number.isFinite(Number(state.data?.evacuations?.orders)) &&
-    Number.isFinite(Number(state.data?.evacuations?.alerts));
-
-  return [
-    { label: 'Stats', status: statsReady ? 'ready' : 'error' },
-    { label: 'Map', status: mapReady ? 'ready' : 'error' },
-    { label: 'Evac', status: evacReady ? 'ready' : 'error' },
-  ];
-}
-
 function sourceHealthLabel(status) {
-  if (status === 'ready') return 'Ready';
-  if (status === 'loading') return 'Loading';
+  if (status === 'browser_fallback') return 'Browser fallback';
+  if (status === 'not_wired') return 'Not wired';
+  if (status === 'no_db') return 'No DB';
+  if (status === 'never_captured') return 'Never captured';
+  if (status === 'capture_running') return 'Capture running';
+  if (status === 'backfill_due') return 'Backfill due';
+  if (status === 'healthy') return 'Healthy';
   return 'Error';
 }
 
