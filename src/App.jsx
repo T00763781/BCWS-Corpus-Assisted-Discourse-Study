@@ -35,10 +35,17 @@ const ROUTES = [
 const STATIC_ASSET_BASE = import.meta.env.BASE_URL;
 
 const STAGE_ICON_SRC = {
-  FIRE_OF_NOTE: `${STATIC_ASSET_BASE}fire-of-note.svg`,
-  UNDR_CNTRL: `${STATIC_ASSET_BASE}under-control.svg`,
-  HOLDING: `${STATIC_ASSET_BASE}being-held.svg`,
-  OUT_CNTRL: `${STATIC_ASSET_BASE}out-of-control.svg`,
+  FIRE_OF_NOTE: `${STATIC_ASSET_BASE}assets/wfnote.svg`,
+  UNDR_CNTRL: `${STATIC_ASSET_BASE}assets/under-control.svg`,
+  HOLDING: `${STATIC_ASSET_BASE}assets/being-held.svg`,
+  OUT_CNTRL: `${STATIC_ASSET_BASE}assets/out-of-control.svg`,
+};
+
+const PIPELINE_STATUS_ICON = {
+  READY: `${STATIC_ASSET_BASE}assets/under-control.svg`,
+  WARNING: `${STATIC_ASSET_BASE}assets/orange.svg`,
+  ERROR: `${STATIC_ASSET_BASE}assets/smoke.svg`,
+  IDLE: `${STATIC_ASSET_BASE}assets/grey.svg`,
 };
 
 function parseHashRoute() {
@@ -66,10 +73,63 @@ function navigateTo(next) {
   window.location.hash = next.startsWith('#') ? next.slice(1) : next;
 }
 
+function PageTopBar({ title, topBar }) {
+  return (
+    <div className="page-top-bar">
+      <h1 className="page-top-bar__title">{title}</h1>
+      <div className="page-top-bar__actions">
+        <TopBarAction
+          label="Incident"
+          status={topBar.status.incident}
+          onClick={() => {
+            topBar.onFetchIncident();
+            navigateTo('/incidents');
+          }}
+        />
+        <TopBarAction
+          label="Weather"
+          status={topBar.status.weather}
+          onClick={() => {
+            topBar.onFetchWeather();
+            navigateTo('/weather');
+          }}
+        />
+        <TopBarAction
+          label="Discourse"
+          status={topBar.status.discourse}
+          onClick={() => {
+            topBar.onFetchDiscourse();
+            navigateTo('/discourse');
+          }}
+        />
+        <TopBarAction label="Fetch All" status={topBar.status.fetchAll} onClick={topBar.onFetchAll} />
+      </div>
+    </div>
+  );
+}
+
+function TopBarAction({ label, status, onClick }) {
+  const icon = PIPELINE_STATUS_ICON[status] || PIPELINE_STATUS_ICON.IDLE;
+  return (
+    <button type="button" className={`top-action top-action--${String(status || 'IDLE').toLowerCase()}`} onClick={onClick}>
+      <img src={icon} alt="" className="top-action__icon" />
+      <span>{label}</span>
+      <span className="top-action__status">{status || 'IDLE'}</span>
+    </button>
+  );
+}
+
 export default function App() {
   const route = useHashRoute();
+  const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [configureTab, setConfigureTab] = React.useState('sources');
   const [pageLayouts, setPageLayouts] = React.useState(initialPageLayouts);
+  const [pipelineStatus, setPipelineStatus] = React.useState({
+    incident: 'IDLE',
+    weather: 'IDLE',
+    discourse: 'IDLE',
+    fetchAll: 'IDLE',
+  });
 
   const updatePageLayout = React.useCallback((pageId, recipe) => {
     setPageLayouts((current) => ({
@@ -87,12 +147,54 @@ export default function App() {
     [updatePageLayout]
   );
 
+  const setPipeline = React.useCallback((key, status) => {
+    setPipelineStatus((current) => ({ ...current, [key]: status }));
+  }, []);
+
+  const runPipeline = React.useCallback(
+    async (key, task) => {
+      try {
+        await task();
+        setPipeline(key, 'READY');
+      } catch {
+        setPipeline(key, 'ERROR');
+      }
+    },
+    [setPipeline]
+  );
+
+  const topBar = React.useMemo(
+    () => ({
+      status: pipelineStatus,
+      onFetchIncident: () => runPipeline('incident', () => fetchIncidentList({ pageRowCount: 500 })),
+      onFetchWeather: () => setPipeline('weather', 'WARNING'),
+      onFetchDiscourse: () => setPipeline('discourse', 'WARNING'),
+      onFetchAll: () =>
+        runPipeline('fetchAll', async () => {
+          await Promise.all([fetchIncidentList({ pageRowCount: 500 }), fetchDashboardData()]);
+          setPipeline('incident', 'READY');
+        }),
+    }),
+    [pipelineStatus, runPipeline, setPipeline]
+  );
+
   return (
     <div className="app-shell">
-      <main className="shell-frame">
+      <main className={`shell-frame ${sidebarOpen ? '' : 'is-rail-collapsed'}`.trim()}>
         <aside className="left-rail">
           <div className="brand-block">
             <img src={`${STATIC_ASSET_BASE}assets/logo.svg`} alt="Open Fireside" className="brand-logo" />
+            <button
+              type="button"
+              className="sidebar-toggle"
+              onClick={() => setSidebarOpen((current) => !current)}
+              aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            >
+              <img
+                src={`${STATIC_ASSET_BASE}assets/${sidebarOpen ? 'close-sidebar.svg' : 'open-sidebar.svg'}`}
+                alt=""
+              />
+            </button>
           </div>
           <nav className="route-nav" aria-label="Primary navigation">
             {ROUTES.map((item) => {
@@ -113,16 +215,17 @@ export default function App() {
         </aside>
 
         <section className="workspace">
-          {route.id === 'dashboard' ? <DashboardPage /> : null}
-          {route.id === 'incidents' ? <IncidentsListPage /> : null}
+          {route.id === 'dashboard' ? <DashboardPage topBar={topBar} /> : null}
+          {route.id === 'incidents' ? <IncidentsListPage topBar={topBar} /> : null}
           {route.id === 'incident-detail' ? (
-            <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} />
+            <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} topBar={topBar} />
           ) : null}
           {route.id === 'weather' ? <BlankRoute /> : null}
           {route.id === 'maps' ? <BlankRoute /> : null}
           {route.id === 'discourse' ? <BlankRoute /> : null}
           {route.id === 'configure' ? (
             <ConfigureWorkspace
+              topBar={topBar}
               configureTab={configureTab}
               setConfigureTab={setConfigureTab}
               pageLayouts={pageLayouts}
@@ -135,7 +238,7 @@ export default function App() {
   );
 }
 
-function DashboardPage() {
+function DashboardPage({ topBar }) {
   const [state, setState] = React.useState({ phase: 'loading', error: '', data: null });
 
   const load = React.useCallback(async () => {
@@ -162,6 +265,7 @@ function DashboardPage() {
 
   return (
     <div className="dashboard-page">
+      <PageTopBar title="Dashboard" topBar={topBar} />
       <div className="dashboard-header">
         <div>
           <div className="dashboard-kicker">
@@ -320,7 +424,7 @@ function FireCentreTable({ statsList }) {
   );
 }
 
-function IncidentsListPage() {
+function IncidentsListPage({ topBar }) {
   const [search, setSearch] = React.useState('');
   const [fireCentre, setFireCentre] = React.useState('');
   const [quickFilter, setQuickFilter] = React.useState('all');
@@ -412,6 +516,7 @@ function IncidentsListPage() {
 
   return (
     <div className="incidents-page">
+      <PageTopBar title="Incidents" topBar={topBar} />
       <div className="list-toolbar">
         <input
           className="toolbar-input"
@@ -504,7 +609,7 @@ function IncidentsListPage() {
   );
 }
 
-function IncidentDetailPage({ fireYear, incidentNumber }) {
+function IncidentDetailPage({ fireYear, incidentNumber, topBar }) {
   const [tab, setTab] = React.useState('response');
   const [state, setState] = React.useState({ phase: 'loading', error: '', data: null });
 
@@ -522,9 +627,18 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
 
   const incident = state.data?.incident;
   const response = state.data?.response;
+  const localUpdates = response?.localOfficialUpdates || [];
+  const renderedUpdates = localUpdates.length
+    ? localUpdates
+    : (response?.responseUpdates || []).map((item, index) => ({
+      id: `parsed-${index}`,
+      updateText: item,
+      observedAt: state.data?.localCapture?.capturedAt || null,
+    }));
 
   return (
     <div className="incident-detail-page">
+      <PageTopBar title="Incident Detail" topBar={topBar} />
       <button type="button" className="back-button" onClick={() => navigateTo('/incidents')}>&larr;</button>
 
       {state.phase === 'failure' ? <div className="error-banner">{state.error}</div> : null}
@@ -539,6 +653,7 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
             <SummaryRow label={`Discovered On ${formatDate(incident?.discoveryDate)}`} />
             <SummaryRow label={`Updated ${formatDateTime(incident?.updatedDate)}`} />
             <SummaryRow label={incident?.fireCentre || '—'} />
+            <SummaryRow label={`Local updates ${state.data?.localCapture?.updateCount ?? 0}`} />
           </div>
         </div>
         <IncidentHeroMap incident={incident} perimeterData={state.data?.perimeterData} />
@@ -566,10 +681,20 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
         <div className="incident-tab-panel incident-response-layout">
           <section className="response-big-card">
             <h2>Response Update</h2>
-            {response?.responseUpdates?.length ? (
-              response.responseUpdates.map((item, index) => (
-                <article key={`resp-${index}`} className="response-update-block">
-                  <pre>{item}</pre>
+            <div className="capture-diagnostic">
+              <span>Status: {state.data?.localCapture?.captureError ? 'ERROR' : (state.data?.localCapture?.updateCount ? 'READY' : 'WARNING')}</span>
+              <span>Local updates: {state.data?.localCapture?.updateCount ?? 0}</span>
+              <span>Local attachments: {state.data?.localCapture?.recordCounts?.attachmentCount ?? 0}</span>
+              <span>Last local capture: {formatDateTime(state.data?.localCapture?.capturedAt)}</span>
+            </div>
+            {renderedUpdates.length ? (
+              renderedUpdates.map((item, index) => (
+                <article key={item.id || `resp-${index}`} className="response-update-block">
+                  <div className="response-update-meta">
+                    {index === 0 ? 'Newest' : `Older ${index}`}
+                    {item.observedAt ? ` | Captured ${formatDateTime(item.observedAt)}` : ''}
+                  </div>
+                  <pre>{item.updateText}</pre>
                 </article>
               ))
             ) : (
@@ -873,11 +998,12 @@ function BlankRoute() {
 
 
 
-function ConfigureWorkspace({ configureTab, setConfigureTab, pageLayouts, builderActions }) {
+function ConfigureWorkspace({ topBar, configureTab, setConfigureTab, pageLayouts, builderActions }) {
   const activeBuilderTab = pageBuilderTabs.find((tab) => tab.id === configureTab);
 
   return (
     <div className="configure-workspace">
+      <PageTopBar title="Configure" topBar={topBar} />
       <div className="configure-top-tabs" role="tablist" aria-label="Configure sections">
         {configureTabs.map((tab) => (
           <button

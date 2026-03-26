@@ -16,16 +16,30 @@ button, input, select { font: inherit; }
 body { color: #0d1419; }
 .app-shell { width: 100vw; height: 100vh; background: radial-gradient(circle at top, rgba(24, 36, 60, .3), transparent 35%), var(--bg); }
 .shell-frame { width: 100vw; height: 100vh; display: grid; grid-template-columns: 150px minmax(0, 1fr); }
+.shell-frame.is-rail-collapsed { grid-template-columns: 72px minmax(0, 1fr); }
 .left-rail { background: var(--rail); padding: 16px 10px; display: flex; flex-direction: column; }
-.brand-block { margin-bottom: 36px; }
+.brand-block { margin-bottom: 24px; display: flex; flex-direction: column; gap: 10px; }
 .brand-logo { width: 128px; height: auto; display: block; }
+.sidebar-toggle { appearance: none; border: 0; background: transparent; width: 26px; height: 26px; padding: 0; cursor: pointer; }
+.sidebar-toggle img { width: 100%; height: 100%; object-fit: contain; }
 .route-nav { display: flex; flex-direction: column; gap: 18px; flex: 1; }
 .nav-item { appearance: none; background: transparent; border: 0; display: flex; align-items: center; gap: 12px; padding: 0; cursor: pointer; color: #eef1f3; text-align: left; }
 .nav-marker { width: 38px; height: 38px; background: var(--slate); flex: 0 0 auto; }
 .nav-label { font-weight: 700; font-size: 16px; }
 .nav-item.is-active .nav-marker { background: var(--active); }
 .nav-item:last-child { margin-top: auto; }
+.shell-frame.is-rail-collapsed .brand-logo { width: 44px; }
+.shell-frame.is-rail-collapsed .nav-label { display: none; }
 .workspace { min-width: 0; background: var(--surface); overflow: auto; padding: 16px 18px; }
+.page-top-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; border: 1px solid #adb2ba; background: #f1f2f4; border-radius: 12px; padding: 8px 10px; }
+.page-top-bar__title { margin: 0; font-size: 22px; color: var(--ink); }
+.page-top-bar__actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.top-action { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #7d858d; border-radius: 10px; background: #ffffff; color: #1e2a33; padding: 5px 8px; cursor: pointer; font-weight: 700; }
+.top-action__icon { width: 14px; height: 14px; object-fit: contain; }
+.top-action__status { font-size: 10px; padding: 2px 5px; border-radius: 999px; background: #e5e9ec; letter-spacing: .03em; }
+.top-action--ready .top-action__status { background: #d5f2dd; color: #215533; }
+.top-action--warning .top-action__status { background: #ffe7c4; color: #734611; }
+.top-action--error .top-action__status { background: #ffd9d9; color: #7a2323; }
 .error-banner { border: 1px solid #a9482c; background: #f4dfdb; color: #5d1f11; padding: 10px 12px; margin-bottom: 12px; }
 .text-muted { color: var(--muted); }
 .dashboard-page { display: flex; flex-direction: column; gap: 16px; max-width: 1280px; padding-right: 4px; }
@@ -111,11 +125,11 @@ body { color: #0d1419; }
 .dashboard-pinned h2 { margin-bottom: 0; }
 .dashboard-right-lower { display: flex; flex-direction: column; gap: 10px; }
 .incidents-page, .incident-detail-page { display: flex; flex-direction: column; gap: 12px; }
-.list-toolbar { display: grid; grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(180px, 1fr)); gap: 10px; }
+.list-toolbar { display: grid; grid-template-columns: minmax(240px, 1.5fr) repeat(3, minmax(170px, 1fr)); gap: 10px; align-items: center; }
 .toolbar-input, .toolbar-button { border: 2px solid #7f858d; background: #f7f7f8; border-radius: 10px; height: 40px; padding: 0 12px; color: var(--ink); }
 .toolbar-button { font-weight: 700; min-width: 128px; cursor: pointer; }
 .toolbar-select { font-weight: 700; }
-.list-results-row { display: flex; align-items: center; justify-content: space-between; min-height: 20px; }
+.list-results-row { display: flex; align-items: center; justify-content: space-between; min-height: 20px; padding: 2px 2px 0; }
 .list-results-label { font-size: 12px; font-weight: 700; color: #4c5862; }
 .stage-toggle-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .stage-toggle { border: 2px solid #55616b; border-radius: 10px; padding: 12px 18px; background: #2f392e; color: #fff; font-weight: 700; cursor: pointer; }
@@ -141,7 +155,7 @@ body { color: #0d1419; }
 .stage-pill--UNDR_CNTRL { background: rgba(68,199,118,.16); color: #21603a; }
 .stage-pill--OUT { background: rgba(50,58,47,.15); color: #30372c; }
 .table-empty { text-align: center; padding: 20px; color: var(--muted); }
-.back-button { appearance: none; border: 0; background: #107c92; color: white; width: 38px; height: 38px; border-radius: 50%; font-size: 22px; line-height: 1; cursor: pointer; }
+.back-button { appearance: none; border: 0; background: #107c92 url('/assets/back.svg') center/18px 18px no-repeat; color: transparent; width: 38px; height: 38px; border-radius: 50%; font-size: 0; line-height: 1; cursor: pointer; }
 .incident-hero { display: grid; grid-template-columns: 1fr 1.1fr; gap: 12px; align-items: stretch; }
 .incident-summary-card, .detail-card, .response-big-card, .maps-panel, .discourse-stub { border: 1px solid var(--border); background: #f2f2f3; border-radius: 12px; }
 .incident-summary-card { padding: 14px 16px; }
@@ -157,6 +171,8 @@ body { color: #0d1419; }
 .response-big-card { padding: 14px; }
 .response-big-card h2, .maps-panel h2, .discourse-stub h2 { margin: 0 0 12px; font-size: 24px; color: var(--ink); }
 .response-update-block { border: 1px solid #d1d3d7; background: #fff; padding: 12px; border-radius: 8px; margin-bottom: 10px; }
+.response-update-meta { margin-bottom: 8px; font-size: 11px; font-weight: 700; color: #4b5863; text-transform: uppercase; letter-spacing: .04em; }
+.capture-diagnostic { display: flex; gap: 12px; flex-wrap: wrap; margin: 0 0 10px; font-size: 11px; color: #42515d; }
 .response-update-block pre { margin: 0; white-space: pre-wrap; font-family: inherit; font-size: 13px; line-height: 1.45; color: #22303a; }
 .response-lower-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .detail-card { padding: 12px; }
@@ -188,6 +204,8 @@ body { color: #0d1419; }
   }
   .resource-strip, .metrics-card-grid.is-four, .metrics-card-grid.is-three, .stage-control-grid, .dashboard-evac-grid { grid-template-columns: repeat(2, 1fr); }
   .list-toolbar { grid-template-columns: 1fr; }
+  .page-top-bar { flex-direction: column; align-items: flex-start; }
+  .page-top-bar__actions { width: 100%; }
   .dashboard-page { max-width: none; }
   .dashboard-map-canvas { min-height: 272px; }
 }
