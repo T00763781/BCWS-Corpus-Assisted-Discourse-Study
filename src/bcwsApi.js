@@ -39,6 +39,16 @@ function toQuery(params) {
   return sp.toString();
 }
 
+function toPublicAttachmentUrl(incidentNumberLabel, attachmentGuid, fireYear, thumbnail = false) {
+  if (!incidentNumberLabel || !attachmentGuid) return '';
+  return `https://wildfiresituation.nrs.gov.bc.ca/wfnews-api/publicPublishedIncidentAttachment/${encodeURIComponent(
+    incidentNumberLabel
+  )}/attachments/${encodeURIComponent(attachmentGuid)}/bytes?${toQuery({
+    fireYear,
+    thumbnail: thumbnail ? 'true' : null,
+  })}`;
+}
+
 async function fetchJson(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
@@ -404,7 +414,13 @@ export async function fetchIncidentDetail(fireYear, incidentNumber, seedIncident
     attachmentGuid: item.attachmentGuid,
     title: item.attachmentTitle || item.fileName || 'Untitled asset',
     description: item.attachmentDescription,
-    imageUrl: item.imageURL ? `https://wildfiresituation.nrs.gov.bc.ca${item.imageURL}` : '',
+    fileName: item.fileName || item.attachmentTitle || '',
+    imageUrl: String(item.mimeType || '').toLowerCase().startsWith('image/')
+      ? toPublicAttachmentUrl(incident.incidentNumber, item.attachmentGuid, fireYear, false)
+      : '',
+    thumbnailUrl: String(item.mimeType || '').toLowerCase().startsWith('image/')
+      ? toPublicAttachmentUrl(incident.incidentNumber, item.attachmentGuid, fireYear, true)
+      : '',
     mimeType: item.mimeType,
     uploadedTimestamp: item.uploadedTimestamp,
   }));

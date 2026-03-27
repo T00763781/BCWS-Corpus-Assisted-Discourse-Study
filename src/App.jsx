@@ -112,9 +112,14 @@ async function fetchCaptureSummary() {
       detailArchivedCount: 0,
       detailFailureCount: 0,
       attachmentsMetadataCount: 0,
+      localMediaIncidentCount: 0,
       externalLinksMetadataCount: 0,
       perimeterPayloadCount: 0,
       responseHistoryCount: 0,
+      mediaRecordCount: 0,
+      thumbnailStoredCount: 0,
+      fullImageStoredCount: 0,
+      totalMediaBytes: 0,
       lastRun: null,
       failureCategoryCounts: {},
     };
@@ -741,16 +746,45 @@ function responseSourceNote(source, captureStatus) {
   return 'Response source: Live BCWS.';
 }
 
-function gallerySourceNote(source, captureStatus) {
-  if (source === 'local') {
-    return 'Gallery source: Local attachment metadata. Image bytes still load from live BCWS URLs.';
+function getGalleryMediaState(attachments, pageSource, captureStatus) {
+  const items = Array.isArray(attachments) ? attachments : [];
+  const renderable = items.filter((asset) => asset?.localMedia || asset?.imageUrl || asset?.thumbnailUrl);
+  if (!renderable.length) {
+    return 'unavailable';
   }
-  if (source === 'mixed') {
-    return `Gallery source: Live BCWS fallback. Local attachment metadata: ${
-      captureStatus?.hasAttachmentsMetadata ? 'yes' : 'no'
-    }.`;
+  const localCount = renderable.filter((asset) => asset?.localMedia).length;
+  if (localCount === renderable.length) {
+    return 'local';
   }
-  return 'Gallery source: Live BCWS.';
+  if (localCount > 0 || captureStatus?.hasAttachmentsMetadata) {
+    return 'mixed';
+  }
+  return pageSource === 'live' ? 'live' : 'mixed';
+}
+
+function gallerySourceNote(galleryState, attachments, captureStatus) {
+  const items = Array.isArray(attachments) ? attachments : [];
+  const renderable = items.filter((asset) => asset?.localMedia || asset?.imageUrl || asset?.thumbnailUrl);
+  const localCount = renderable.filter((asset) => asset?.localMedia).length;
+  if (galleryState === 'local') {
+    return `Gallery source: Local media from SQLite. Local image bytes available for ${localCount} of ${renderable.length} assets.`;
+  }
+  if (galleryState === 'mixed') {
+    return `Gallery source: Local metadata + live image fallback. Local image bytes available for ${localCount} of ${renderable.length} assets.`;
+  }
+  if (galleryState === 'live') {
+    return `Gallery source: Live BCWS only. Local attachment metadata: ${captureStatus?.hasAttachmentsMetadata ? 'yes' : 'no'}.`;
+  }
+  return 'Gallery source: Unavailable. No local image bytes or live image URLs are available for this incident.';
+}
+
+function base64ToBlob(base64, mimeType) {
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mimeType || 'application/octet-stream' });
 }
 
 function mapsSourceNote(source, captureStatus) {
@@ -763,6 +797,23 @@ function mapsSourceNote(source, captureStatus) {
     } | local external links: ${captureStatus?.hasExternalLinksMetadata ? 'yes' : 'no'}.`;
   }
   return 'Maps source: Live BCWS.';
+}
+
+function mergeLiveIncidentWithLocalMedia(localData, liveData) {
+  const localMediaByAttachmentGuid = new Map(
+    (localData?.attachments || [])
+      .filter((asset) => asset?.attachmentGuid && asset?.localMedia)
+      .map((asset) => [String(asset.attachmentGuid), asset.localMedia])
+  );
+  return {
+    ...liveData,
+    attachments: Array.isArray(liveData?.attachments)
+      ? liveData.attachments.map((asset) => ({
+          ...asset,
+          localMedia: localMediaByAttachmentGuid.get(String(asset?.attachmentGuid || '')) || null,
+        }))
+      : [],
+  };
 }
 
 function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
@@ -797,7 +848,7 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
           setState({
             phase: 'success',
             error: '',
-            data: live,
+            data: mergeLiveIncidentWithLocalMedia(local.data, live),
             source: 'mixed',
             captureStatus: local.captureStatus || null,
             sourceReason:
@@ -825,6 +876,7 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
 
   const incident = state.data?.incident;
   const response = state.data?.response;
+  const galleryState = getGalleryMediaState(state.data?.attachments, state.source, state.captureStatus);
 
   return (
     <div className="incident-detail-page">
@@ -847,7 +899,8 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
           {state.captureStatus ? (
             <div className="text-muted">
               Local artifacts: detail {state.captureStatus.hasDetailSource ? 'yes' : 'no'} | attachments{' '}
-              {state.captureStatus.hasAttachmentsMetadata ? 'yes' : 'no'} | external links{' '}
+              {state.captureStatus.hasAttachmentsMetadata ? 'yes' : 'no'} | media{' '}
+              {state.captureStatus.hasLocalMedia ? 'yes' : 'no'} | external links{' '}
               {state.captureStatus.hasExternalLinksMetadata ? 'yes' : 'no'} | perimeter{' '}
               {state.captureStatus.hasPerimeterPayload ? 'yes' : 'no'} | response history{' '}
               {state.captureStatus.hasResponseHistory ? 'yes' : 'no'}
@@ -931,7 +984,7 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
 
       {tab === 'gallery' ? (
         <div className="incident-tab-panel">
-          <div className="text-muted">{gallerySourceNote(state.source, state.captureStatus)}</div>
+          <div className="text-muted">{gallerySourceNote(galleryState, state.data?.attachments, state.captureStatus)}</div>
           {state.data?.attachments?.length ? (
             <div className="gallery-grid">
               {state.data.attachments.map((asset) => (
@@ -1164,23 +1217,45 @@ function DetailCard({ title, children }) {
 
 function GalleryImage({ asset }) {
   const [failed, setFailed] = React.useState(false);
+  const [localObjectUrl, setLocalObjectUrl] = React.useState('');
 
-  if (!asset.imageUrl) {
-    return <div className="gallery-card__empty">No live image URL</div>;
+  React.useEffect(() => {
+    if (!asset?.localMedia?.base64) {
+      setLocalObjectUrl('');
+      return undefined;
+    }
+    const blob = base64ToBlob(asset.localMedia.base64, asset.localMedia.mimeType);
+    const nextUrl = URL.createObjectURL(blob);
+    setLocalObjectUrl(nextUrl);
+    setFailed(false);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [asset?.localMedia?.base64, asset?.localMedia?.mimeType]);
+
+  const liveUrl = asset?.imageUrl || asset?.thumbnailUrl || '';
+  const sourceUrl = !failed && localObjectUrl ? localObjectUrl : liveUrl;
+
+  if (!sourceUrl) {
+    return <div className="gallery-card__empty">Image unavailable</div>;
   }
 
   if (failed) {
-    return <div className="gallery-card__empty">Live image unavailable</div>;
+    return <div className="gallery-card__empty">{localObjectUrl ? 'Local image unavailable' : 'Live image unavailable'}</div>;
   }
 
   return (
     <img
-      src={asset.imageUrl}
+      src={sourceUrl}
       alt={asset.title}
       className="gallery-card__image"
       loading="lazy"
       referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
+      onError={() => {
+        if (localObjectUrl && liveUrl && sourceUrl === localObjectUrl) {
+          setFailed(true);
+          return;
+        }
+        setFailed(true);
+      }}
     />
   );
 }
@@ -1218,9 +1293,14 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
     detailArchivedCount: 0,
     detailFailureCount: 0,
     attachmentsMetadataCount: 0,
+    localMediaIncidentCount: 0,
     externalLinksMetadataCount: 0,
     perimeterPayloadCount: 0,
     responseHistoryCount: 0,
+    mediaRecordCount: 0,
+    thumbnailStoredCount: 0,
+    fullImageStoredCount: 0,
+    totalMediaBytes: 0,
     lastRun: null,
     failureCategoryCounts: {},
   });
@@ -1269,7 +1349,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
         throw new Error(result?.error || 'Incident capture failed');
       }
       setCaptureSummary(
-        `Captured ${result.capturedListCount} incidents | targeted detail retries ${result.saved.runSummary?.targetedIncidentCount ?? result.targetedIncidentCount ?? 0} | detail archived ${result.saved.runSummary?.detailCaptureSuccessCount ?? result.capturedDetailCount} | detail failures ${result.saved.runSummary?.detailCaptureFailureCount ?? result.detailFailureCount} | attachments ${result.saved.runSummary?.attachmentsCaptureCount ?? 0} | external links ${result.saved.runSummary?.externalLinksCaptureCount ?? 0} | perimeter ${result.saved.runSummary?.perimeterCaptureCount ?? 0} | response history ${result.saved.runSummary?.responseHistoryExtractedCount ?? 0}.`
+        `Captured ${result.capturedListCount} incidents | targeted detail retries ${result.saved.runSummary?.targetedIncidentCount ?? result.targetedIncidentCount ?? 0} | detail archived ${result.saved.runSummary?.detailCaptureSuccessCount ?? result.capturedDetailCount} | detail failures ${result.saved.runSummary?.detailCaptureFailureCount ?? result.detailFailureCount} | attachments ${result.saved.runSummary?.attachmentsCaptureCount ?? 0} | media attempts ${result.saved.runSummary?.mediaDownloadAttemptedCount ?? 0} | media stored ${result.saved.runSummary?.mediaStoredCount ?? 0} | media failures ${result.saved.runSummary?.mediaFailureCount ?? 0} | external links ${result.saved.runSummary?.externalLinksCaptureCount ?? 0} | perimeter ${result.saved.runSummary?.perimeterCaptureCount ?? 0} | response history ${result.saved.runSummary?.responseHistoryExtractedCount ?? 0}.`
       );
       await refreshCaptureSummary();
     } catch (nextError) {
@@ -1332,8 +1412,11 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
       <p>
         Capture completeness: listed {captureCompleteness.listedIncidentCount} | detail archived{' '}
         {captureCompleteness.detailArchivedCount} | detail failures {captureCompleteness.detailFailureCount} |
-        attachments {captureCompleteness.attachmentsMetadataCount} | external links {captureCompleteness.externalLinksMetadataCount} | perimeter{' '}
-        {captureCompleteness.perimeterPayloadCount} | response history {captureCompleteness.responseHistoryCount}.
+        attachments {captureCompleteness.attachmentsMetadataCount} | incidents with local media {captureCompleteness.localMediaIncidentCount} |
+        media records {captureCompleteness.mediaRecordCount} | thumbnails {captureCompleteness.thumbnailStoredCount} | full images{' '}
+        {captureCompleteness.fullImageStoredCount} | external links {captureCompleteness.externalLinksMetadataCount} | perimeter{' '}
+        {captureCompleteness.perimeterPayloadCount} | response history {captureCompleteness.responseHistoryCount} | media bytes{' '}
+        {captureCompleteness.totalMediaBytes}.
       </p>
       <p>
         Failure categories:{' '}
@@ -1354,7 +1437,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
           <div>
             Last run summary:{' '}
             {captureCompleteness.lastRun
-              ? `${captureCompleteness.lastRun.trigger || 'manual'} | listed ${captureCompleteness.lastRun.listedIncidentCount} | targeted ${captureCompleteness.lastRun.targetedIncidentCount} | detail ok ${captureCompleteness.lastRun.detailCaptureSuccessCount} | detail fail ${captureCompleteness.lastRun.detailCaptureFailureCount} | attachments ${captureCompleteness.lastRun.attachmentsCaptureCount} | external links ${captureCompleteness.lastRun.externalLinksCaptureCount} | perimeter ${captureCompleteness.lastRun.perimeterCaptureCount} | response history ${captureCompleteness.lastRun.responseHistoryExtractedCount}`
+              ? `${captureCompleteness.lastRun.trigger || 'manual'} | listed ${captureCompleteness.lastRun.listedIncidentCount} | targeted ${captureCompleteness.lastRun.targetedIncidentCount} | detail ok ${captureCompleteness.lastRun.detailCaptureSuccessCount} | detail fail ${captureCompleteness.lastRun.detailCaptureFailureCount} | attachments ${captureCompleteness.lastRun.attachmentsCaptureCount} | media attempts ${captureCompleteness.lastRun.mediaDownloadAttemptedCount} | media stored ${captureCompleteness.lastRun.mediaStoredCount} | media failures ${captureCompleteness.lastRun.mediaFailureCount} | external links ${captureCompleteness.lastRun.externalLinksCaptureCount} | perimeter ${captureCompleteness.lastRun.perimeterCaptureCount} | response history ${captureCompleteness.lastRun.responseHistoryExtractedCount}`
               : '--'}
           </div>
         </div>

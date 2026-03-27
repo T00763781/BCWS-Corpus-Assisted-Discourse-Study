@@ -61,6 +61,187 @@ function incidentKey(fireYear, incidentNumber) {
   return `${String(fireYear)}:${String(incidentNumber)}`;
 }
 
+function normalizeBcwsUrl(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (/^https?:\/\//i.test(text)) return text;
+  if (text.startsWith('/')) return `https://wildfiresituation.nrs.gov.bc.ca${text}`;
+  return `https://wildfiresituation.nrs.gov.bc.ca/${text.replace(/^\/+/, '')}`;
+}
+
+function isImageAttachment(asset) {
+  const mimeType = String(asset?.mimeType || '').toLowerCase();
+  return mimeType.startsWith('image/') || Boolean(asset?.imageUrl) || Boolean(asset?.thumbnailUrl);
+}
+
+function getAttachmentMediaTargets(asset) {
+  const targets = [];
+  const fullUrl = normalizeBcwsUrl(asset?.imageUrl);
+  const thumbnailUrl = normalizeBcwsUrl(asset?.thumbnailUrl);
+  if (fullUrl) {
+    targets.push({ isThumbnail: false, sourceUrl: fullUrl });
+  }
+  if (thumbnailUrl && thumbnailUrl !== fullUrl) {
+    targets.push({ isThumbnail: true, sourceUrl: thumbnailUrl });
+  }
+  return targets;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function classifyNetworkFailure(error, response = null, didTimeout = false) {
+  if (didTimeout) {
+    return {
+      category: 'timeout',
+      error: 'Request timed out',
+      retryable: true,
+    };
+  }
+
+  if (response) {
+    const code = Number(response.status || 0);
+    if (code === 404) {
+      return {
+        category: 'unavailable',
+        error: `${code} ${response.statusText}`,
+        retryable: false,
+      };
+    }
+    if (code === 429 || code >= 500) {
+      return {
+        category: 'http_error',
+        error: `${code} ${response.statusText}`,
+        retryable: true,
+      };
+    }
+    return {
+      category: 'http_error',
+      error: `${code} ${response.statusText}`,
+      retryable: false,
+    };
+  }
+
+  const message = error instanceof Error ? error.message || error.name : String(error);
+  const lower = message.toLowerCase();
+  if (lower.includes('aborted') || lower.includes('aborterror')) {
+    return {
+      category: 'aborted',
+      error: message,
+      retryable: true,
+    };
+  }
+  if (lower.includes('failed to fetch') || lower.includes('network') || lower.includes('econn') || lower.includes('socket')) {
+    return {
+      category: 'network_error',
+      error: message,
+      retryable: true,
+    };
+  }
+  return {
+    category: 'error',
+    error: message,
+    retryable: false,
+  };
+}
+
+async function fetchBinaryWithRetry(url, options = {}) {
+  const {
+    timeoutMs = 15000,
+    retries = 2,
+    backoffMs = 500,
+  } = options;
+
+  let lastFailure = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    let didTimeout = false;
+    const timer = setTimeout(() => {
+      didTimeout = true;
+      controller.abort();
+    }, timeoutMs);
+
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        const failure = classifyNetworkFailure(null, response, false);
+        failure.httpStatus = Number(response.status || 0);
+        lastFailure = failure;
+        if (!failure.retryable || attempt === retries) {
+          return {
+            ok: false,
+            url,
+            status: failure.category,
+            error: failure.error,
+            httpStatus: failure.httpStatus || null,
+            bytes: null,
+            mimeType: '',
+            byteLength: 0,
+          };
+        }
+        await delay(backoffMs * (attempt + 1));
+        continue;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      const mimeType = String(response.headers.get('content-type') || '').split(';')[0].trim();
+      if (mimeType.toLowerCase() === 'text/html') {
+        return {
+          ok: false,
+          url,
+          status: 'unavailable',
+          error: 'Document proxy returned HTML instead of media bytes',
+          httpStatus: Number(response.status || 200),
+          bytes: null,
+          mimeType,
+          byteLength: 0,
+        };
+      }
+      return {
+        ok: true,
+        url,
+        status: 'ok',
+        error: '',
+        httpStatus: Number(response.status || 200),
+        bytes,
+        mimeType,
+        byteLength: bytes.byteLength,
+      };
+    } catch (error) {
+      const failure = classifyNetworkFailure(error, null, didTimeout);
+      lastFailure = failure;
+      if (!failure.retryable || attempt === retries) {
+        return {
+          ok: false,
+          url,
+          status: failure.category,
+          error: failure.error,
+          httpStatus: null,
+          bytes: null,
+          mimeType: '',
+          byteLength: 0,
+        };
+      }
+      await delay(backoffMs * (attempt + 1));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return {
+    ok: false,
+    url,
+    status: lastFailure?.category || 'error',
+    error: lastFailure?.error || 'Unknown media fetch failure',
+    httpStatus: lastFailure?.httpStatus || null,
+    bytes: null,
+    mimeType: '',
+    byteLength: 0,
+  };
+}
+
 function buildSnapshotPayload(row, detail) {
   const incident = detail?.incident || row || {};
   const response = detail?.response || {};
@@ -202,12 +383,30 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         has_list_row INTEGER NOT NULL DEFAULT 0,
         has_detail_source INTEGER NOT NULL DEFAULT 0,
         has_attachments_metadata INTEGER NOT NULL DEFAULT 0,
+        has_local_media INTEGER NOT NULL DEFAULT 0,
         has_external_links_metadata INTEGER NOT NULL DEFAULT 0,
         has_perimeter_payload INTEGER NOT NULL DEFAULT 0,
         has_response_history INTEGER NOT NULL DEFAULT 0,
         last_capture_at TEXT NOT NULL,
         last_capture_error TEXT,
         PRIMARY KEY (fire_year, incident_number)
+      )
+    `);
+    database.run(`
+      CREATE TABLE IF NOT EXISTS incident_media (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fire_year TEXT NOT NULL,
+        incident_number TEXT NOT NULL,
+        attachment_guid TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        file_name TEXT,
+        mime_type TEXT,
+        byte_length INTEGER NOT NULL DEFAULT 0,
+        content_hash TEXT,
+        fetched_at TEXT NOT NULL,
+        is_thumbnail INTEGER NOT NULL DEFAULT 0,
+        blob_bytes BLOB NOT NULL,
+        UNIQUE (fire_year, incident_number, attachment_guid, is_thumbnail)
       )
     `);
     database.run(`
@@ -220,6 +419,9 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         detail_capture_success_count INTEGER NOT NULL DEFAULT 0,
         detail_capture_failure_count INTEGER NOT NULL DEFAULT 0,
         attachments_capture_count INTEGER NOT NULL DEFAULT 0,
+        media_download_attempted_count INTEGER NOT NULL DEFAULT 0,
+        media_stored_count INTEGER NOT NULL DEFAULT 0,
+        media_failure_count INTEGER NOT NULL DEFAULT 0,
         external_links_capture_count INTEGER NOT NULL DEFAULT 0,
         perimeter_capture_count INTEGER NOT NULL DEFAULT 0,
         response_history_extracted_count INTEGER NOT NULL DEFAULT 0,
@@ -245,6 +447,30 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       'capture_runs',
       'attachments_capture_count',
       'attachments_capture_count INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(
+      database,
+      'capture_runs',
+      'media_download_attempted_count',
+      'media_download_attempted_count INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(
+      database,
+      'capture_runs',
+      'media_stored_count',
+      'media_stored_count INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(
+      database,
+      'capture_runs',
+      'media_failure_count',
+      'media_failure_count INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(
+      database,
+      'incident_capture_status',
+      'has_local_media',
+      'has_local_media INTEGER NOT NULL DEFAULT 0'
     );
     ensureColumn(
       database,
@@ -469,6 +695,128 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     );
   };
 
+  const getExistingMediaRows = (fireYear, incidentNumber) => {
+    const rows = db.exec(
+      `
+      SELECT attachment_guid, is_thumbnail, source_url
+      FROM incident_media
+      WHERE fire_year = ? AND incident_number = ?
+      `,
+      [String(fireYear), String(incidentNumber)]
+    );
+    return rows.length ? rows[0].values : [];
+  };
+
+  const getStoredMediaAttachmentGuids = (fireYear, incidentNumber) =>
+    new Set(getExistingMediaRows(fireYear, incidentNumber).map((row) => String(row[0] || '')).filter(Boolean));
+
+  const hasCompleteLocalMediaForAttachments = (fireYear, incidentNumber, attachments = []) => {
+    const renderableAttachments = attachments.filter(isImageAttachment);
+    if (!renderableAttachments.length) return true;
+    const storedAttachmentGuids = getStoredMediaAttachmentGuids(fireYear, incidentNumber);
+    return renderableAttachments.every((asset) => storedAttachmentGuids.has(String(asset.attachmentGuid || '')));
+  };
+
+  const storeIncidentMediaRecord = ({
+    fireYear,
+    incidentNumber,
+    attachmentGuid,
+    sourceUrl,
+    fileName,
+    mimeType,
+    byteLength,
+    contentHash,
+    fetchedAt,
+    isThumbnail,
+    blobBytes,
+  }) => {
+    db.run(
+      `
+      INSERT INTO incident_media (
+        fire_year, incident_number, attachment_guid, source_url, file_name, mime_type,
+        byte_length, content_hash, fetched_at, is_thumbnail, blob_bytes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(fire_year, incident_number, attachment_guid, is_thumbnail) DO UPDATE SET
+        source_url = excluded.source_url,
+        file_name = excluded.file_name,
+        mime_type = excluded.mime_type,
+        byte_length = excluded.byte_length,
+        content_hash = excluded.content_hash,
+        fetched_at = excluded.fetched_at,
+        blob_bytes = excluded.blob_bytes
+      `,
+      [
+        String(fireYear),
+        String(incidentNumber),
+        String(attachmentGuid || ''),
+        sourceUrl,
+        fileName || null,
+        mimeType || null,
+        Number(byteLength || 0),
+        contentHash || null,
+        fetchedAt,
+        isThumbnail ? 1 : 0,
+        blobBytes,
+      ]
+    );
+  };
+
+  const captureIncidentMedia = async ({ fireYear, incidentNumber, attachments = [], capturedAt, countFailure }) => {
+    const existingKeys = new Set(
+      getExistingMediaRows(fireYear, incidentNumber).map((row) =>
+        `${String(row[0] || '')}:${Number(row[1] || 0)}:${String(row[2] || '')}`
+      )
+    );
+    const displayableAssets = attachments.filter(isImageAttachment);
+    let mediaDownloadAttemptedCount = 0;
+    let mediaStoredCount = 0;
+    let mediaFailureCount = 0;
+
+    for (const asset of displayableAssets) {
+      const targets = getAttachmentMediaTargets(asset);
+      for (const target of targets) {
+        const key = `${String(asset.attachmentGuid || '')}:${target.isThumbnail ? 1 : 0}:${target.sourceUrl}`;
+        if (existingKeys.has(key)) {
+          continue;
+        }
+        mediaDownloadAttemptedCount += 1;
+        const fetched = await fetchBinaryWithRetry(target.sourceUrl, {
+          timeoutMs: 15000,
+          retries: 2,
+          backoffMs: 500,
+        });
+        if (!fetched.ok || !fetched.bytes?.byteLength) {
+          mediaFailureCount += 1;
+          countFailure(fetched.status, fetched.error);
+          continue;
+        }
+
+        storeIncidentMediaRecord({
+          fireYear,
+          incidentNumber,
+          attachmentGuid: asset.attachmentGuid,
+          sourceUrl: target.sourceUrl,
+          fileName: asset.fileName || asset.title || null,
+          mimeType: fetched.mimeType || asset.mimeType || null,
+          byteLength: fetched.byteLength,
+          contentHash: crypto.createHash('sha256').update(fetched.bytes).digest('hex'),
+          fetchedAt: capturedAt,
+          isThumbnail: target.isThumbnail,
+          blobBytes: fetched.bytes,
+        });
+        existingKeys.add(key);
+        mediaStoredCount += 1;
+      }
+    }
+
+    return {
+      mediaDownloadAttemptedCount,
+      mediaStoredCount,
+      mediaFailureCount,
+      hasLocalMedia: hasCompleteLocalMediaForAttachments(fireYear, incidentNumber, attachments),
+    };
+  };
+
   const hasUpdateHashForIncident = (fireYear, incidentNumber, updateHash) => {
     const rows = db.exec(
       'SELECT 1 FROM incident_updates WHERE fire_year = ? AND incident_number = ? AND update_hash = ? LIMIT 1',
@@ -640,7 +988,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     return { updates: deduped, reason: deduped.length ? 'heading_blocks' : 'no_blocks_after_heading' };
   };
 
-  const writeCaptureRecords = ({ listRows, detailRecords, detailFailures, capturedAt, trigger }) => {
+  const writeCaptureRecords = async ({ listRows, detailRecords, detailFailures, capturedAt, trigger }) => {
     const captureTime = capturedAt || nowIso();
     const detailByIncidentKey = new Map();
     const detailFailureByIncidentKey = new Map();
@@ -663,6 +1011,9 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     let detailCaptureSuccessCount = 0;
     let detailCaptureFailureCount = 0;
     let attachmentsCaptureCount = 0;
+    let mediaDownloadAttemptedCount = 0;
+    let mediaStoredCount = 0;
+    let mediaFailureCount = 0;
     let externalLinksCaptureCount = 0;
     let perimeterCaptureCount = 0;
     let responseHistoryExtractedCount = 0;
@@ -777,6 +1128,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         const rawSources = detail?.rawSources;
         let hasDetailSource = false;
         let hasAttachmentsMetadata = false;
+        let hasLocalMedia = false;
         let hasExternalLinksMetadata = false;
         let hasPerimeterPayload = false;
         let hasResponseHistory = false;
@@ -846,6 +1198,20 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
               ...artifact,
             });
             insertedRaw += 1;
+          }
+
+          if (hasAttachmentsMetadata) {
+            const mediaCapture = await captureIncidentMedia({
+              fireYear: incident.fireYear,
+              incidentNumber: incident.incidentNumber,
+              attachments: detail?.attachments || [],
+              capturedAt: captureTime,
+              countFailure,
+            });
+            mediaDownloadAttemptedCount += mediaCapture.mediaDownloadAttemptedCount;
+            mediaStoredCount += mediaCapture.mediaStoredCount;
+            mediaFailureCount += mediaCapture.mediaFailureCount;
+            hasLocalMedia = mediaCapture.hasLocalMedia;
           }
         }
 
@@ -927,6 +1293,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           if (!hasAttachmentsMetadata) missingArtifacts.push('attachments metadata');
           if (!hasExternalLinksMetadata) missingArtifacts.push('external links metadata');
           if (!hasPerimeterPayload) missingArtifacts.push('perimeter payload');
+          if (hasAttachmentsMetadata && !hasLocalMedia) missingArtifacts.push('local media bytes');
 
           if (!captureError && missingArtifacts.length) {
             captureError = `Missing local artifacts: ${missingArtifacts.join(', ')}`;
@@ -944,13 +1311,14 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           db.run(
             `
             INSERT INTO incident_capture_status (
-              fire_year, incident_number, has_list_row, has_detail_source, has_attachments_metadata,
+              fire_year, incident_number, has_list_row, has_detail_source, has_attachments_metadata, has_local_media,
               has_external_links_metadata, has_perimeter_payload, has_response_history, last_capture_at, last_capture_error
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(fire_year, incident_number) DO UPDATE SET
               has_list_row = excluded.has_list_row,
               has_detail_source = excluded.has_detail_source,
               has_attachments_metadata = excluded.has_attachments_metadata,
+              has_local_media = excluded.has_local_media,
               has_external_links_metadata = excluded.has_external_links_metadata,
               has_perimeter_payload = excluded.has_perimeter_payload,
               has_response_history = excluded.has_response_history,
@@ -963,6 +1331,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
               1,
               hasDetailSource ? 1 : 0,
               hasAttachmentsMetadata ? 1 : 0,
+              hasLocalMedia ? 1 : 0,
               hasExternalLinksMetadata ? 1 : 0,
               hasPerimeterPayload ? 1 : 0,
               hasResponseHistory ? 1 : 0,
@@ -977,9 +1346,10 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         `
         INSERT INTO capture_runs (
           captured_at, trigger, listed_incident_count, targeted_incident_count, detail_capture_success_count,
-          detail_capture_failure_count, attachments_capture_count, external_links_capture_count, perimeter_capture_count,
-          response_history_extracted_count, artifact_failure_counts_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          detail_capture_failure_count, attachments_capture_count, media_download_attempted_count, media_stored_count,
+          media_failure_count, external_links_capture_count, perimeter_capture_count, response_history_extracted_count,
+          artifact_failure_counts_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           captureTime,
@@ -989,6 +1359,9 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           detailCaptureSuccessCount,
           detailCaptureFailureCount,
           attachmentsCaptureCount,
+          mediaDownloadAttemptedCount,
+          mediaStoredCount,
+          mediaFailureCount,
           externalLinksCaptureCount,
           perimeterCaptureCount,
           responseHistoryExtractedCount,
@@ -1015,6 +1388,9 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           detailCaptureSuccessCount,
           detailCaptureFailureCount,
           attachmentsCaptureCount,
+          mediaDownloadAttemptedCount,
+          mediaStoredCount,
+          mediaFailureCount,
           externalLinksCaptureCount,
           perimeterCaptureCount,
           responseHistoryExtractedCount,
@@ -1027,10 +1403,10 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     }
   };
 
-  const saveIncidentCapture = ({ listRows = [], detailRecords = [], detailFailures = [], capturedAt, trigger } = {}) => {
+  const saveIncidentCapture = async ({ listRows = [], detailRecords = [], detailFailures = [], capturedAt, trigger } = {}) => {
     if (!db) return { ok: false, error: 'No active DB selected.', status: getStatus() };
     try {
-      return writeCaptureRecords({ listRows, detailRecords, detailFailures, capturedAt, trigger });
+      return await writeCaptureRecords({ listRows, detailRecords, detailFailures, capturedAt, trigger });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Capture write failed.';
       setValue(db, 'app_state', 'capture_state', 'error');
@@ -1181,6 +1557,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         has_list_row,
         has_detail_source,
         has_attachments_metadata,
+        has_local_media,
         has_external_links_metadata,
         has_perimeter_payload,
         has_response_history,
@@ -1197,11 +1574,12 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           hasListRow: Boolean(statusQuery[0].values[0][0]),
           hasDetailSource: Boolean(statusQuery[0].values[0][1]),
           hasAttachmentsMetadata: Boolean(statusQuery[0].values[0][2]),
-          hasExternalLinksMetadata: Boolean(statusQuery[0].values[0][3]),
-          hasPerimeterPayload: Boolean(statusQuery[0].values[0][4]),
-          hasResponseHistory: Boolean(statusQuery[0].values[0][5]),
-          lastCaptureAt: statusQuery[0].values[0][6] ? String(statusQuery[0].values[0][6]) : null,
-          lastCaptureError: statusQuery[0].values[0][7] ? String(statusQuery[0].values[0][7]) : null,
+          hasLocalMedia: Boolean(statusQuery[0].values[0][3]),
+          hasExternalLinksMetadata: Boolean(statusQuery[0].values[0][4]),
+          hasPerimeterPayload: Boolean(statusQuery[0].values[0][5]),
+          hasResponseHistory: Boolean(statusQuery[0].values[0][6]),
+          lastCaptureAt: statusQuery[0].values[0][7] ? String(statusQuery[0].values[0][7]) : null,
+          lastCaptureError: statusQuery[0].values[0][8] ? String(statusQuery[0].values[0][8]) : null,
         }
       : null;
 
@@ -1215,13 +1593,53 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       ? [
           captureStatus.hasDetailSource ? null : 'detail source',
           captureStatus.hasAttachmentsMetadata ? null : 'attachments metadata',
+          captureStatus.hasLocalMedia || !captureStatus.hasAttachmentsMetadata ? null : 'local media bytes',
           captureStatus.hasExternalLinksMetadata ? null : 'external links metadata',
           captureStatus.hasPerimeterPayload ? null : 'perimeter payload',
         ].filter(Boolean)
       : [];
 
+    const mediaQuery = db.exec(
+      `
+      SELECT attachment_guid, mime_type, byte_length, is_thumbnail, blob_bytes
+      FROM incident_media
+      WHERE fire_year = ? AND incident_number = ?
+      ORDER BY is_thumbnail ASC, fetched_at DESC, id DESC
+      `,
+      [effectiveFireYear, String(incidentNumber)]
+    );
+    const mediaRows = mediaQuery.length ? mediaQuery[0].values : [];
+    const attachmentMediaMap = new Map();
+    mediaRows.forEach((row) => {
+      const attachmentGuid = String(row[0] || '');
+      if (!attachmentGuid || attachmentMediaMap.has(attachmentGuid)) return;
+      const blobValue = row[4];
+      const bytes = blobValue instanceof Uint8Array ? blobValue : new Uint8Array(blobValue || []);
+      if (!bytes.byteLength) return;
+      attachmentMediaMap.set(attachmentGuid, {
+        mimeType: String(row[1] || 'application/octet-stream'),
+        byteLength: Number(row[2] || bytes.byteLength || 0),
+        isThumbnail: Boolean(row[3]),
+        base64: Buffer.from(bytes).toString('base64'),
+      });
+    });
+
     parsed.response = parsed.response || {};
     parsed.response.responseUpdates = storedUpdates;
+    parsed.attachments = Array.isArray(parsed.attachments)
+      ? parsed.attachments.map((asset) => ({
+          ...asset,
+          localMedia: attachmentMediaMap.get(String(asset?.attachmentGuid || '')) || null,
+        }))
+      : [];
+    const actualHasLocalMedia = hasCompleteLocalMediaForAttachments(
+      effectiveFireYear,
+      String(incidentNumber),
+      parsed.attachments
+    );
+    if (captureStatus) {
+      captureStatus.hasLocalMedia = actualHasLocalMedia;
+    }
     return {
       ok: true,
       found: true,
@@ -1250,6 +1668,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       snapshots: count('incident_snapshots'),
       updates: count('incident_updates'),
       rawSourceRecords: count('raw_source_records'),
+      incidentMedia: count('incident_media'),
     };
   };
 
@@ -1261,17 +1680,43 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     const recordedCount = countQuery.length && countQuery[0].values.length ? Number(countQuery[0].values[0][0] || 0) : 0;
     const rows = db.exec(
       `
-      SELECT fire_year, incident_number
+      SELECT
+        s.fire_year,
+        s.incident_number,
+        s.has_detail_source,
+        s.has_attachments_metadata,
+        s.has_external_links_metadata,
+        s.has_perimeter_payload,
+        i.detail_json
       FROM incident_capture_status
-      WHERE has_detail_source = 0
-         OR has_attachments_metadata = 0
-         OR has_external_links_metadata = 0
-         OR has_perimeter_payload = 0
+      AS s
+      LEFT JOIN incidents AS i
+        ON i.fire_year = s.fire_year
+       AND i.incident_number = s.incident_number
       `
     );
-    const incompleteKeys = rows.length
-      ? rows[0].values.map((row) => incidentKey(row[0], row[1]))
-      : [];
+    const statusRows = rows.length ? rows[0].values : [];
+    const incompleteKeys = statusRows
+      .filter((row) => {
+        const fireYear = String(row[0] || '');
+        const incidentNumber = String(row[1] || '');
+        const hasDetailSource = Boolean(row[2]);
+        const hasAttachmentsMetadata = Boolean(row[3]);
+        const hasExternalLinksMetadata = Boolean(row[4]);
+        const hasPerimeterPayload = Boolean(row[5]);
+        const parsedDetail = safeJsonParse(String(row[6] || ''), null);
+        const actualHasLocalMedia = hasAttachmentsMetadata
+          ? hasCompleteLocalMediaForAttachments(fireYear, incidentNumber, parsedDetail?.attachments || [])
+          : false;
+        return (
+          !hasDetailSource ||
+          !hasAttachmentsMetadata ||
+          !actualHasLocalMedia ||
+          !hasExternalLinksMetadata ||
+          !hasPerimeterPayload
+        );
+      })
+      .map((row) => incidentKey(row[0], row[1]));
     return {
       ok: true,
       recordedCount,
@@ -1287,9 +1732,14 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         detailArchivedCount: 0,
         detailFailureCount: 0,
         attachmentsMetadataCount: 0,
+        localMediaIncidentCount: 0,
         externalLinksMetadataCount: 0,
         perimeterPayloadCount: 0,
         responseHistoryCount: 0,
+        mediaRecordCount: 0,
+        thumbnailStoredCount: 0,
+        fullImageStoredCount: 0,
+        totalMediaBytes: 0,
         lastRun: null,
         failureCategoryCounts: {},
       };
@@ -1307,6 +1757,18 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       FROM incident_capture_status
       `
     );
+    const mediaAggregate = db.exec(
+      `
+      SELECT
+        COUNT(*) AS media_record_count,
+        COUNT(DISTINCT fire_year || ':' || incident_number) AS incident_media_count,
+        COUNT(DISTINCT CASE WHEN is_thumbnail = 1 THEN attachment_guid END) AS thumbnail_record_count,
+        COUNT(DISTINCT CASE WHEN is_thumbnail = 0 THEN attachment_guid END) AS full_image_record_count,
+        COALESCE(SUM(byte_length), 0) AS total_media_bytes
+      FROM incident_media
+      `
+    );
+    const mediaSummaryRow = mediaAggregate.length && mediaAggregate[0].values.length ? mediaAggregate[0].values[0] : null;
     const summaryRow = aggregate.length && aggregate[0].values.length ? aggregate[0].values[0] : null;
     const lastRunQuery = db.exec(
       `
@@ -1318,6 +1780,9 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         detail_capture_success_count,
         detail_capture_failure_count,
         attachments_capture_count,
+        media_download_attempted_count,
+        media_stored_count,
+        media_failure_count,
         external_links_capture_count,
         perimeter_capture_count,
         response_history_extracted_count,
@@ -1333,9 +1798,14 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       detailArchivedCount: summaryRow ? Number(summaryRow[1] || 0) : 0,
       detailFailureCount: summaryRow ? Number(summaryRow[2] || 0) : 0,
       attachmentsMetadataCount: summaryRow ? Number(summaryRow[3] || 0) : 0,
+      localMediaIncidentCount: mediaSummaryRow ? Number(mediaSummaryRow[1] || 0) : 0,
       externalLinksMetadataCount: summaryRow ? Number(summaryRow[4] || 0) : 0,
       perimeterPayloadCount: summaryRow ? Number(summaryRow[5] || 0) : 0,
       responseHistoryCount: summaryRow ? Number(summaryRow[6] || 0) : 0,
+      mediaRecordCount: mediaSummaryRow ? Number(mediaSummaryRow[0] || 0) : 0,
+      thumbnailStoredCount: mediaSummaryRow ? Number(mediaSummaryRow[2] || 0) : 0,
+      fullImageStoredCount: mediaSummaryRow ? Number(mediaSummaryRow[3] || 0) : 0,
+      totalMediaBytes: mediaSummaryRow ? Number(mediaSummaryRow[4] || 0) : 0,
       lastRun: runRow
         ? {
             capturedAt: String(runRow[0] || ''),
@@ -1345,13 +1815,16 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
             detailCaptureSuccessCount: Number(runRow[4] || 0),
             detailCaptureFailureCount: Number(runRow[5] || 0),
             attachmentsCaptureCount: Number(runRow[6] || 0),
-            externalLinksCaptureCount: Number(runRow[7] || 0),
-            perimeterCaptureCount: Number(runRow[8] || 0),
-            responseHistoryExtractedCount: Number(runRow[9] || 0),
-            failureCategoryCounts: safeJsonParse(String(runRow[10] || '{}'), {}),
+            mediaDownloadAttemptedCount: Number(runRow[7] || 0),
+            mediaStoredCount: Number(runRow[8] || 0),
+            mediaFailureCount: Number(runRow[9] || 0),
+            externalLinksCaptureCount: Number(runRow[10] || 0),
+            perimeterCaptureCount: Number(runRow[11] || 0),
+            responseHistoryExtractedCount: Number(runRow[12] || 0),
+            failureCategoryCounts: safeJsonParse(String(runRow[13] || '{}'), {}),
           }
         : null,
-      failureCategoryCounts: runRow ? safeJsonParse(String(runRow[10] || '{}'), {}) : {},
+      failureCategoryCounts: runRow ? safeJsonParse(String(runRow[13] || '{}'), {}) : {},
     };
   };
 

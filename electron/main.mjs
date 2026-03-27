@@ -14,7 +14,9 @@ const SMOKE_MODE = process.env.OF_SMOKE === '1';
 const PHASE4_AUTO_CAPTURE = process.env.OF_PHASE4_AUTO_CAPTURE === '1';
 const PHASE4C_AUTO_RECOVER = process.env.OF_PHASE4C_AUTO_RECOVER === '1';
 const PHASE4D_AUTO_VERIFY = process.env.OF_PHASE4D_AUTO_VERIFY === '1';
+const PHASE4G_AUTO_VERIFY = process.env.OF_PHASE4G_AUTO_VERIFY === '1';
 const EXTRA_INCIDENT_CAPTURE_ROUTE = process.env.OF_CAPTURE_INCIDENT_ROUTE || '';
+const SHOULD_CONTINUE_AFTER_AUTO_CAPTURE = PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY;
 const dbLifecycle = createDbLifecycleManager({ app, dialog, BrowserWindow });
 let autoCheckTimer = null;
 
@@ -119,7 +121,7 @@ function nowIso() {
 
 app.whenReady().then(async () => {
   if (SMOKE_MODE) {
-    const smokeTimeoutMs = PHASE4_AUTO_CAPTURE ? 600000 : 25000;
+    const smokeTimeoutMs = PHASE4_AUTO_CAPTURE ? 1800000 : 25000;
     setTimeout(() => app.quit(), smokeTimeoutMs);
   }
 
@@ -210,7 +212,7 @@ app.whenReady().then(async () => {
       `
         (async () => {
           const started = Date.now();
-          while (Date.now() - started < 120000) {
+          while (Date.now() - started < 1800000) {
             const summary = [...document.querySelectorAll('.list-results-label')].some(
               (node) => node.textContent && node.textContent.includes('Captured ')
             );
@@ -245,6 +247,19 @@ app.whenReady().then(async () => {
       await captureCurrentView(win, 'phase4d-second-incident-detail.png', 4000);
     }
     if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE4G_AUTO_VERIFY) {
+    await captureView(win, '#/configure', 'phase4g-settings-after-capture.png');
+    await captureIncidentTab(win, '#/incidents/2025/G70422', 'Gallery', 'phase4g-g70422-gallery.png', 2500);
+    if (EXTRA_INCIDENT_CAPTURE_ROUTE) {
+      await captureIncidentTab(win, EXTRA_INCIDENT_CAPTURE_ROUTE, 'Gallery', 'phase4g-second-incident-gallery.png', 2500);
+    }
+    if (SMOKE_MODE && !SHOULD_CONTINUE_AFTER_AUTO_CAPTURE) {
       app.quit();
       return;
     }
