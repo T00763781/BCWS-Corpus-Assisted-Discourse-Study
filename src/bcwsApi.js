@@ -40,18 +40,66 @@ function toQuery(params) {
 }
 
 async function fetchJson(url) {
-  const response = await fetch(url);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  const response = await fetch(url, { signal: controller.signal });
+  clearTimeout(timer);
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   return response.json();
 }
 
 async function fetchText(url) {
-  const response = await fetch(url);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  const response = await fetch(url, { signal: controller.signal });
+  clearTimeout(timer);
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   return response.text();
 }
 
-function normalizeIncidentRow(row) {
+async function fetchWithTimeout(url, mode, timeoutMs = 4000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return mode === 'text' ? response.text() : response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchJsonWithMeta(url) {
+  try {
+    const payload = await fetchWithTimeout(url, 'json');
+    return { ok: true, status: 'ok', url, payload, error: '' };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'error',
+      url,
+      payload: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function fetchTextWithMeta(url) {
+  try {
+    const payload = await fetchWithTimeout(url, 'text');
+    return { ok: true, status: 'ok', url, payload, error: '' };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'error',
+      url,
+      payload: '',
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function normalizeIncidentRow(row, rawSource = null) {
   return {
     incidentGuid: row.incidentGuid,
     publishedIncidentDetailGuid: row.publishedIncidentDetailGuid,
@@ -83,6 +131,7 @@ function normalizeIncidentRow(row) {
       spuCount: row.structureProtectionResourceCount,
     },
     raw: row,
+    rawSource,
   };
 }
 
@@ -102,9 +151,9 @@ export async function fetchIncidentList({
     searchText: search || null,
     orderBy: 'lastUpdatedTimestamp DESC',
   });
-
-  const payload = await fetchJson(`${BCWS_API}/wfnews-api/publicPublishedIncident?${query}`);
-  const rows = (payload.collection || []).map(normalizeIncidentRow);
+  const sourceUrl = `${BCWS_API}/wfnews-api/publicPublishedIncident?${query}`;
+  const payload = await fetchJson(sourceUrl);
+  const rows = (payload.collection || []).map((row) => normalizeIncidentRow(row, { url: sourceUrl, status: 'ok' }));
   return {
     totalRowCount: payload.totalRowCount ?? rows.length,
     rows,
@@ -175,27 +224,49 @@ export async function fetchEvacuationSummary() {
   };
 }
 
-export async function fetchIncidentDetail(fireYear, incidentNumber) {
-  const { rows } = await fetchIncidentList({ pageRowCount: 1000 });
-  const incident = rows.find(
-    (row) => String(row.fireYear) === String(fireYear) && String(row.incidentNumber) === String(incidentNumber)
-  );
+export async function fetchIncidentDetail(fireYear, incidentNumber, seedIncident = null) {
+  const incident = seedIncident
+    ? seedIncident
+    : (await fetchIncidentList({ pageRowCount: 1000 })).rows.find(
+        (row) =>
+          String(row.fireYear) === String(fireYear) &&
+          String(row.incidentNumber) === String(incidentNumber)
+      );
 
   if (!incident) {
     throw new Error(`Unable to find incident ${incidentNumber} for ${fireYear}.`);
   }
 
-  const [attachmentsPayload, externalPayload, responsePageHtml, perimeterData, tiedEvac] =
-    await Promise.all([
-      fetchJson(`${BCWS_API}/wfnews-api/publicPublishedIncidentAttachment/${incident.incidentGuid}/attachments`).catch(() => ({ collection: [] })),
-      fetchJson(`${BCWS_API}/wfnews-api/publicExternalUri?${toQuery({ incidentGuid: incident.incidentGuid, pageNumber: 1, pageRowCount: 100 })}`).catch(() => ({ collection: [] })),
-      fetchText(`${BCWS_SITE}/incidents?${toQuery({ fireYear, incidentNumber, source: 'list' })}`).catch(() => ''),
-      fetchPerimeterByFireNumber(incident.incidentNumber).catch(() => null),
-      fetchTiedEvacuations(incident).catch(() => ({ orders: [], alerts: [] })),
-    ]);
+  const attachmentsUrl = `${BCWS_API}/wfnews-api/publicPublishedIncidentAttachment/${incident.incidentGuid}/attachments`;
+  const externalUrl = `${BCWS_API}/wfnews-api/publicExternalUri?${toQuery({
+    incidentGuid: incident.incidentGuid,
+    pageNumber: 1,
+    pageRowCount: 100,
+  })}`;
+  const detailApiUrl = `${BCWS_API}/wfnews-api/publicPublishedIncident/${incident.incidentGuid}`;
+  const responsePageUrl = `${BCWS_SITE}/incidents?${toQuery({ fireYear, incidentNumber, source: 'list' })}`;
+  const perimeterUrl = buildPerimeterQueryUrl(incident.incidentNumber);
+  const tiedEvacUrl = buildTiedEvacQueryUrl(incident);
 
-  const parsed = parseIncidentResponsePage(responsePageHtml);
-  const attachments = (attachmentsPayload.collection || []).map((item) => ({
+  const [attachmentsResult, externalResult, detailApiResult, responsePageResult, perimeterResult, tiedEvacResult] = await Promise.all([
+    fetchJsonWithMeta(attachmentsUrl),
+    fetchJsonWithMeta(externalUrl),
+    fetchJsonWithMeta(detailApiUrl),
+    fetchTextWithMeta(responsePageUrl),
+    fetchJsonWithMeta(perimeterUrl),
+    fetchJsonWithMeta(tiedEvacUrl),
+  ]);
+
+  const detailPayload = detailApiResult.ok ? detailApiResult.payload : null;
+  const normalizedIncident = detailPayload
+    ? normalizeIncidentRow(detailPayload, { url: detailApiUrl, status: detailApiResult.status || 'ok' })
+    : incident;
+
+  const parsed = mergeIncidentResponse(
+    parseIncidentDetailPayload(detailPayload),
+    parseIncidentResponsePage(responsePageResult.payload || '')
+  );
+  const attachments = ((attachmentsResult.payload?.collection) || []).map((item) => ({
     attachmentGuid: item.attachmentGuid,
     title: item.attachmentTitle || item.fileName || 'Untitled asset',
     description: item.attachmentDescription,
@@ -203,51 +274,67 @@ export async function fetchIncidentDetail(fireYear, incidentNumber) {
     mimeType: item.mimeType,
     uploadedTimestamp: item.uploadedTimestamp,
   }));
-  const externalLinks = (externalPayload.collection || []).map((item) => ({
+  const externalLinks = ((externalResult.payload?.collection) || []).map((item) => ({
     id: item.externalUriGuid,
     category: item.externalUriCategoryTag,
     label: item.externalUriDisplayLabel,
     url: item.externalUri,
   }));
+  const perimeterData = perimeterResult.ok ? perimeterResult.payload : null;
+  const tiedEvac = parseTiedEvacPayload(tiedEvacResult.ok ? tiedEvacResult.payload : null);
 
   return {
-    incident,
+    incident: normalizedIncident,
     response: parsed,
     attachments,
     externalLinks,
     perimeterData,
     tiedEvac,
+    rawSources: {
+      attachments: attachmentsResult,
+      external: externalResult,
+      detailApi: detailApiResult,
+      responsePage: responsePageResult,
+      perimeter: perimeterResult,
+      tiedEvac: tiedEvacResult,
+    },
   };
 }
 
-async function fetchPerimeterByFireNumber(fireNumber) {
+function buildPerimeterQueryUrl(fireNumber) {
   const where = `FIRE_NUMBER='${String(fireNumber).replace(/'/g, "''")}'`;
-  return fetchJson(
-    `${WFNEWS_ARCGIS}/BCWS_FirePerimeters_PublicView/FeatureServer/0/query?${toQuery({
-      where,
-      outFields: '*',
-      returnGeometry: true,
-      outSR: 4326,
-      f: 'geojson',
-    })}`
-  );
+  return `${WFNEWS_ARCGIS}/BCWS_FirePerimeters_PublicView/FeatureServer/0/query?${toQuery({
+    where,
+    outFields: '*',
+    returnGeometry: true,
+    outSR: 4326,
+    f: 'geojson',
+  })}`;
 }
 
-async function fetchTiedEvacuations(incident) {
+async function fetchPerimeterByFireNumber(fireNumber) {
+  return fetchJson(buildPerimeterQueryUrl(fireNumber));
+}
+
+function buildTiedEvacQueryUrl(incident) {
   const { xmin, ymin, xmax, ymax } = buildEnvelopeForIncident(incident);
-  const payload = await fetchJson(
-    `${WFNEWS_ARCGIS}/Evacuation_Orders_and_Alerts/FeatureServer/0/query?${toQuery({
-      returnGeometry: false,
-      where: "ORDER_ALERT_STATUS <> 'All Clear' and (EVENT_TYPE = 'Fire' or EVENT_TYPE = 'Wildfire')",
-      outFields: '*',
-      inSR: 4326,
-      outSR: 4326,
-      geometry: JSON.stringify({ xmin, ymin, xmax, ymax, spatialReference: { wkid: 4326 } }),
-      geometryType: 'esriGeometryEnvelope',
-      spatialRel: 'esriSpatialRelIntersects',
-      f: 'pjson',
-    })}`
-  );
+  return `${WFNEWS_ARCGIS}/Evacuation_Orders_and_Alerts/FeatureServer/0/query?${toQuery({
+    returnGeometry: false,
+    where: "ORDER_ALERT_STATUS <> 'All Clear' and (EVENT_TYPE = 'Fire' or EVENT_TYPE = 'Wildfire')",
+    outFields: '*',
+    inSR: 4326,
+    outSR: 4326,
+    geometry: JSON.stringify({ xmin, ymin, xmax, ymax, spatialReference: { wkid: 4326 } }),
+    geometryType: 'esriGeometryEnvelope',
+    spatialRel: 'esriSpatialRelIntersects',
+    f: 'pjson',
+  })}`;
+}
+
+function parseTiedEvacPayload(payload) {
+  if (!payload || !Array.isArray(payload.features)) {
+    return { orders: [], alerts: [] };
+  }
 
   const orders = [];
   const alerts = [];
@@ -266,6 +353,11 @@ async function fetchTiedEvacuations(incident) {
   return { orders, alerts };
 }
 
+async function fetchTiedEvacuations(incident) {
+  const payload = await fetchJson(buildTiedEvacQueryUrl(incident));
+  return parseTiedEvacPayload(payload);
+}
+
 function buildEnvelopeForIncident(incident) {
   const lon = Number(incident.longitude || -123.5);
   const lat = Number(incident.latitude || 54);
@@ -282,6 +374,87 @@ function normalizeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+function decodeHtml(html) {
+  if (!html || typeof DOMParser === 'undefined') return String(html || '');
+  const doc = new DOMParser().parseFromString(String(html), 'text/html');
+  return doc.documentElement.textContent || '';
+}
+
+function toPlainText(value) {
+  return decodeHtml(String(value || '')).replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function extractOverviewUpdates(overviewHtml) {
+  if (!overviewHtml || typeof DOMParser === 'undefined') {
+    return [];
+  }
+
+  const doc = new DOMParser().parseFromString(`<div id="overview-root">${overviewHtml}</div>`, 'text/html');
+  const root = doc.getElementById('overview-root');
+  if (!root) return [];
+
+  const blocks = [];
+  root.childNodes.forEach((node) => {
+    const text = toPlainText(node.textContent || '');
+    if (text) blocks.push(text);
+  });
+  if (!blocks.length) return [];
+
+  const updates = [];
+  let current = [];
+  const flush = () => {
+    const text = current.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (text) updates.push(text);
+    current = [];
+  };
+
+  blocks.forEach((block) => {
+    if (/^updated\b/i.test(block)) {
+      flush();
+    }
+    current.push(block);
+  });
+  flush();
+  return updates;
+}
+
+function buildResourcesAssignedText(detailPayload) {
+  const detailed = [
+    detailPayload?.resourceDetail,
+    detailPayload?.wildfireCrewResourcesDetail,
+    detailPayload?.incidentMgmtCrewRsrcDetail,
+    detailPayload?.wildfireAviationResourceDetail,
+    detailPayload?.heavyEquipmentResourcesDetail,
+    detailPayload?.structureProtectionRsrcDetail,
+  ]
+    .map((value) => toPlainText(value))
+    .filter(Boolean);
+
+  return detailed.length ? detailed.join('\n\n') : '';
+}
+
+function parseIncidentDetailPayload(detailPayload) {
+  if (!detailPayload) {
+    return {
+      responseUpdates: [],
+      evacuationsText: '',
+      suspectedCauseText: '',
+      resourcesAssignedText: '',
+      mapMessage: '',
+      sourceKind: 'none',
+    };
+  }
+
+  return {
+    responseUpdates: extractOverviewUpdates(detailPayload.incidentOverview),
+    evacuationsText: '',
+    suspectedCauseText: toPlainText(detailPayload.incidentCauseDetail),
+    resourcesAssignedText: buildResourcesAssignedText(detailPayload),
+    mapMessage: '',
+    sourceKind: detailPayload.incidentOverview ? 'detail-api-incidentOverview' : 'detail-api-fields',
+  };
+}
+
 function parseIncidentResponsePage(html) {
   if (!html || typeof DOMParser === 'undefined') {
     return {
@@ -290,6 +463,7 @@ function parseIncidentResponsePage(html) {
       suspectedCauseText: '',
       resourcesAssignedText: '',
       mapMessage: '',
+      sourceKind: 'none',
     };
   }
 
@@ -332,6 +506,25 @@ function parseIncidentResponsePage(html) {
     suspectedCauseText,
     resourcesAssignedText,
     mapMessage,
+    sourceKind: responseUpdates.length ? 'response-page-html' : 'response-page-shell',
+  };
+}
+
+function mergeIncidentResponse(detailResponse, pageResponse) {
+  return {
+    responseUpdates: detailResponse.responseUpdates.length
+      ? detailResponse.responseUpdates
+      : pageResponse.responseUpdates,
+    evacuationsText: detailResponse.evacuationsText || pageResponse.evacuationsText || '',
+    suspectedCauseText: detailResponse.suspectedCauseText || pageResponse.suspectedCauseText || '',
+    resourcesAssignedText: detailResponse.resourcesAssignedText || pageResponse.resourcesAssignedText || '',
+    mapMessage: detailResponse.mapMessage || pageResponse.mapMessage || '',
+    sourceKind:
+      detailResponse.responseUpdates.length ||
+      detailResponse.suspectedCauseText ||
+      detailResponse.resourcesAssignedText
+        ? detailResponse.sourceKind
+        : pageResponse.sourceKind,
   };
 }
 
