@@ -29,7 +29,7 @@ const ROUTES = [
   { id: 'incidents', label: 'Incidents' },
   { id: 'maps', label: 'Maps' },
   { id: 'discourse', label: 'Discourse' },
-  { id: 'configure', label: 'Configure' },
+  { id: 'configure', label: 'Settings' },
 ];
 
 const STATIC_ASSET_BASE = import.meta.env.BASE_URL;
@@ -66,10 +66,116 @@ function navigateTo(next) {
   window.location.hash = next.startsWith('#') ? next.slice(1) : next;
 }
 
+function hasDesktopDbBridge() {
+  return Boolean(window.openFiresideDesktop?.db);
+}
+
+async function fetchDesktopDbStatus() {
+  if (!hasDesktopDbBridge()) {
+    return {
+      hasActiveDb: false,
+      dbStateLabel: 'No DB',
+      captureStateLabel: 'No DB',
+      captureStateCode: 'no_db',
+      name: null,
+      path: null,
+      createdAt: null,
+      lastOpenedAt: null,
+      lastCapturedAt: null,
+      lastCaptureError: null,
+      capturedIncidentCount: 0,
+      autoCheckMinutes: 0,
+      autoCheckEnabled: false,
+    };
+  }
+  return window.openFiresideDesktop.db.getStatus();
+}
+
+async function fetchLocalIncidentList() {
+  if (!hasDesktopDbBridge()) {
+    return { ok: false, rows: [], totalRowCount: 0, hasLocalData: false };
+  }
+  return window.openFiresideDesktop.db.getIncidentListLocal();
+}
+
+async function fetchLocalIncidentDetail(fireYear, incidentNumber) {
+  if (!hasDesktopDbBridge()) {
+    return { ok: false, found: false };
+  }
+  return window.openFiresideDesktop.db.getIncidentDetailLocal(fireYear, incidentNumber);
+}
+
+async function runIncidentCapture({ trigger = 'manual' } = {}) {
+  if (!hasDesktopDbBridge()) {
+    return { ok: false, error: 'Desktop DB bridge unavailable.' };
+  }
+
+  const dbApi = window.openFiresideDesktop.db;
+  const capturedAt = new Date().toISOString();
+  try {
+    await dbApi.markCaptureRunning();
+    const listPayload = await fetchIncidentList({ pageRowCount: 1000 });
+    const listRows = listPayload.rows || [];
+
+    const detailRecords = [];
+    const chunkSize = 40;
+    for (let index = 0; index < listRows.length; index += chunkSize) {
+      const chunk = listRows.slice(index, index + chunkSize);
+      const settled = await Promise.allSettled(
+        chunk.map((row) => fetchIncidentDetail(row.fireYear, row.incidentNumber, row))
+      );
+      settled.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          detailRecords.push(result.value);
+        }
+      });
+    }
+
+    const saved = await dbApi.saveCapture({
+      trigger,
+      capturedAt,
+      listRows,
+      detailRecords,
+    });
+    if (!saved?.ok) {
+      throw new Error(saved?.error || 'Capture write failed.');
+    }
+
+    const metrics = await dbApi.getCaptureMetrics();
+    return {
+      ok: true,
+      saved,
+      metrics,
+      capturedListCount: saved.capturedListCount ?? listRows.length,
+      capturedDetailCount: saved.capturedDetailCount ?? detailRecords.length,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Incident capture failed';
+    await dbApi.markCaptureError(message);
+    return { ok: false, error: message };
+  }
+}
+
 export default function App() {
   const route = useHashRoute();
   const [configureTab, setConfigureTab] = React.useState('sources');
   const [pageLayouts, setPageLayouts] = React.useState(initialPageLayouts);
+  const [dbStatus, setDbStatus] = React.useState({
+    hasActiveDb: false,
+    dbStateLabel: 'No DB',
+    captureStateLabel: 'No DB',
+    captureStateCode: 'no_db',
+    name: null,
+    path: null,
+    createdAt: null,
+    lastOpenedAt: null,
+    lastCapturedAt: null,
+    lastCaptureError: null,
+    capturedIncidentCount: 0,
+    autoCheckMinutes: 0,
+    autoCheckEnabled: false,
+  });
+  const captureInFlightRef = React.useRef(false);
 
   const updatePageLayout = React.useCallback((pageId, recipe) => {
     setPageLayouts((current) => ({
@@ -86,6 +192,39 @@ export default function App() {
     }),
     [updatePageLayout]
   );
+
+  const refreshDbStatus = React.useCallback(async () => {
+    const next = await fetchDesktopDbStatus();
+    setDbStatus(next);
+    return next;
+  }, []);
+
+  React.useEffect(() => {
+    refreshDbStatus();
+  }, [refreshDbStatus]);
+
+  const captureIncidents = React.useCallback(
+    async (options = {}) => {
+      if (captureInFlightRef.current) {
+        return { ok: false, error: 'Capture is already running.' };
+      }
+      captureInFlightRef.current = true;
+      const result = await runIncidentCapture(options);
+      await refreshDbStatus();
+      captureInFlightRef.current = false;
+      return result;
+    },
+    [refreshDbStatus]
+  );
+
+  React.useEffect(() => {
+    if (!hasDesktopDbBridge() || !window.openFiresideDesktop.db.onAutoCheckTick) return undefined;
+    const unsubscribe = window.openFiresideDesktop.db.onAutoCheckTick(async () => {
+      if (captureInFlightRef.current) return;
+      await captureIncidents({ trigger: 'auto-check' });
+    });
+    return unsubscribe;
+  }, [captureIncidents]);
 
   return (
     <div className="app-shell">
@@ -113,20 +252,19 @@ export default function App() {
         </aside>
 
         <section className="workspace">
-          {route.id === 'dashboard' ? <DashboardPage /> : null}
-          {route.id === 'incidents' ? <IncidentsListPage /> : null}
+          {route.id === 'dashboard' ? <DashboardPage dbStatus={dbStatus} /> : null}
+          {route.id === 'incidents' ? <IncidentsListPage dbStatus={dbStatus} /> : null}
           {route.id === 'incident-detail' ? (
-            <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} />
+            <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} dbStatus={dbStatus} />
           ) : null}
-          {route.id === 'weather' ? <BlankRoute /> : null}
+          {route.id === 'weather' ? <PlaceholderPage title="Weather" message="Not wired in this browser runtime." /> : null}
           {route.id === 'maps' ? <BlankRoute /> : null}
-          {route.id === 'discourse' ? <BlankRoute /> : null}
+          {route.id === 'discourse' ? <PlaceholderPage title="Discourse" message="Not wired in this browser runtime." /> : null}
           {route.id === 'configure' ? (
-            <ConfigureWorkspace
-              configureTab={configureTab}
-              setConfigureTab={setConfigureTab}
-              pageLayouts={pageLayouts}
-              builderActions={builderActions}
+            <SettingsHonestyPage
+              dbStatus={dbStatus}
+              onDbStatusChange={refreshDbStatus}
+              onCaptureIncidents={captureIncidents}
             />
           ) : null}
         </section>
@@ -135,7 +273,7 @@ export default function App() {
   );
 }
 
-function DashboardPage() {
+function DashboardPage({ dbStatus }) {
   const [state, setState] = React.useState({ phase: 'loading', error: '', data: null });
 
   const load = React.useCallback(async () => {
@@ -158,7 +296,18 @@ function DashboardPage() {
       (stats.activeBeingHeldFires || 0) +
       (stats.activeUnderControlFires || 0)
     : null;
-  const sourceSignals = React.useMemo(() => buildDashboardSourceSignals(state), [state]);
+  const sourceSignals = React.useMemo(
+    () => [
+      {
+        label: 'Incident',
+        status: dbStatus.hasActiveDb ? dbStatus.captureStateCode : 'no_db',
+      },
+      { label: 'Weather', status: 'not_wired' },
+      { label: 'Discourse', status: 'not_wired' },
+      { label: 'Storage', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
+    ],
+    [dbStatus.captureStateCode, dbStatus.hasActiveDb]
+  );
 
   return (
     <div className="dashboard-page">
@@ -320,13 +469,13 @@ function FireCentreTable({ statsList }) {
   );
 }
 
-function IncidentsListPage() {
+function IncidentsListPage({ dbStatus }) {
   const [search, setSearch] = React.useState('');
   const [fireCentre, setFireCentre] = React.useState('');
   const [quickFilter, setQuickFilter] = React.useState('all');
   const [selectedStages, setSelectedStages] = React.useState(['OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL', 'OUT']);
   const [sortState, setSortState] = React.useState({ key: 'updatedDate', direction: 'desc' });
-  const [state, setState] = React.useState({ phase: 'loading', error: '', rows: [] });
+  const [state, setState] = React.useState({ phase: 'loading', error: '', rows: [], source: 'live' });
   const columnDefs = React.useMemo(
     () => ({
       incidentName: { label: 'Wildfire Name', type: 'text' },
@@ -342,10 +491,17 @@ function IncidentsListPage() {
   const load = React.useCallback(async () => {
     setState((current) => ({ ...current, phase: 'loading', error: '' }));
     try {
+      if (hasDesktopDbBridge()) {
+        const local = await fetchLocalIncidentList();
+        if (local?.ok && local?.hasLocalData) {
+          setState({ phase: 'success', error: '', rows: local.rows, source: 'local' });
+          return;
+        }
+      }
       const data = await fetchIncidentList({ search, fireCentre, stageCodes: selectedStages, pageRowCount: 500 });
-      setState({ phase: 'success', error: '', rows: data.rows });
+      setState({ phase: 'success', error: '', rows: data.rows, source: 'live' });
     } catch (error) {
-      setState({ phase: 'failure', error: error.message || 'Failed to load incidents', rows: [] });
+      setState({ phase: 'failure', error: error.message || 'Failed to load incidents', rows: [], source: 'live' });
     }
   }, [search, fireCentre, selectedStages]);
 
@@ -354,12 +510,18 @@ function IncidentsListPage() {
   }, [load]);
 
   const rows = React.useMemo(() => {
-    const filtered = quickFilter === 'fireOfNote'
-      ? state.rows.filter((row) => row.fireOfNote)
-      : [...state.rows];
+    const searchNeedle = search.trim().toLowerCase();
+    const filtered = [...state.rows].filter((row) => {
+      if (quickFilter === 'fireOfNote' && !row.fireOfNote) return false;
+      if (fireCentre && row.fireCentre !== fireCentre) return false;
+      if (selectedStages.length && !selectedStages.includes(row.stage)) return false;
+      if (!searchNeedle) return true;
+      const haystack = `${row.incidentName || ''} ${row.incidentNumber || ''} ${row.location || ''}`.toLowerCase();
+      return haystack.includes(searchNeedle);
+    });
     filtered.sort((a, b) => compareRows(a, b, sortState, columnDefs));
     return filtered;
-  }, [columnDefs, quickFilter, sortState, state.rows]);
+  }, [columnDefs, fireCentre, quickFilter, search, selectedStages, sortState, state.rows]);
 
   const sortOptions = React.useMemo(
     () => [
@@ -407,8 +569,12 @@ function IncidentsListPage() {
   if (fireCentre) activeFilters.push(fireCentre);
   if (selectedStages.length === 1) activeFilters.push(stageLabel(selectedStages[0]));
   const resultsLabel = activeFilters.length ? `Filtered by ${activeFilters.join(' | ')}` : 'All active incidents';
-  const noResultsMessage =
-    state.phase === 'loading' ? 'Loading incidents...' : 'No incidents matched the current filters.';
+  const sourceLabel =
+    state.source === 'local'
+      ? 'Local DB incidents'
+      : dbStatus.hasActiveDb
+      ? 'Live BCWS fallback (no local incident rows)'
+      : 'Live BCWS incidents';
 
   return (
     <div className="incidents-page">
@@ -437,7 +603,7 @@ function IncidentsListPage() {
       </div>
 
       <div className="list-results-row">
-        <div className="list-results-label">{resultsLabel}</div>
+        <div className="list-results-label">{`${resultsLabel} | ${sourceLabel}`}</div>
       </div>
 
       <div className="stage-toggle-row">
@@ -504,17 +670,24 @@ function IncidentsListPage() {
   );
 }
 
-function IncidentDetailPage({ fireYear, incidentNumber }) {
+function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
   const [tab, setTab] = React.useState('response');
-  const [state, setState] = React.useState({ phase: 'loading', error: '', data: null });
+  const [state, setState] = React.useState({ phase: 'loading', error: '', data: null, source: 'live' });
 
   const load = React.useCallback(async () => {
-    setState({ phase: 'loading', error: '', data: null });
+    setState({ phase: 'loading', error: '', data: null, source: 'live' });
     try {
+      if (hasDesktopDbBridge()) {
+        const local = await fetchLocalIncidentDetail(fireYear, incidentNumber);
+        if (local?.ok && local?.found) {
+          setState({ phase: 'success', error: '', data: local.data, source: 'local' });
+          return;
+        }
+      }
       const data = await fetchIncidentDetail(fireYear, incidentNumber);
-      setState({ phase: 'success', error: '', data });
+      setState({ phase: 'success', error: '', data, source: 'live' });
     } catch (error) {
-      setState({ phase: 'failure', error: error.message || 'Failed to load incident', data: null });
+      setState({ phase: 'failure', error: error.message || 'Failed to load incident', data: null, source: 'live' });
     }
   }, [fireYear, incidentNumber]);
 
@@ -532,6 +705,13 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
       <div className="incident-hero">
         <div className="incident-summary-card">
           <div className="incident-summary-card__title">{incident?.incidentName || incidentNumber}</div>
+          <div className="list-results-label">
+            {state.source === 'local'
+              ? 'Detail source: Local DB capture'
+              : dbStatus.hasActiveDb
+              ? 'Detail source: Live BCWS fallback (no local detail record)'
+              : 'Detail source: Live BCWS'}
+          </div>
           <div className="incident-summary-card__list">
             <SummaryRow label={stageLabel(incident?.stage)} color={STAGE_DEFS[incident?.stage]?.color} />
             <SummaryRow label={`Fire Number ${incident?.incidentNumber || incidentNumber}`} />
@@ -870,6 +1050,193 @@ function BlankRoute() {
   return <div className="blank-workspace" aria-hidden="true" />;
 }
 
+function PlaceholderPage({ title, message }) {
+  return (
+    <div className="stub-page">
+      <h1>{title}</h1>
+      <p>{message}</p>
+    </div>
+  );
+}
+
+function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents }) {
+  const desktopActive = Boolean(window.openFiresideDesktop?.isElectron);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [captureSummary, setCaptureSummary] = React.useState('');
+  const [recoverySummary, setRecoverySummary] = React.useState('');
+  const [autoCheckMinutesDraft, setAutoCheckMinutesDraft] = React.useState(String(dbStatus.autoCheckMinutes || 0));
+
+  React.useEffect(() => {
+    setAutoCheckMinutesDraft(String(dbStatus.autoCheckMinutes || 0));
+  }, [dbStatus.autoCheckMinutes]);
+
+  const runDbAction = async (action) => {
+    if (!hasDesktopDbBridge()) return;
+    setBusy(true);
+    setError('');
+    try {
+      const result = await action();
+      if (result?.error) {
+        setError(result.error);
+      }
+      await onDbStatusChange();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'DB action failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runManualCapture = async () => {
+    if (!desktopActive || !hasDesktopDbBridge() || !dbStatus.hasActiveDb) return;
+    setBusy(true);
+    setError('');
+    setCaptureSummary('');
+    setRecoverySummary('');
+    try {
+      const result = await onCaptureIncidents({ trigger: 'manual' });
+      if (!result?.ok) {
+        throw new Error(result?.error || 'Incident capture failed');
+      }
+      setCaptureSummary(
+        `Captured ${result.capturedListCount} incidents, ${result.saved.insertedSnapshots} new snapshots, ${result.saved.insertedUpdates} new updates, ${result.saved.insertedRaw} raw records.`
+      );
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : 'Incident capture failed';
+      setError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runRecovery = async () => {
+    if (!desktopActive || !hasDesktopDbBridge() || !dbStatus.hasActiveDb) return;
+    setBusy(true);
+    setError('');
+    setRecoverySummary('');
+    try {
+      const result = await window.openFiresideDesktop.db.recoverResponseHistory();
+      if (!result?.ok) {
+        throw new Error(result?.error || 'Recovery failed');
+      }
+      await onDbStatusChange();
+      setRecoverySummary(
+        `Recovered ${result.insertedUpdates} response updates from ${result.scannedRecords} archived detail records (G70422 parsed blocks: ${result.g70422?.parsedBlocks ?? 0}, inserted: ${result.g70422?.inserted ?? 0}, reason: ${result.g70422?.reason || 'n/a'}).`
+      );
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to recover response history');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveAutoCheckInterval = async () => {
+    if (!desktopActive || !hasDesktopDbBridge() || !dbStatus.hasActiveDb) return;
+    setBusy(true);
+    setError('');
+    try {
+      const next = Number(autoCheckMinutesDraft || 0);
+      const result = await window.openFiresideDesktop.db.setAutoCheckMinutes(next);
+      if (result?.error) {
+        setError(result.error);
+      }
+      await onDbStatusChange();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to save auto-check interval');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="stub-page">
+      <h1>Settings</h1>
+      <p>Current runtime: {desktopActive ? 'Electron desktop shell.' : 'browser fallback with no DB.'}</p>
+      <p>Incident capture is manual in desktop runtime. Weather and Discourse are not wired in this runtime.</p>
+      <p>Storage state: {dbStatus.hasActiveDb ? 'DB selected' : 'No DB selected'}.</p>
+      <p>Incident capture state: {dbStatus.captureStateLabel}.</p>
+      <p>Auto-check: {dbStatus.autoCheckEnabled ? `Enabled (${dbStatus.autoCheckMinutes} min)` : 'Disabled'}.</p>
+      {dbStatus.hasActiveDb ? (
+        <div className="mini-list">
+          <div>Active DB: {dbStatus.name}</div>
+          <div>Path: {dbStatus.path}</div>
+          <div>Created: {dbStatus.createdAt ? formatDateTime(Date.parse(dbStatus.createdAt)) : '--'}</div>
+          <div>Last opened: {dbStatus.lastOpenedAt ? formatDateTime(Date.parse(dbStatus.lastOpenedAt)) : '--'}</div>
+          <div>Last capture: {dbStatus.lastCapturedAt ? formatDateTime(Date.parse(dbStatus.lastCapturedAt)) : '--'}</div>
+          <div>Captured incidents: {displayValue(dbStatus.capturedIncidentCount)}</div>
+          <div>Last capture error: {dbStatus.lastCaptureError || '--'}</div>
+        </div>
+      ) : null}
+      <div className="stage-toggle-row">
+        <input
+          className="toolbar-input"
+          type="number"
+          min="0"
+          step="1"
+          value={autoCheckMinutesDraft}
+          onChange={(event) => setAutoCheckMinutesDraft(event.target.value)}
+          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+        />
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+          onClick={saveAutoCheckInterval}
+        >
+          Save auto-check minutes
+        </button>
+      </div>
+      <div className="stage-toggle-row">
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={!desktopActive || busy}
+          onClick={() => runDbAction(() => window.openFiresideDesktop.db.create())}
+        >
+          Create DB
+        </button>
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={!desktopActive || busy}
+          onClick={() => runDbAction(() => window.openFiresideDesktop.db.select())}
+        >
+          Select DB
+        </button>
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+          onClick={runManualCapture}
+        >
+          Capture incidents
+        </button>
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+          onClick={runRecovery}
+        >
+          Recover response history
+        </button>
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+          onClick={() => runDbAction(() => window.openFiresideDesktop.db.deleteActive())}
+        >
+          Delete DB
+        </button>
+      </div>
+      {!desktopActive ? <p>DB lifecycle controls are available only in desktop runtime.</p> : null}
+      {captureSummary ? <div className="list-results-label">{captureSummary}</div> : null}
+      {recoverySummary ? <div className="list-results-label">{recoverySummary}</div> : null}
+      {error ? <div className="error-banner">{error}</div> : null}
+    </div>
+  );
+}
+
 
 
 
@@ -1158,41 +1525,15 @@ function displayValue(value) {
   return Number(value).toLocaleString('en-CA');
 }
 
-function buildDashboardSourceSignals(state) {
-  if (state.phase === 'loading') {
-    return [
-      { label: 'Stats', status: 'loading' },
-      { label: 'Map', status: 'loading' },
-      { label: 'Evac', status: 'loading' },
-    ];
-  }
-
-  if (state.phase === 'failure') {
-    return [
-      { label: 'Stats', status: 'error' },
-      { label: 'Map', status: 'error' },
-      { label: 'Evac', status: 'error' },
-    ];
-  }
-
-  const statsReady = Boolean(state.data?.stats);
-  const mapReady = ['FIRE_OF_NOTE', 'OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL'].every(
-    (code) => Array.isArray(state.data?.mapLayers?.[code])
-  );
-  const evacReady =
-    Number.isFinite(Number(state.data?.evacuations?.orders)) &&
-    Number.isFinite(Number(state.data?.evacuations?.alerts));
-
-  return [
-    { label: 'Stats', status: statsReady ? 'ready' : 'error' },
-    { label: 'Map', status: mapReady ? 'ready' : 'error' },
-    { label: 'Evac', status: evacReady ? 'ready' : 'error' },
-  ];
-}
-
 function sourceHealthLabel(status) {
-  if (status === 'ready') return 'Ready';
-  if (status === 'loading') return 'Loading';
+  if (status === 'db_selected') return 'DB selected';
+  if (status === 'browser_fallback') return 'Browser fallback';
+  if (status === 'not_wired') return 'Not wired';
+  if (status === 'no_db') return 'No DB';
+  if (status === 'never_captured') return 'Never captured';
+  if (status === 'capture_running') return 'Capture running';
+  if (status === 'backfill_due') return 'Backfill due';
+  if (status === 'healthy') return 'Healthy';
   return 'Error';
 }
 
