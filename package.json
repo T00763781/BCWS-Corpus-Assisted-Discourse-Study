@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:desktop": "node scripts/dev-desktop.mjs",
+    "smoke:desktop": "node scripts/dev-desktop.mjs --smoke",
     "build": "vite build",
     "preview": "vite preview",
     "desktop": "electron electron/main.mjs"
