@@ -119,7 +119,7 @@ function nowIso() {
 
 app.whenReady().then(async () => {
   if (SMOKE_MODE) {
-    const smokeTimeoutMs = PHASE4_AUTO_CAPTURE ? 180000 : 25000;
+    const smokeTimeoutMs = PHASE4_AUTO_CAPTURE ? 600000 : 25000;
     setTimeout(() => app.quit(), smokeTimeoutMs);
   }
 
@@ -172,6 +172,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('db:get-capture-metrics', async () => dbLifecycle.getCaptureMetrics());
   ipcMain.handle('db:get-capture-summary', async () => dbLifecycle.getCaptureCompletenessSummary());
+  ipcMain.handle('db:get-capture-targets', async () => dbLifecycle.getIncidentCaptureTargets());
   ipcMain.handle('db:recover-response-history', async () => dbLifecycle.recoverResponseHistoryFromArchivedRaw());
   ipcMain.handle('db:capture-mark-running', async () => dbLifecycle.markCaptureRunning());
   ipcMain.handle('db:capture-mark-error', async (_event, message) => dbLifecycle.markCaptureError(message));

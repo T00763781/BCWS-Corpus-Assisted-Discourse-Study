@@ -116,9 +116,17 @@ async function fetchCaptureSummary() {
       perimeterPayloadCount: 0,
       responseHistoryCount: 0,
       lastRun: null,
+      failureCategoryCounts: {},
     };
   }
   return window.openFiresideDesktop.db.getCaptureSummary();
+}
+
+async function fetchCaptureTargets() {
+  if (!hasDesktopDbBridge() || !window.openFiresideDesktop.db.getCaptureTargets) {
+    return { ok: false, incompleteKeys: [], incompleteKeySet: {}, recordedCount: 0 };
+  }
+  return window.openFiresideDesktop.db.getCaptureTargets();
 }
 
 async function runIncidentCapture({ trigger = 'manual' } = {}) {
@@ -132,12 +140,19 @@ async function runIncidentCapture({ trigger = 'manual' } = {}) {
     await dbApi.markCaptureRunning();
     const listPayload = await fetchIncidentList({ pageRowCount: 1000 });
     const listRows = listPayload.rows || [];
+    const captureTargets = await fetchCaptureTargets();
+    const incompleteSet = new Set(Object.keys(captureTargets?.incompleteKeySet || {}));
+    const targetRows = captureTargets?.recordedCount
+      ? listRows.filter((row) => incompleteSet.has(`${String(row.fireYear)}:${String(row.incidentNumber)}`))
+      : incompleteSet.size
+      ? listRows.filter((row) => incompleteSet.has(`${String(row.fireYear)}:${String(row.incidentNumber)}`))
+      : listRows;
 
     const detailRecords = [];
     const detailFailures = [];
-    const chunkSize = 40;
-    for (let index = 0; index < listRows.length; index += chunkSize) {
-      const chunk = listRows.slice(index, index + chunkSize);
+    const chunkSize = 8;
+    for (let index = 0; index < targetRows.length; index += chunkSize) {
+      const chunk = targetRows.slice(index, index + chunkSize);
       const settled = await Promise.all(
         chunk.map(async (row) => {
           try {
@@ -184,6 +199,7 @@ async function runIncidentCapture({ trigger = 'manual' } = {}) {
       capturedListCount: saved.capturedListCount ?? listRows.length,
       capturedDetailCount: saved.capturedDetailCount ?? detailRecords.length,
       detailFailureCount: detailFailures.length,
+      targetedIncidentCount: targetRows.length,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Incident capture failed';
@@ -1202,10 +1218,11 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
     detailArchivedCount: 0,
     detailFailureCount: 0,
     attachmentsMetadataCount: 0,
-      externalLinksMetadataCount: 0,
-      perimeterPayloadCount: 0,
+    externalLinksMetadataCount: 0,
+    perimeterPayloadCount: 0,
     responseHistoryCount: 0,
     lastRun: null,
+    failureCategoryCounts: {},
   });
   const [autoCheckMinutesDraft, setAutoCheckMinutesDraft] = React.useState(String(dbStatus.autoCheckMinutes || 0));
 
@@ -1252,7 +1269,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
         throw new Error(result?.error || 'Incident capture failed');
       }
       setCaptureSummary(
-        `Captured ${result.capturedListCount} incidents | detail archived ${result.saved.runSummary?.detailCaptureSuccessCount ?? result.capturedDetailCount} | detail failures ${result.saved.runSummary?.detailCaptureFailureCount ?? result.detailFailureCount} | attachments ${result.saved.runSummary?.attachmentsCaptureCount ?? 0} | external links ${result.saved.runSummary?.externalLinksCaptureCount ?? 0} | perimeter ${result.saved.runSummary?.perimeterCaptureCount ?? 0} | response history ${result.saved.runSummary?.responseHistoryExtractedCount ?? 0}.`
+        `Captured ${result.capturedListCount} incidents | targeted detail retries ${result.saved.runSummary?.targetedIncidentCount ?? result.targetedIncidentCount ?? 0} | detail archived ${result.saved.runSummary?.detailCaptureSuccessCount ?? result.capturedDetailCount} | detail failures ${result.saved.runSummary?.detailCaptureFailureCount ?? result.detailFailureCount} | attachments ${result.saved.runSummary?.attachmentsCaptureCount ?? 0} | external links ${result.saved.runSummary?.externalLinksCaptureCount ?? 0} | perimeter ${result.saved.runSummary?.perimeterCaptureCount ?? 0} | response history ${result.saved.runSummary?.responseHistoryExtractedCount ?? 0}.`
       );
       await refreshCaptureSummary();
     } catch (nextError) {
@@ -1318,6 +1335,13 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
         attachments {captureCompleteness.attachmentsMetadataCount} | external links {captureCompleteness.externalLinksMetadataCount} | perimeter{' '}
         {captureCompleteness.perimeterPayloadCount} | response history {captureCompleteness.responseHistoryCount}.
       </p>
+      <p>
+        Failure categories:{' '}
+        {Object.entries(captureCompleteness.failureCategoryCounts || {})
+          .filter(([, count]) => Number(count) > 0)
+          .map(([key, count]) => `${key} ${count}`)
+          .join(' | ') || '--'}
+      </p>
       {dbStatus.hasActiveDb ? (
         <div className="mini-list">
           <div>Active DB: {dbStatus.name}</div>
@@ -1330,7 +1354,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
           <div>
             Last run summary:{' '}
             {captureCompleteness.lastRun
-              ? `${captureCompleteness.lastRun.trigger || 'manual'} | listed ${captureCompleteness.lastRun.listedIncidentCount} | detail ok ${captureCompleteness.lastRun.detailCaptureSuccessCount} | detail fail ${captureCompleteness.lastRun.detailCaptureFailureCount} | attachments ${captureCompleteness.lastRun.attachmentsCaptureCount} | external links ${captureCompleteness.lastRun.externalLinksCaptureCount} | perimeter ${captureCompleteness.lastRun.perimeterCaptureCount} | response history ${captureCompleteness.lastRun.responseHistoryExtractedCount}`
+              ? `${captureCompleteness.lastRun.trigger || 'manual'} | listed ${captureCompleteness.lastRun.listedIncidentCount} | targeted ${captureCompleteness.lastRun.targetedIncidentCount} | detail ok ${captureCompleteness.lastRun.detailCaptureSuccessCount} | detail fail ${captureCompleteness.lastRun.detailCaptureFailureCount} | attachments ${captureCompleteness.lastRun.attachmentsCaptureCount} | external links ${captureCompleteness.lastRun.externalLinksCaptureCount} | perimeter ${captureCompleteness.lastRun.perimeterCaptureCount} | response history ${captureCompleteness.lastRun.responseHistoryExtractedCount}`
               : '--'}
           </div>
         </div>

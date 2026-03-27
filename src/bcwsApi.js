@@ -57,6 +57,162 @@ async function fetchText(url) {
   return response.text();
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function classifyFetchFailure(error, response = null, didTimeout = false) {
+  if (didTimeout) {
+    return {
+      category: 'timeout',
+      error: 'Request timed out',
+      retryable: true,
+    };
+  }
+
+  if (response) {
+    const code = Number(response.status || 0);
+    if (code === 404) {
+      return {
+        category: 'unavailable',
+        error: `${code} ${response.statusText}`,
+        retryable: false,
+      };
+    }
+    if (code === 429 || code >= 500) {
+      return {
+        category: 'http_error',
+        error: `${code} ${response.statusText}`,
+        retryable: true,
+      };
+    }
+    return {
+      category: 'http_error',
+      error: `${code} ${response.statusText}`,
+      retryable: false,
+    };
+  }
+
+  if (error instanceof SyntaxError) {
+    return {
+      category: 'parse_failure',
+      error: error.message || 'Failed to parse payload',
+      retryable: false,
+    };
+  }
+
+  const message = error instanceof Error ? error.message || error.name : String(error);
+  const lower = message.toLowerCase();
+  if (lower.includes('aborted') || lower.includes('aborterror')) {
+    return {
+      category: 'aborted',
+      error: message,
+      retryable: true,
+    };
+  }
+  if (lower.includes('failed to fetch') || lower.includes('network') || lower.includes('econn') || lower.includes('socket')) {
+    return {
+      category: 'network_error',
+      error: message,
+      retryable: true,
+    };
+  }
+  return {
+    category: 'error',
+    error: message,
+    retryable: false,
+  };
+}
+
+async function fetchWithRetry(url, mode, options = {}) {
+  const {
+    timeoutMs = 12000,
+    retries = 2,
+    backoffMs = 400,
+    label = mode,
+  } = options;
+
+  let lastFailure = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    let didTimeout = false;
+    const timer = setTimeout(() => {
+      didTimeout = true;
+      controller.abort();
+    }, timeoutMs);
+
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        const failure = classifyFetchFailure(null, response, false);
+        failure.httpStatus = Number(response.status || 0);
+        failure.attempt = attempt + 1;
+        lastFailure = failure;
+        if (!failure.retryable || attempt === retries) {
+          return {
+            ok: false,
+            url,
+            payload: mode === 'text' ? '' : null,
+            status: failure.category,
+            error: failure.error,
+            attempts: attempt + 1,
+            httpStatus: failure.httpStatus || null,
+            failureCategory: failure.category,
+            label,
+          };
+        }
+        await delay(backoffMs * (attempt + 1));
+        continue;
+      }
+
+      const payload = mode === 'text' ? await response.text() : await response.json();
+      return {
+        ok: true,
+        url,
+        payload,
+        status: 'ok',
+        error: '',
+        attempts: attempt + 1,
+        httpStatus: Number(response.status || 200),
+        failureCategory: null,
+        label,
+      };
+    } catch (error) {
+      const failure = classifyFetchFailure(error, null, didTimeout);
+      failure.attempt = attempt + 1;
+      lastFailure = failure;
+      if (!failure.retryable || attempt === retries) {
+        return {
+          ok: false,
+          url,
+          payload: mode === 'text' ? '' : null,
+          status: failure.category,
+          error: failure.error,
+          attempts: attempt + 1,
+          httpStatus: null,
+          failureCategory: failure.category,
+          label,
+        };
+      }
+      await delay(backoffMs * (attempt + 1));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return {
+    ok: false,
+    url,
+    payload: mode === 'text' ? '' : null,
+    status: lastFailure?.category || 'error',
+    error: lastFailure?.error || 'Unknown fetch failure',
+    attempts: lastFailure?.attempt || retries + 1,
+    httpStatus: lastFailure?.httpStatus || null,
+    failureCategory: lastFailure?.category || 'error',
+    label,
+  };
+}
+
 async function fetchWithTimeout(url, mode, timeoutMs = 4000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -69,34 +225,12 @@ async function fetchWithTimeout(url, mode, timeoutMs = 4000) {
   }
 }
 
-async function fetchJsonWithMeta(url) {
-  try {
-    const payload = await fetchWithTimeout(url, 'json');
-    return { ok: true, status: 'ok', url, payload, error: '' };
-  } catch (error) {
-    return {
-      ok: false,
-      status: 'error',
-      url,
-      payload: null,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
+async function fetchJsonWithMeta(url, options = {}) {
+  return fetchWithRetry(url, 'json', options);
 }
 
-async function fetchTextWithMeta(url) {
-  try {
-    const payload = await fetchWithTimeout(url, 'text');
-    return { ok: true, status: 'ok', url, payload, error: '' };
-  } catch (error) {
-    return {
-      ok: false,
-      status: 'error',
-      url,
-      payload: '',
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
+async function fetchTextWithMeta(url, options = {}) {
+  return fetchWithRetry(url, 'text', options);
 }
 
 function normalizeIncidentRow(row, rawSource = null) {
@@ -248,13 +382,13 @@ export async function fetchIncidentDetail(fireYear, incidentNumber, seedIncident
   const perimeterUrl = buildPerimeterQueryUrl(incident.incidentNumber);
   const tiedEvacUrl = buildTiedEvacQueryUrl(incident);
 
-  const [attachmentsResult, externalResult, detailApiResult, responsePageResult, perimeterResult, tiedEvacResult] = await Promise.all([
-    fetchJsonWithMeta(attachmentsUrl),
-    fetchJsonWithMeta(externalUrl),
-    fetchJsonWithMeta(detailApiUrl),
-    fetchTextWithMeta(responsePageUrl),
-    fetchJsonWithMeta(perimeterUrl),
-    fetchJsonWithMeta(tiedEvacUrl),
+  const [detailApiResult, responsePageResult, attachmentsResult, externalResult, perimeterResult, tiedEvacResult] = await Promise.all([
+    fetchJsonWithMeta(detailApiUrl, { timeoutMs: 14000, retries: 2, backoffMs: 500, label: 'detail_api' }),
+    fetchTextWithMeta(responsePageUrl, { timeoutMs: 14000, retries: 1, backoffMs: 500, label: 'detail_html' }),
+    fetchJsonWithMeta(attachmentsUrl, { timeoutMs: 10000, retries: 2, backoffMs: 400, label: 'attachments' }),
+    fetchJsonWithMeta(externalUrl, { timeoutMs: 10000, retries: 2, backoffMs: 400, label: 'external_links' }),
+    fetchJsonWithMeta(perimeterUrl, { timeoutMs: 12000, retries: 2, backoffMs: 500, label: 'perimeter' }),
+    fetchJsonWithMeta(tiedEvacUrl, { timeoutMs: 12000, retries: 1, backoffMs: 500, label: 'tied_evac' }),
   ]);
 
   const detailPayload = detailApiResult.ok ? detailApiResult.payload : null;
