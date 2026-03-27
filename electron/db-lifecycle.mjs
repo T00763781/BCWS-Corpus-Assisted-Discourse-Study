@@ -181,6 +181,35 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         payload_text TEXT
       )
     `);
+    database.run(`
+      CREATE TABLE IF NOT EXISTS incident_capture_status (
+        fire_year TEXT NOT NULL,
+        incident_number TEXT NOT NULL,
+        has_list_row INTEGER NOT NULL DEFAULT 0,
+        has_detail_source INTEGER NOT NULL DEFAULT 0,
+        has_attachments_metadata INTEGER NOT NULL DEFAULT 0,
+        has_external_links_metadata INTEGER NOT NULL DEFAULT 0,
+        has_perimeter_payload INTEGER NOT NULL DEFAULT 0,
+        has_response_history INTEGER NOT NULL DEFAULT 0,
+        last_capture_at TEXT NOT NULL,
+        last_capture_error TEXT,
+        PRIMARY KEY (fire_year, incident_number)
+      )
+    `);
+    database.run(`
+      CREATE TABLE IF NOT EXISTS capture_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        captured_at TEXT NOT NULL,
+        trigger TEXT,
+        listed_incident_count INTEGER NOT NULL DEFAULT 0,
+        detail_capture_success_count INTEGER NOT NULL DEFAULT 0,
+        detail_capture_failure_count INTEGER NOT NULL DEFAULT 0,
+        attachments_capture_count INTEGER NOT NULL DEFAULT 0,
+        external_links_capture_count INTEGER NOT NULL DEFAULT 0,
+        perimeter_capture_count INTEGER NOT NULL DEFAULT 0,
+        response_history_extracted_count INTEGER NOT NULL DEFAULT 0
+      )
+    `);
 
     ensureColumn(database, 'incidents', 'detail_json', 'detail_json TEXT');
     ensureColumn(database, 'incidents', 'last_snapshot_hash', 'last_snapshot_hash TEXT');
@@ -189,6 +218,30 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     ensureColumn(database, 'incident_updates', 'update_hash', 'update_hash TEXT');
     ensureColumn(database, 'incident_updates', 'update_published_at', 'update_published_at TEXT');
     ensureColumn(database, 'incident_updates', 'source_kind', "source_kind TEXT DEFAULT 'capture-detail'");
+    ensureColumn(
+      database,
+      'capture_runs',
+      'attachments_capture_count',
+      'attachments_capture_count INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(
+      database,
+      'capture_runs',
+      'external_links_capture_count',
+      'external_links_capture_count INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(
+      database,
+      'capture_runs',
+      'perimeter_capture_count',
+      'perimeter_capture_count INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(
+      database,
+      'capture_runs',
+      'response_history_extracted_count',
+      'response_history_extracted_count INTEGER NOT NULL DEFAULT 0'
+    );
   };
 
   const flushDb = () => {
@@ -421,6 +474,62 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     return dateMatch ? dateMatch[1] : null;
   };
 
+  const extractUpdatesFromDetailApiPayload = (payloadText) => {
+    const payload = safeJsonParse(String(payloadText || ''), null);
+    const overview = String(payload?.incidentOverview || '').trim();
+    if (!payload) return { updates: [], reason: 'detail_api_payload_invalid' };
+    if (!overview) return { updates: [], reason: 'no_incident_overview' };
+
+    const lines = decodeHtml(
+      overview
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<li[^>]*>/gi, '- ')
+        .replace(/<[^>]+>/g, ' ')
+    )
+      .split('\n')
+      .map((line) => line.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+
+    if (!lines.length) {
+      return { updates: [], reason: 'incident_overview_empty_after_strip' };
+    }
+
+    const updates = [];
+    let current = [];
+    const flush = () => {
+      const text = normalizeUpdateText(current.join('\n'));
+      if (text) {
+        updates.push({
+          text,
+          publishedAt: parseDatePrefix(text),
+        });
+      }
+      current = [];
+    };
+
+    for (const line of lines) {
+      if (/^updated\b/i.test(line)) {
+        flush();
+      }
+      current.push(line);
+    }
+    flush();
+
+    const deduped = [];
+    const seen = new Set();
+    for (const row of updates) {
+      const key = hashPayload(row.text);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(row);
+    }
+
+    return { updates: deduped, reason: deduped.length ? 'detail_api_incident_overview' : 'incident_overview_no_updates' };
+  };
+
   const extractUpdatesFromArchivedHtml = (html) => {
     const source = String(html || '');
     if (!source.trim()) return { updates: [], reason: 'empty_html' };
@@ -503,24 +612,39 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     return { updates: deduped, reason: deduped.length ? 'heading_blocks' : 'no_blocks_after_heading' };
   };
 
-  const writeCaptureRecords = ({ listRows, detailRecords, capturedAt }) => {
+  const writeCaptureRecords = ({ listRows, detailRecords, detailFailures, capturedAt, trigger }) => {
     const captureTime = capturedAt || nowIso();
     const detailByIncidentKey = new Map();
+    const detailFailureByIncidentKey = new Map();
     for (const detail of detailRecords) {
       const incident = detail?.incident;
       if (!incident?.incidentNumber || !incident?.fireYear) continue;
       detailByIncidentKey.set(incidentKey(incident.fireYear, incident.incidentNumber), detail);
     }
+    for (const item of detailFailures || []) {
+      if (!item?.incidentNumber || !item?.fireYear) continue;
+      detailFailureByIncidentKey.set(
+        incidentKey(item.fireYear, item.incidentNumber),
+        String(item.error || 'Detail capture failed')
+      );
+    }
 
     let insertedSnapshots = 0;
     let insertedUpdates = 0;
     let insertedRaw = 0;
+    let detailCaptureSuccessCount = 0;
+    let detailCaptureFailureCount = 0;
+    let attachmentsCaptureCount = 0;
+    let externalLinksCaptureCount = 0;
+    let perimeterCaptureCount = 0;
+    let responseHistoryExtractedCount = 0;
 
     db.run('BEGIN TRANSACTION');
     try {
       for (const row of listRows) {
         const key = incidentKey(row.fireYear, row.incidentNumber);
         const detail = detailByIncidentKey.get(key) || null;
+        const detailFailure = detailFailureByIncidentKey.get(key) || '';
         const incident = detail?.incident || row;
         const snapshotPayload = buildSnapshotPayload(row, detail);
         const snapshotHash = hashPayload(snapshotPayload);
@@ -607,8 +731,30 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         insertedRaw += 1;
 
         const rawSources = detail?.rawSources;
+        let hasDetailSource = false;
+        let hasAttachmentsMetadata = false;
+        let hasExternalLinksMetadata = false;
+        let hasPerimeterPayload = false;
+        let hasResponseHistory = false;
+        let captureError = detailFailure;
+
         if (rawSources) {
+          hasDetailSource = Boolean(rawSources.detailApi?.ok);
+          hasAttachmentsMetadata = Boolean(rawSources.attachments?.ok);
+          hasExternalLinksMetadata = Boolean(rawSources.external?.ok);
+          hasPerimeterPayload = Boolean(rawSources.perimeter?.ok);
+          if (hasAttachmentsMetadata) attachmentsCaptureCount += 1;
+          if (hasExternalLinksMetadata) externalLinksCaptureCount += 1;
+          if (hasPerimeterPayload) perimeterCaptureCount += 1;
+
           const artifacts = [
+            {
+              sourceKind: 'incident_detail_api_json',
+              sourceUrl: rawSources.detailApi?.url,
+              status: rawSources.detailApi?.status || null,
+              errorText: rawSources.detailApi?.error || null,
+              payload: rawSources.detailApi?.payload,
+            },
             {
               sourceKind: 'incident_detail_html',
               sourceUrl: rawSources.responsePage?.url,
@@ -656,6 +802,12 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           }
         }
 
+        if (hasDetailSource) {
+          detailCaptureSuccessCount += 1;
+        } else {
+          detailCaptureFailureCount += 1;
+        }
+
         const parsedUpdates = [];
         const inlineUpdates = Array.isArray(detail?.response?.responseUpdates) ? detail.response.responseUpdates : [];
         inlineUpdates.forEach((item) => {
@@ -663,6 +815,18 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           if (!text) return;
           parsedUpdates.push({ text, publishedAt: parseDatePrefix(text), sourceKind: 'capture-detail' });
         });
+
+        if (!parsedUpdates.length) {
+          const archivedDetailApiPayload = detail?.rawSources?.detailApi?.payload;
+          const recoveredFromApi = extractUpdatesFromDetailApiPayload(asPayloadText(archivedDetailApiPayload));
+          recoveredFromApi.updates.forEach((item) => {
+            parsedUpdates.push({
+              text: item.text,
+              publishedAt: item.publishedAt || null,
+              sourceKind: 'capture-detail-api-overview',
+            });
+          });
+        }
 
         if (!parsedUpdates.length) {
           const archivedHtml = detail?.rawSources?.responsePage?.payload;
@@ -700,7 +864,80 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           );
           insertedUpdates += 1;
         });
+
+        hasResponseHistory = parsedUpdates.length > 0;
+        if (hasResponseHistory) responseHistoryExtractedCount += 1;
+
+        const missingArtifacts = [];
+        if (!hasDetailSource) missingArtifacts.push('detail source');
+        if (!hasAttachmentsMetadata) missingArtifacts.push('attachments metadata');
+        if (!hasExternalLinksMetadata) missingArtifacts.push('external links metadata');
+        if (!hasPerimeterPayload) missingArtifacts.push('perimeter payload');
+
+        if (!captureError && missingArtifacts.length) {
+          captureError = `Missing local artifacts: ${missingArtifacts.join(', ')}`;
+        }
+        if (!captureError && !hasResponseHistory && detail?.response?.sourceKind === 'detail-api-incidentOverview') {
+          captureError = 'Detail overview captured but response history could not be extracted';
+        }
+        if (!captureError && !hasDetailSource) {
+          captureError = rawSources?.detailApi?.error || rawSources?.responsePage?.error || 'Detail source unavailable';
+        }
+        if (!captureError && !detail && detailFailure) {
+          captureError = detailFailure;
+        }
+
+        db.run(
+          `
+          INSERT INTO incident_capture_status (
+            fire_year, incident_number, has_list_row, has_detail_source, has_attachments_metadata,
+            has_external_links_metadata, has_perimeter_payload, has_response_history, last_capture_at, last_capture_error
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(fire_year, incident_number) DO UPDATE SET
+            has_list_row = excluded.has_list_row,
+            has_detail_source = excluded.has_detail_source,
+            has_attachments_metadata = excluded.has_attachments_metadata,
+            has_external_links_metadata = excluded.has_external_links_metadata,
+            has_perimeter_payload = excluded.has_perimeter_payload,
+            has_response_history = excluded.has_response_history,
+            last_capture_at = excluded.last_capture_at,
+            last_capture_error = excluded.last_capture_error
+          `,
+          [
+            String(incident.fireYear),
+            String(incident.incidentNumber),
+            1,
+            hasDetailSource ? 1 : 0,
+            hasAttachmentsMetadata ? 1 : 0,
+            hasExternalLinksMetadata ? 1 : 0,
+            hasPerimeterPayload ? 1 : 0,
+            hasResponseHistory ? 1 : 0,
+            captureTime,
+            captureError || null,
+          ]
+        );
       }
+
+      db.run(
+        `
+        INSERT INTO capture_runs (
+          captured_at, trigger, listed_incident_count, detail_capture_success_count,
+          detail_capture_failure_count, attachments_capture_count, external_links_capture_count, perimeter_capture_count,
+          response_history_extracted_count
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          captureTime,
+          trigger || 'manual',
+          listRows.length,
+          detailCaptureSuccessCount,
+          detailCaptureFailureCount,
+          attachmentsCaptureCount,
+          externalLinksCaptureCount,
+          perimeterCaptureCount,
+          responseHistoryExtractedCount,
+        ]
+      );
 
       setValue(db, 'app_state', 'capture_state', 'healthy');
       setValue(db, 'app_state', 'last_capture_at', captureTime);
@@ -715,6 +952,15 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         insertedSnapshots,
         insertedUpdates,
         insertedRaw,
+        runSummary: {
+          listedIncidentCount: listRows.length,
+          detailCaptureSuccessCount,
+          detailCaptureFailureCount,
+          attachmentsCaptureCount,
+          externalLinksCaptureCount,
+          perimeterCaptureCount,
+          responseHistoryExtractedCount,
+        },
       };
     } catch (error) {
       db.run('ROLLBACK');
@@ -722,10 +968,10 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     }
   };
 
-  const saveIncidentCapture = ({ listRows = [], detailRecords = [], capturedAt } = {}) => {
+  const saveIncidentCapture = ({ listRows = [], detailRecords = [], detailFailures = [], capturedAt, trigger } = {}) => {
     if (!db) return { ok: false, error: 'No active DB selected.', status: getStatus() };
     try {
-      return writeCaptureRecords({ listRows, detailRecords, capturedAt });
+      return writeCaptureRecords({ listRows, detailRecords, detailFailures, capturedAt, trigger });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Capture write failed.';
       setValue(db, 'app_state', 'capture_state', 'error');
@@ -739,9 +985,9 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     if (!db) return { ok: false, error: 'No active DB selected.', status: getStatus() };
     const rawRows = db.exec(
       `
-      SELECT id, fire_year, incident_number, captured_at, payload_text
+      SELECT id, fire_year, incident_number, captured_at, source_kind, payload_text
       FROM raw_source_records
-      WHERE source_kind = 'incident_detail_html'
+      WHERE source_kind IN ('incident_detail_api_json', 'incident_detail_html')
       ORDER BY captured_at ASC, id ASC
       `
     );
@@ -760,10 +1006,14 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         const fireYear = String(row[1]);
         const incidentNumber = String(row[2]);
         const capturedAt = String(row[3] || nowIso());
-        const html = String(row[4] || '');
-        const recovered = extractUpdatesFromArchivedHtml(html);
+        const sourceKind = String(row[4] || '');
+        const sourcePayload = String(row[5] || '');
+        const recovered =
+          sourceKind === 'incident_detail_api_json'
+            ? extractUpdatesFromDetailApiPayload(sourcePayload)
+            : extractUpdatesFromArchivedHtml(sourcePayload);
         if (incidentNumber.toUpperCase() === 'G70422') {
-          g70422Reason = recovered.reason;
+          g70422Reason = `${sourceKind}:${recovered.reason}`;
         }
         if (!recovered.updates.length) continue;
         parsedRecords += 1;
@@ -789,7 +1039,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
               updateHash,
               text,
               item.publishedAt || null,
-              'recovery-archived-html',
+              sourceKind === 'incident_detail_api_json' ? 'recovery-detail-api-overview' : 'recovery-archived-html',
             ]
           );
           insertedUpdates += 1;
@@ -866,9 +1116,61 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     const storedUpdates = updatesQuery.length
       ? updatesQuery[0].values.map((row) => String(row[0] || '')).filter(Boolean)
       : [];
+    const statusQuery = db.exec(
+      `
+      SELECT
+        has_list_row,
+        has_detail_source,
+        has_attachments_metadata,
+        has_external_links_metadata,
+        has_perimeter_payload,
+        has_response_history,
+        last_capture_at,
+        last_capture_error
+      FROM incident_capture_status
+      WHERE fire_year = ? AND incident_number = ?
+      LIMIT 1
+      `,
+      [effectiveFireYear, String(incidentNumber)]
+    );
+    const captureStatus = statusQuery.length && statusQuery[0].values.length
+      ? {
+          hasListRow: Boolean(statusQuery[0].values[0][0]),
+          hasDetailSource: Boolean(statusQuery[0].values[0][1]),
+          hasAttachmentsMetadata: Boolean(statusQuery[0].values[0][2]),
+          hasExternalLinksMetadata: Boolean(statusQuery[0].values[0][3]),
+          hasPerimeterPayload: Boolean(statusQuery[0].values[0][4]),
+          hasResponseHistory: Boolean(statusQuery[0].values[0][5]),
+          lastCaptureAt: statusQuery[0].values[0][6] ? String(statusQuery[0].values[0][6]) : null,
+          lastCaptureError: statusQuery[0].values[0][7] ? String(statusQuery[0].values[0][7]) : null,
+        }
+      : null;
+
+    const hasCompleteLocalDetail =
+      Boolean(captureStatus?.hasDetailSource) &&
+      Boolean(captureStatus?.hasAttachmentsMetadata) &&
+      Boolean(captureStatus?.hasExternalLinksMetadata) &&
+      Boolean(captureStatus?.hasPerimeterPayload);
+
+    const missingArtifacts = captureStatus
+      ? [
+          captureStatus.hasDetailSource ? null : 'detail source',
+          captureStatus.hasAttachmentsMetadata ? null : 'attachments metadata',
+          captureStatus.hasExternalLinksMetadata ? null : 'external links metadata',
+          captureStatus.hasPerimeterPayload ? null : 'perimeter payload',
+        ].filter(Boolean)
+      : [];
+
     parsed.response = parsed.response || {};
     parsed.response.responseUpdates = storedUpdates;
-    return { ok: true, found: true, data: parsed };
+    return {
+      ok: true,
+      found: true,
+      hasCompleteLocalDetail,
+      captureStatus,
+      missingArtifacts,
+      data: parsed,
+    };
   };
 
   const getCaptureMetrics = () => {
@@ -889,6 +1191,75 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       snapshots: count('incident_snapshots'),
       updates: count('incident_updates'),
       rawSourceRecords: count('raw_source_records'),
+    };
+  };
+
+  const getCaptureCompletenessSummary = () => {
+    if (!db) {
+      return {
+        listedIncidentCount: 0,
+        detailArchivedCount: 0,
+        detailFailureCount: 0,
+        attachmentsMetadataCount: 0,
+        externalLinksMetadataCount: 0,
+        perimeterPayloadCount: 0,
+        responseHistoryCount: 0,
+        lastRun: null,
+      };
+    }
+    const aggregate = db.exec(
+      `
+      SELECT
+        COUNT(*) AS listed_incident_count,
+        SUM(CASE WHEN has_detail_source = 1 THEN 1 ELSE 0 END) AS detail_archived_count,
+        SUM(CASE WHEN has_detail_source = 0 THEN 1 ELSE 0 END) AS detail_failure_count,
+        SUM(CASE WHEN has_attachments_metadata = 1 THEN 1 ELSE 0 END) AS attachments_metadata_count,
+        SUM(CASE WHEN has_external_links_metadata = 1 THEN 1 ELSE 0 END) AS external_links_metadata_count,
+        SUM(CASE WHEN has_perimeter_payload = 1 THEN 1 ELSE 0 END) AS perimeter_payload_count,
+        SUM(CASE WHEN has_response_history = 1 THEN 1 ELSE 0 END) AS response_history_count
+      FROM incident_capture_status
+      `
+    );
+    const summaryRow = aggregate.length && aggregate[0].values.length ? aggregate[0].values[0] : null;
+    const lastRunQuery = db.exec(
+      `
+      SELECT
+        captured_at,
+        trigger,
+        listed_incident_count,
+        detail_capture_success_count,
+        detail_capture_failure_count,
+        attachments_capture_count,
+        external_links_capture_count,
+        perimeter_capture_count,
+        response_history_extracted_count
+      FROM capture_runs
+      ORDER BY id DESC
+      LIMIT 1
+      `
+    );
+    const runRow = lastRunQuery.length && lastRunQuery[0].values.length ? lastRunQuery[0].values[0] : null;
+    return {
+      listedIncidentCount: summaryRow ? Number(summaryRow[0] || 0) : 0,
+      detailArchivedCount: summaryRow ? Number(summaryRow[1] || 0) : 0,
+      detailFailureCount: summaryRow ? Number(summaryRow[2] || 0) : 0,
+      attachmentsMetadataCount: summaryRow ? Number(summaryRow[3] || 0) : 0,
+      externalLinksMetadataCount: summaryRow ? Number(summaryRow[4] || 0) : 0,
+      perimeterPayloadCount: summaryRow ? Number(summaryRow[5] || 0) : 0,
+      responseHistoryCount: summaryRow ? Number(summaryRow[6] || 0) : 0,
+      lastRun: runRow
+        ? {
+            capturedAt: String(runRow[0] || ''),
+            trigger: String(runRow[1] || ''),
+            listedIncidentCount: Number(runRow[2] || 0),
+            detailCaptureSuccessCount: Number(runRow[3] || 0),
+            detailCaptureFailureCount: Number(runRow[4] || 0),
+            attachmentsCaptureCount: Number(runRow[5] || 0),
+            externalLinksCaptureCount: Number(runRow[6] || 0),
+            perimeterCaptureCount: Number(runRow[7] || 0),
+            responseHistoryExtractedCount: Number(runRow[8] || 0),
+          }
+        : null,
     };
   };
 
@@ -925,6 +1296,8 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     getIncidentListLocal,
     getIncidentDetailLocal,
     getCaptureMetrics,
+    getCaptureCompletenessSummary,
     closeActive,
   };
 }
+

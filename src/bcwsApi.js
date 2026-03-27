@@ -243,19 +243,29 @@ export async function fetchIncidentDetail(fireYear, incidentNumber, seedIncident
     pageNumber: 1,
     pageRowCount: 100,
   })}`;
+  const detailApiUrl = `${BCWS_API}/wfnews-api/publicPublishedIncident/${incident.incidentGuid}`;
   const responsePageUrl = `${BCWS_SITE}/incidents?${toQuery({ fireYear, incidentNumber, source: 'list' })}`;
   const perimeterUrl = buildPerimeterQueryUrl(incident.incidentNumber);
   const tiedEvacUrl = buildTiedEvacQueryUrl(incident);
 
-  const [attachmentsResult, externalResult, responsePageResult, perimeterResult, tiedEvacResult] = await Promise.all([
+  const [attachmentsResult, externalResult, detailApiResult, responsePageResult, perimeterResult, tiedEvacResult] = await Promise.all([
     fetchJsonWithMeta(attachmentsUrl),
     fetchJsonWithMeta(externalUrl),
+    fetchJsonWithMeta(detailApiUrl),
     fetchTextWithMeta(responsePageUrl),
     fetchJsonWithMeta(perimeterUrl),
     fetchJsonWithMeta(tiedEvacUrl),
   ]);
 
-  const parsed = parseIncidentResponsePage(responsePageResult.payload || '');
+  const detailPayload = detailApiResult.ok ? detailApiResult.payload : null;
+  const normalizedIncident = detailPayload
+    ? normalizeIncidentRow(detailPayload, { url: detailApiUrl, status: detailApiResult.status || 'ok' })
+    : incident;
+
+  const parsed = mergeIncidentResponse(
+    parseIncidentDetailPayload(detailPayload),
+    parseIncidentResponsePage(responsePageResult.payload || '')
+  );
   const attachments = ((attachmentsResult.payload?.collection) || []).map((item) => ({
     attachmentGuid: item.attachmentGuid,
     title: item.attachmentTitle || item.fileName || 'Untitled asset',
@@ -274,7 +284,7 @@ export async function fetchIncidentDetail(fireYear, incidentNumber, seedIncident
   const tiedEvac = parseTiedEvacPayload(tiedEvacResult.ok ? tiedEvacResult.payload : null);
 
   return {
-    incident,
+    incident: normalizedIncident,
     response: parsed,
     attachments,
     externalLinks,
@@ -283,6 +293,7 @@ export async function fetchIncidentDetail(fireYear, incidentNumber, seedIncident
     rawSources: {
       attachments: attachmentsResult,
       external: externalResult,
+      detailApi: detailApiResult,
       responsePage: responsePageResult,
       perimeter: perimeterResult,
       tiedEvac: tiedEvacResult,
@@ -363,6 +374,87 @@ function normalizeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+function decodeHtml(html) {
+  if (!html || typeof DOMParser === 'undefined') return String(html || '');
+  const doc = new DOMParser().parseFromString(String(html), 'text/html');
+  return doc.documentElement.textContent || '';
+}
+
+function toPlainText(value) {
+  return decodeHtml(String(value || '')).replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function extractOverviewUpdates(overviewHtml) {
+  if (!overviewHtml || typeof DOMParser === 'undefined') {
+    return [];
+  }
+
+  const doc = new DOMParser().parseFromString(`<div id="overview-root">${overviewHtml}</div>`, 'text/html');
+  const root = doc.getElementById('overview-root');
+  if (!root) return [];
+
+  const blocks = [];
+  root.childNodes.forEach((node) => {
+    const text = toPlainText(node.textContent || '');
+    if (text) blocks.push(text);
+  });
+  if (!blocks.length) return [];
+
+  const updates = [];
+  let current = [];
+  const flush = () => {
+    const text = current.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (text) updates.push(text);
+    current = [];
+  };
+
+  blocks.forEach((block) => {
+    if (/^updated\b/i.test(block)) {
+      flush();
+    }
+    current.push(block);
+  });
+  flush();
+  return updates;
+}
+
+function buildResourcesAssignedText(detailPayload) {
+  const detailed = [
+    detailPayload?.resourceDetail,
+    detailPayload?.wildfireCrewResourcesDetail,
+    detailPayload?.incidentMgmtCrewRsrcDetail,
+    detailPayload?.wildfireAviationResourceDetail,
+    detailPayload?.heavyEquipmentResourcesDetail,
+    detailPayload?.structureProtectionRsrcDetail,
+  ]
+    .map((value) => toPlainText(value))
+    .filter(Boolean);
+
+  return detailed.length ? detailed.join('\n\n') : '';
+}
+
+function parseIncidentDetailPayload(detailPayload) {
+  if (!detailPayload) {
+    return {
+      responseUpdates: [],
+      evacuationsText: '',
+      suspectedCauseText: '',
+      resourcesAssignedText: '',
+      mapMessage: '',
+      sourceKind: 'none',
+    };
+  }
+
+  return {
+    responseUpdates: extractOverviewUpdates(detailPayload.incidentOverview),
+    evacuationsText: '',
+    suspectedCauseText: toPlainText(detailPayload.incidentCauseDetail),
+    resourcesAssignedText: buildResourcesAssignedText(detailPayload),
+    mapMessage: '',
+    sourceKind: detailPayload.incidentOverview ? 'detail-api-incidentOverview' : 'detail-api-fields',
+  };
+}
+
 function parseIncidentResponsePage(html) {
   if (!html || typeof DOMParser === 'undefined') {
     return {
@@ -371,6 +463,7 @@ function parseIncidentResponsePage(html) {
       suspectedCauseText: '',
       resourcesAssignedText: '',
       mapMessage: '',
+      sourceKind: 'none',
     };
   }
 
@@ -413,6 +506,25 @@ function parseIncidentResponsePage(html) {
     suspectedCauseText,
     resourcesAssignedText,
     mapMessage,
+    sourceKind: responseUpdates.length ? 'response-page-html' : 'response-page-shell',
+  };
+}
+
+function mergeIncidentResponse(detailResponse, pageResponse) {
+  return {
+    responseUpdates: detailResponse.responseUpdates.length
+      ? detailResponse.responseUpdates
+      : pageResponse.responseUpdates,
+    evacuationsText: detailResponse.evacuationsText || pageResponse.evacuationsText || '',
+    suspectedCauseText: detailResponse.suspectedCauseText || pageResponse.suspectedCauseText || '',
+    resourcesAssignedText: detailResponse.resourcesAssignedText || pageResponse.resourcesAssignedText || '',
+    mapMessage: detailResponse.mapMessage || pageResponse.mapMessage || '',
+    sourceKind:
+      detailResponse.responseUpdates.length ||
+      detailResponse.suspectedCauseText ||
+      detailResponse.resourcesAssignedText
+        ? detailResponse.sourceKind
+        : pageResponse.sourceKind,
   };
 }
 
