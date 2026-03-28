@@ -36,12 +36,14 @@ const ROUTES = [
 ];
 
 const STATIC_ASSET_BASE = import.meta.env.BASE_URL;
+const APP_ICON_SRC = `${STATIC_ASSET_BASE}assets/icon.svg`;
+const APP_WORDMARK_SRC = `${STATIC_ASSET_BASE}assets/logo.svg`;
 
 const STAGE_ICON_SRC = {
   FIRE_OF_NOTE: `${STATIC_ASSET_BASE}fire-of-note.svg`,
-  UNDR_CNTRL: `${STATIC_ASSET_BASE}under-control.svg`,
-  HOLDING: `${STATIC_ASSET_BASE}being-held.svg`,
-  OUT_CNTRL: `${STATIC_ASSET_BASE}out-of-control.svg`,
+  UNDR_CNTRL: `${STATIC_ASSET_BASE}assets/under-control.svg`,
+  HOLDING: `${STATIC_ASSET_BASE}assets/being-held.svg`,
+  OUT_CNTRL: `${STATIC_ASSET_BASE}assets/out-of-control.svg`,
 };
 
 function parseHashRoute() {
@@ -439,7 +441,8 @@ export default function App() {
       <main className="shell-frame">
         <aside className="left-rail">
           <div className="brand-block">
-            <img src={`${STATIC_ASSET_BASE}assets/logo.svg`} alt="Open Fireside" className="brand-logo" />
+            <img src={APP_ICON_SRC} alt="" className="brand-icon" aria-hidden="true" />
+            <img src={APP_WORDMARK_SRC} alt="Open Fireside" className="brand-logo" />
           </div>
           <nav className="route-nav" aria-label="Primary navigation">
             {ROUTES.map((item) => {
@@ -466,7 +469,7 @@ export default function App() {
             <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} dbStatus={dbStatus} />
           ) : null}
           {route.id === 'weather' ? <PlaceholderPage title="Weather" message="Not wired in this browser runtime." /> : null}
-          {route.id === 'maps' ? <BlankRoute /> : null}
+          {route.id === 'maps' ? <PlaceholderPage title="Maps" message="Not wired in this browser runtime." /> : null}
           {route.id === 'discourse' ? <PlaceholderPage title="Discourse" message="Not wired in this browser runtime." /> : null}
           {route.id === 'configure' ? (
             <SettingsHonestyPage
@@ -477,6 +480,27 @@ export default function App() {
           ) : null}
         </section>
       </main>
+    </div>
+  );
+}
+
+function PageHeader({ title, subtitle = '', chips = [], actions = null }) {
+  return (
+    <div className="page-header">
+      <div className="page-header__identity">
+        <div className="page-header__title-row">
+          <h1 className="page-header__title">{title}</h1>
+          {subtitle ? <div className="page-header__subtitle">{subtitle}</div> : null}
+        </div>
+        {chips.length ? (
+          <div className="source-health-row page-header__chips" aria-label={`${title} status`}>
+            {chips.map((chip) => (
+              <SourceHealthChip key={`${chip.label}-${chip.status}`} label={chip.label} status={chip.status} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <div className="page-header__actions">{actions}</div>
     </div>
   );
 }
@@ -535,24 +559,16 @@ function DashboardPage({ dbStatus }) {
 
   return (
     <div className="dashboard-page">
-      <div className="dashboard-header">
-        <div>
-          <div className="dashboard-kicker">
-            {`Fire year ${state.data?.fireYear ?? DASHBOARD_FIRE_YEAR}`}
-          </div>
-          <h1 className="dashboard-title">Dashboard</h1>
-        </div>
-        <div className="dashboard-header__actions">
-          <div className="source-health-row" aria-label="Dashboard source status">
-            {sourceSignals.map((signal) => (
-              <SourceHealthChip key={signal.label} label={signal.label} status={signal.status} />
-            ))}
-          </div>
+      <PageHeader
+        title="Dashboard"
+        subtitle="Live BCWS overview with local archive status."
+        chips={sourceSignals}
+        actions={
           <button type="button" className="refresh-chip" onClick={load}>
             Refresh
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {state.phase === 'failure' ? <div className="error-banner">{state.error}</div> : null}
 
@@ -577,17 +593,17 @@ function DashboardPage({ dbStatus }) {
 
         <div className="dashboard-overview-stack dashboard-grid__overview">
           <div className="metrics-card-grid is-four">
-            <MetricCard label="Active" value={displayValue(activeCount)} />
-            <MetricCard label="New in 24" value={displayValue(stats?.newFires24Hours)} />
-            <MetricCard label="Out in 24" value={displayValue(stats?.outFires24Hours)} />
-            <MetricCard label="Out in 7" value={displayValue(stats?.outFires7Days)} />
+            <MetricCard label="Active wildfires" value={displayValue(activeCount)} />
+            <MetricCard label="New in 24 hours" value={displayValue(stats?.newFires24Hours)} />
+            <MetricCard label="Controlled or out in 24 hours" value={displayValue(stats?.outFires24Hours)} />
+            <MetricCard label="Controlled or out in 7 days" value={displayValue(stats?.outFires7Days)} />
           </div>
 
           <StageControlPanel stats={stats} />
 
           <FireCentreTable statsList={state.data?.fireCentreStats || []} />
 
-          <ResourceStubStrip />
+          <ArchiveTotalsPanel captureSummary={captureSummary} hasActiveDb={dbStatus.hasActiveDb} />
 
           <div className="dashboard-evac-grid">
             <MetricCard label="Evacuation Orders" value={displayValue(state.data?.evacuations.orders)} large />
@@ -596,9 +612,8 @@ function DashboardPage({ dbStatus }) {
         </div>
 
         <StubPanel title="Discourse Signals" className="dashboard-discourse dashboard-grid__discourse" />
-        <ArchiveTotalsPanel
+        <PinnedIncidentsPanel
           className="dashboard-pinned dashboard-grid__pinned"
-          captureSummary={captureSummary}
           hasActiveDb={dbStatus.hasActiveDb}
         />
       </div>
@@ -708,6 +723,8 @@ function IncidentsListPage({ dbStatus }) {
     () => ({
       incidentName: { label: 'Wildfire Name', type: 'text' },
       stage: { label: 'Stage of Control', type: 'text' },
+      sizeHa: { label: 'Size', type: 'number' },
+      affordances: { label: 'Archive', type: 'text' },
       fireCentre: { label: 'Fire Centre', type: 'text' },
       location: { label: 'Location', type: 'text' },
       discoveryDate: { label: 'Discovery Date', type: 'date' },
@@ -803,9 +820,23 @@ function IncidentsListPage({ dbStatus }) {
       : dbStatus.hasActiveDb
       ? 'Live BCWS fallback (no local incident rows)'
       : 'Live BCWS incidents';
+  const headerChips = [
+    { label: 'Incidents', status: state.source === 'local' ? 'db_selected' : dbStatus.hasActiveDb ? 'browser_fallback' : 'healthy' },
+    { label: 'Storage', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
+  ];
 
   return (
     <div className="incidents-page">
+      <PageHeader
+        title="Incidents"
+        subtitle={sourceLabel}
+        chips={headerChips}
+        actions={
+          <button type="button" className="refresh-chip" onClick={load}>
+            Refresh
+          </button>
+        }
+      />
       <div className="list-toolbar">
         <input
           className="toolbar-input"
@@ -880,6 +911,8 @@ function IncidentsListPage({ dbStatus }) {
                 <td>
                   <span className={`stage-pill stage-pill--${row.stage}`}>{stageLabel(row.stage)}</span>
                 </td>
+                <td>{formatSizeHa(row.sizeHa)}</td>
+                <td><IncidentAffordanceRow affordances={row.affordances} /></td>
                 <td>{row.fireCentre}</td>
                 <td>{row.location || '—'}</td>
                 <td>{formatDate(row.discoveryDate)}</td>
@@ -888,7 +921,7 @@ function IncidentsListPage({ dbStatus }) {
             ))}
             {!rows.length ? (
               <tr>
-                <td colSpan="6" className="table-empty">{state.phase === 'loading' ? 'Loading incidents…' : 'No incidents matched the current filters.'}</td>
+                <td colSpan="8" className="table-empty">{state.phase === 'loading' ? 'Loading incidents…' : 'No incidents matched the current filters.'}</td>
               </tr>
             ) : null}
           </tbody>
@@ -958,6 +991,49 @@ function base64ToBlob(base64, mimeType) {
   return new Blob([bytes], { type: mimeType || 'application/octet-stream' });
 }
 
+function isMapAttachment(asset) {
+  const mimeType = String(asset?.mimeType || '').toLowerCase();
+  const title = String(asset?.title || asset?.fileName || '').toLowerCase();
+  const description = String(asset?.description || '').toLowerCase();
+  return (
+    mimeType.includes('pdf') ||
+    mimeType.includes('geopdf') ||
+    title.includes('map') ||
+    title.includes('perimeter') ||
+    description.includes('map') ||
+    description.includes('perimeter')
+  );
+}
+
+function isMapLink(link) {
+  const category = String(link?.category || '').toLowerCase();
+  const label = String(link?.label || '').toLowerCase();
+  const url = String(link?.url || '').toLowerCase();
+  return (
+    category.includes('map') ||
+    category.includes('pdf') ||
+    label.includes('map') ||
+    label.includes('perimeter') ||
+    label.includes('document') ||
+    url.includes('.pdf')
+  );
+}
+
+function getMapResources(data) {
+  const attachmentDocs = (Array.isArray(data?.attachments) ? data.attachments : []).filter(isMapAttachment);
+  const externalDocs = (Array.isArray(data?.externalLinks) ? data.externalLinks : []).filter(isMapLink);
+  return { attachmentDocs, externalDocs };
+}
+
+function getAttachmentDownloadUrl(incident, asset) {
+  if (asset?.downloadUrl) return asset.downloadUrl;
+  if (!incident?.incidentNumber || !asset?.attachmentGuid) return '';
+  const fireYear = incident?.fireYear ? `?fireYear=${encodeURIComponent(incident.fireYear)}` : '';
+  return `https://wildfiresituation.nrs.gov.bc.ca/wfnews-api/publicPublishedIncidentAttachment/${encodeURIComponent(
+    incident.incidentNumber
+  )}/attachments/${encodeURIComponent(asset.attachmentGuid)}/bytes${fireYear}`;
+}
+
 function mapsSourceNote(source, captureStatus) {
   if (source === 'local') {
     return 'Maps source: Local perimeter and external-link metadata. Link targets still open live URLs.';
@@ -989,6 +1065,7 @@ function mergeLiveIncidentWithLocalMedia(localData, liveData) {
 
 function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
   const [tab, setTab] = React.useState('response');
+  const [lightbox, setLightbox] = React.useState(null);
   const [state, setState] = React.useState({
     phase: 'loading',
     error: '',
@@ -1048,27 +1125,48 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
   const incident = state.data?.incident;
   const response = state.data?.response;
   const galleryState = getGalleryMediaState(state.data?.attachments, state.source, state.captureStatus);
+  const mapResources = getMapResources(state.data);
+  const detailSourceLabel =
+    state.source === 'local'
+      ? 'Local DB capture'
+      : state.source === 'mixed'
+      ? `Partial local detail + live fallback${state.sourceReason ? ` (${state.sourceReason})` : ''}`
+      : dbStatus.hasActiveDb
+      ? 'Live BCWS fallback (no local detail record)'
+      : 'Live BCWS';
+  const headerChips = [
+    {
+      label: 'Detail',
+      status: state.source === 'local' ? 'db_selected' : state.source === 'mixed' ? 'browser_fallback' : 'healthy',
+    },
+    { label: 'Storage', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
+  ];
 
   return (
     <div className="incident-detail-page">
-      <button type="button" className="back-button" onClick={() => navigateTo('/incidents')}>&larr;</button>
+      <PageHeader
+        title={incident?.incidentName || incidentNumber}
+        subtitle={`${incident?.incidentNumber || incidentNumber} · ${incident?.fireCentre || 'Incident detail'}`}
+        chips={headerChips}
+        actions={
+          <>
+            <button type="button" className="refresh-chip refresh-chip--secondary" onClick={() => navigateTo('/incidents')}>
+              Back to list
+            </button>
+            <button type="button" className="refresh-chip" onClick={load}>
+              Refresh
+            </button>
+          </>
+        }
+      />
 
       {state.phase === 'failure' ? <div className="error-banner">{state.error}</div> : null}
 
       <div className="incident-hero">
         <div className="incident-summary-card">
-          <div className="incident-summary-card__title">{incident?.incidentName || incidentNumber}</div>
-          <div className="list-results-label">
-            {state.source === 'local'
-              ? 'Detail source: Local DB capture'
-              : state.source === 'mixed'
-              ? `Detail source: Partial local detail + live fallback${state.sourceReason ? ` (${state.sourceReason})` : ''}`
-              : dbStatus.hasActiveDb
-              ? 'Detail source: Live BCWS fallback (no local detail record)'
-              : 'Detail source: Live BCWS'}
-          </div>
+          <div className="incident-summary-card__title">{detailSourceLabel}</div>
           {state.captureStatus ? (
-            <div className="text-muted">
+            <div className="detail-source-note">
               Local artifacts: detail {state.captureStatus.hasDetailSource ? 'yes' : 'no'} | attachments{' '}
               {state.captureStatus.hasAttachmentsMetadata ? 'yes' : 'no'} | media{' '}
               {state.captureStatus.hasLocalMedia ? 'yes' : 'no'} | external links{' '}
@@ -1107,11 +1205,13 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
         ))}
       </div>
 
-          {tab === 'response' ? (
+      {tab === 'response' ? (
         <div className="incident-tab-panel incident-response-layout">
           <section className="response-big-card">
-            <h2>Response Update</h2>
-            <div className="text-muted">{responseSourceNote(state.source, state.captureStatus)}</div>
+            <div className="card-title-row">
+              <h2>Response updates</h2>
+              <div className="response-source-chip">{responseSourceNote(state.source, state.captureStatus)}</div>
+            </div>
             {response?.responseUpdates?.length ? (
               response.responseUpdates.map((item, index) => (
                 <article key={`resp-${index}`} className="response-update-block">
@@ -1160,7 +1260,10 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
             <div className="gallery-grid">
               {state.data.attachments.map((asset) => (
                 <article key={asset.attachmentGuid} className="gallery-card">
-                  <GalleryImage asset={asset} />
+                  <GalleryImage
+                    asset={asset}
+                    onOpen={(payload) => setLightbox(payload)}
+                  />
                   <div className="gallery-card__title">{asset.title}</div>
                   <div className="gallery-card__date">{formatDate(asset.uploadedTimestamp)}</div>
                 </article>
@@ -1175,22 +1278,50 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
       {tab === 'maps' ? (
         <div className="incident-tab-panel maps-panel">
           <div className="text-muted">{mapsSourceNote(state.source, state.captureStatus)}</div>
-          {state.data?.externalLinks?.filter((item) => /map|pdf/i.test(item.category || '') || /map/i.test(item.label || '')).length ? (
-            <div className="mini-list">
-              {state.data.externalLinks
-                .filter((item) => /map|pdf/i.test(item.category || '') || /map/i.test(item.label || ''))
-                .map((link) => (
-                  <a key={link.id} href={link.url} target="_blank" rel="noreferrer" className="link-row">
-                    {link.label || link.url}
-                  </a>
-                ))}
+          {mapResources.attachmentDocs.length || mapResources.externalDocs.length ? (
+            <div className="maps-download-grid">
+              {mapResources.attachmentDocs.map((asset) => (
+                <a
+                  key={asset.attachmentGuid}
+                  href={getAttachmentDownloadUrl(incident, asset) || asset.imageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="download-card"
+                >
+                  <div className="download-card__title">{asset.title || asset.fileName || 'Map document'}</div>
+                  <div className="download-card__meta">Archived attachment metadata {asset.mimeType ? `· ${asset.mimeType}` : ''}</div>
+                </a>
+              ))}
+              {mapResources.externalDocs.map((link) => (
+                <a key={link.id} href={link.url} target="_blank" rel="noreferrer" className="download-card">
+                  <div className="download-card__title">{link.label || link.url}</div>
+                  <div className="download-card__meta">External map link {link.category ? `· ${link.category}` : ''}</div>
+                </a>
+              ))}
             </div>
           ) : (
             <>
               <h2>Map Downloads</h2>
-              <p>{response?.mapMessage || 'There are currently no maps associated with this incident.'}</p>
+              <p>
+                {response?.mapMessage ||
+                  (state.captureStatus?.hasAttachmentsMetadata || state.captureStatus?.hasExternalLinksMetadata
+                    ? 'No archived map download was identified in captured attachments or external links for this incident.'
+                    : 'There are currently no maps associated with this incident.')}
+              </p>
             </>
           )}
+        </div>
+      ) : null}
+
+      {lightbox ? (
+        <div className="lightbox-backdrop" role="dialog" aria-modal="true" onClick={() => setLightbox(null)}>
+          <div className="lightbox-panel" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="lightbox-close" onClick={() => setLightbox(null)}>
+              Close
+            </button>
+            <img src={lightbox.src} alt={lightbox.title} className="lightbox-image" />
+            <div className="lightbox-caption">{lightbox.title}</div>
+          </div>
         </div>
       ) : null}
 
@@ -1277,6 +1408,28 @@ function MetricCard({ label, value, large = false }) {
   );
 }
 
+function IncidentAffordanceRow({ affordances }) {
+  const chips = [
+    affordances?.hasMedia ? { label: 'Media', tone: 'media' } : null,
+    affordances?.hasMapDownloads ? { label: 'Map', tone: 'map' } : null,
+    affordances?.hasResponseHistory ? { label: 'Response', tone: 'response' } : null,
+  ].filter(Boolean);
+
+  if (!chips.length) {
+    return <span className="table-affordance-row__empty">—</span>;
+  }
+
+  return (
+    <div className="table-affordance-row">
+      {chips.map((chip) => (
+        <span key={chip.label} className={`table-affordance-chip is-${chip.tone}`.trim()}>
+          {chip.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function SourceHealthChip({ label, status }) {
   return (
     <div className={`source-health-chip is-${status}`.trim()}>
@@ -1337,9 +1490,6 @@ function ArchiveTotalsPanel({ captureSummary, hasActiveDb, className = '' }) {
     <section className={`stub-panel archive-totals-panel ${className}`.trim()}>
       <div className="card-title-row">
         <h2>Archive Totals</h2>
-        <div className="dashboard-updated">
-          {captureSummary?.archivalFireYear ? `Fire year ${captureSummary.archivalFireYear}` : ''}
-        </div>
       </div>
       <div className="text-muted">{headline}</div>
       <div className="metrics-card-grid is-three archive-totals-grid">
@@ -1439,7 +1589,7 @@ function DetailCard({ title, children }) {
   );
 }
 
-function GalleryImage({ asset }) {
+function GalleryImage({ asset, onOpen }) {
   const [failed, setFailed] = React.useState(false);
   const [localObjectUrl, setLocalObjectUrl] = React.useState('');
 
@@ -1467,20 +1617,41 @@ function GalleryImage({ asset }) {
   }
 
   return (
-    <img
-      src={sourceUrl}
-      alt={asset.title}
-      className="gallery-card__image"
-      loading="lazy"
-      referrerPolicy="no-referrer"
-      onError={() => {
-        if (localObjectUrl && liveUrl && sourceUrl === localObjectUrl) {
+    <button
+      type="button"
+      className="gallery-card__button"
+      onClick={() => onOpen?.({ src: sourceUrl, title: asset.title || 'Incident image' })}
+    >
+      <img
+        src={sourceUrl}
+        alt={asset.title}
+        className="gallery-card__image"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => {
+          if (localObjectUrl && liveUrl && sourceUrl === localObjectUrl) {
+            setFailed(true);
+            return;
+          }
           setFailed(true);
-          return;
-        }
-        setFailed(true);
-      }}
-    />
+        }}
+      />
+    </button>
+  );
+}
+
+function PinnedIncidentsPanel({ hasActiveDb, className = '' }) {
+  return (
+    <section className={`stub-panel ${className}`.trim()}>
+      <div className="card-title-row">
+        <h2>Pinned Incidents</h2>
+      </div>
+      <div className="text-muted">
+        {hasActiveDb
+          ? 'Pinned incidents are not yet backed by a saved pin model. No operator-curated pins are being shown.'
+          : 'Select an active SQLite DB before pinned incidents can be modeled truthfully.'}
+      </div>
+    </section>
   );
 }
 
@@ -1500,8 +1671,18 @@ function BlankRoute() {
 function PlaceholderPage({ title, message }) {
   return (
     <div className="stub-page">
-      <h1>{title}</h1>
-      <p>{message}</p>
+      <PageHeader
+        title={title}
+        subtitle={message}
+        chips={[
+          { label: title, status: 'not_wired' },
+          { label: 'Storage', status: 'no_db' },
+        ]}
+      />
+      <section className="stub-panel">
+        <h2>Not wired in this runtime</h2>
+        <p>{message}</p>
+      </section>
     </div>
   );
 }
@@ -1679,12 +1860,23 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
 
   return (
     <div className="stub-page">
-      <h1>Settings</h1>
-      <p>Current runtime: {desktopActive ? 'Electron desktop shell.' : 'browser fallback with no DB.'}</p>
-      <p>Incident capture is manual in desktop runtime. Weather and Discourse are not wired in this runtime.</p>
-      <p>Storage state: {dbStatus.hasActiveDb ? 'DB selected' : 'No DB selected'}.</p>
-      <p>Incident capture state: {dbStatus.captureStateLabel}.</p>
-      <p>Auto-check: {dbStatus.autoCheckEnabled ? `Enabled (${dbStatus.autoCheckMinutes} min)` : 'Disabled'}.</p>
+      <PageHeader
+        title="Settings"
+        subtitle="Desktop archive controls, truthful run state, and storage visibility."
+        chips={[
+          { label: 'Runtime', status: desktopActive ? 'db_selected' : 'browser_fallback' },
+          { label: 'Capture', status: dbStatus.captureStateCode },
+          { label: 'Storage', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
+        ]}
+      />
+      <section className="settings-note-card">
+        <div className="mini-list">
+          <div>Runtime: {desktopActive ? 'Electron desktop shell' : 'Browser fallback with no DB controls'}</div>
+          <div>Storage: {dbStatus.hasActiveDb ? 'SQLite DB selected' : 'No DB selected'}</div>
+          <div>Capture state: {dbStatus.captureStateLabel}</div>
+          <div>Auto-check: {dbStatus.autoCheckEnabled ? `Enabled (${dbStatus.autoCheckMinutes} min)` : 'Disabled'}</div>
+        </div>
+      </section>
       <section className={`capture-status-panel is-${dbStatus.captureStateCode}`.trim()}>
         <div className="capture-status-panel__header">
           <div className="capture-status-panel__title">
@@ -1851,6 +2043,10 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
         >
           Delete DB
         </button>
+      </div>
+      <div className="text-muted settings-helper-copy">
+        Capture incidents refreshes the current 2025 published incident set, detail records, media, maps, and run summary.
+        Recover response history reprocesses already archived raw detail payloads without rerunning a full capture.
       </div>
       {!desktopActive ? <p>DB lifecycle controls are available only in desktop runtime.</p> : null}
       {captureSummary ? <div className="list-results-label">{captureSummary}</div> : null}
@@ -2146,6 +2342,16 @@ function displayValue(value) {
     return '--';
   }
   return Number(value).toLocaleString('en-CA');
+}
+
+function formatSizeHa(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—';
+  }
+  const hectares = Number(value);
+  return hectares >= 100
+    ? `${Math.round(hectares).toLocaleString('en-CA')} ha`
+    : `${hectares.toFixed(1)} ha`;
 }
 
 function formatQueryScope(scope) {

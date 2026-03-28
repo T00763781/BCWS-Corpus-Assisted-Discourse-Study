@@ -17,11 +17,13 @@ const PHASE4D_AUTO_VERIFY = process.env.OF_PHASE4D_AUTO_VERIFY === '1';
 const PHASE4G_AUTO_VERIFY = process.env.OF_PHASE4G_AUTO_VERIFY === '1';
 const PHASE4H_AUTO_VERIFY = process.env.OF_PHASE4H_AUTO_VERIFY === '1';
 const PHASE4I_AUTO_VERIFY = process.env.OF_PHASE4I_AUTO_VERIFY === '1';
+const PHASE5_AUTO_VERIFY = process.env.OF_PHASE5_AUTO_VERIFY === '1';
 const EXTRA_INCIDENT_CAPTURE_ROUTE = process.env.OF_CAPTURE_INCIDENT_ROUTE || '';
 const SHOULD_CONTINUE_AFTER_AUTO_CAPTURE =
-  PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY || PHASE4H_AUTO_VERIFY || PHASE4I_AUTO_VERIFY;
+  PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY || PHASE4H_AUTO_VERIFY || PHASE4I_AUTO_VERIFY || PHASE5_AUTO_VERIFY;
 const dbLifecycle = createDbLifecycleManager({ app, dialog, BrowserWindow });
 let autoCheckTimer = null;
+const APP_ICON_PATH = path.join(__dirname, '..', 'public', 'assets', 'icon.svg');
 
 function broadcastCaptureProgress(payload) {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -39,6 +41,7 @@ function createWindow() {
     minHeight: 760,
     backgroundColor: '#050713',
     autoHideMenuBar: true,
+    icon: fs.existsSync(APP_ICON_PATH) ? APP_ICON_PATH : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
@@ -88,7 +91,8 @@ async function captureIncidentTab(win, hash, tabLabel, fileName, waitMs = 1500) 
       (async () => {
         const started = Date.now();
         while (Date.now() - started < 15000) {
-          const button = [...document.querySelectorAll('button')].find(
+          const tabButtons = [...document.querySelectorAll('.incident-tabs button')];
+          const button = tabButtons.find(
             (item) => item.textContent && item.textContent.trim() === ${JSON.stringify(tabLabel)}
           );
           if (button) {
@@ -103,6 +107,48 @@ async function captureIncidentTab(win, hash, tabLabel, fileName, waitMs = 1500) 
     true
   );
   await captureCurrentView(win, fileName, waitMs);
+}
+
+async function clickFirstGalleryAsset(win) {
+  await win.webContents.executeJavaScript(
+    `
+      (async () => {
+        const started = Date.now();
+        while (Date.now() - started < 15000) {
+          const button = document.querySelector('.gallery-card__button');
+          if (button) {
+            button.click();
+            return true;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        return false;
+      })();
+    `,
+    true
+  );
+}
+
+async function waitForIncidentListRows(win) {
+  await win.webContents.executeJavaScript(
+    `
+      (async () => {
+        const started = Date.now();
+        while (Date.now() - started < 30000) {
+          const hasRows = document.querySelectorAll('.incident-table tbody tr').length > 1
+            || document.querySelector('.incident-link');
+          const loadingCell = document.querySelector('.table-empty');
+          const loading = loadingCell && /Loading incidents/i.test(loadingCell.textContent || '');
+          if (hasRows && !loading) {
+            return true;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        return false;
+      })();
+    `,
+    true
+  );
 }
 
 function restartAutoCheckTimer() {
@@ -262,6 +308,45 @@ app.whenReady().then(async () => {
   if (PHASE4I_AUTO_VERIFY) {
     await loadRenderer(win, '#/incidents/2025/G70422');
     await captureCurrentView(win, 'phase4i-g70422-detail.png', 3500);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE5_AUTO_VERIFY) {
+    await captureView(win, '#/dashboard', 'phase5-dashboard.png');
+    await loadRenderer(win, '#/incidents');
+    await waitForIncidentListRows(win);
+    await captureCurrentView(win, 'phase5-incidents-list.png', 1200);
+    await captureView(win, '#/configure', 'phase5-settings.png');
+    await captureIncidentTab(win, '#/incidents/2025/G70422', 'Response', 'phase5-g70422-response.png', 2500);
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await win.webContents.executeJavaScript(
+      `
+        (async () => {
+          const started = Date.now();
+          while (Date.now() - started < 15000) {
+            const button = [...document.querySelectorAll('button')].find(
+              (item) => item.textContent && item.textContent.trim() === 'Gallery'
+            );
+            if (button) {
+              button.click();
+              return true;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          }
+          return false;
+        })();
+      `,
+      true
+    );
+    await clickFirstGalleryAsset(win);
+    await captureCurrentView(win, 'phase5-g70422-gallery-full-view.png', 2200);
+    await captureIncidentTab(win, '#/incidents/2025/G90425', 'Maps', 'phase5-g90425-maps.png', 2500);
+    await loadRenderer(win, '#/incidents/2025/K60922');
+    await captureCurrentView(win, 'phase5-k60922-detail.png', 2600);
     if (SMOKE_MODE) {
       app.quit();
       return;

@@ -74,6 +74,46 @@ function isImageAttachment(asset) {
   return mimeType.startsWith('image/') || Boolean(asset?.imageUrl) || Boolean(asset?.thumbnailUrl);
 }
 
+function isMapAttachment(asset) {
+  const mimeType = String(asset?.mimeType || '').toLowerCase();
+  const title = String(asset?.title || asset?.fileName || '').toLowerCase();
+  const description = String(asset?.description || '').toLowerCase();
+  return (
+    mimeType.includes('pdf') ||
+    mimeType.includes('geopdf') ||
+    title.includes('map') ||
+    title.includes('perimeter') ||
+    description.includes('map') ||
+    description.includes('perimeter')
+  );
+}
+
+function isMapLink(link) {
+  const category = String(link?.category || '').toLowerCase();
+  const label = String(link?.label || '').toLowerCase();
+  const url = String(link?.url || '').toLowerCase();
+  return (
+    category.includes('map') ||
+    category.includes('pdf') ||
+    label.includes('map') ||
+    label.includes('perimeter') ||
+    label.includes('document') ||
+    url.includes('.pdf')
+  );
+}
+
+function buildIncidentListAffordances(fireYear, incidentNumber, parsedDetail, captureStatus) {
+  const attachments = Array.isArray(parsedDetail?.attachments) ? parsedDetail.attachments : [];
+  const externalLinks = Array.isArray(parsedDetail?.externalLinks) ? parsedDetail.externalLinks : [];
+  const responseUpdates = Array.isArray(parsedDetail?.response?.responseUpdates) ? parsedDetail.response.responseUpdates : [];
+  const hasMapDownloads = attachments.some(isMapAttachment) || externalLinks.some(isMapLink);
+  return {
+    hasMedia: Boolean(captureStatus?.hasLocalMedia) || attachments.some((asset) => isImageAttachment(asset)),
+    hasMapDownloads,
+    hasResponseHistory: Boolean(captureStatus?.hasResponseHistory) || responseUpdates.length > 0,
+  };
+}
+
 function getAttachmentMediaTargets(asset) {
   const targets = [];
   const fullUrl = normalizeBcwsUrl(asset?.imageUrl);
@@ -1910,10 +1950,50 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
   const getIncidentListLocal = () => {
     if (!db) return { ok: false, error: 'No active DB selected.', rows: [], hasLocalData: false };
     const rows = db.exec(
-      'SELECT row_json FROM incidents ORDER BY COALESCE(updated_date, discovery_date, last_captured_at) DESC'
+      `
+      SELECT
+        i.fire_year,
+        i.incident_number,
+        i.row_json,
+        i.detail_json,
+        s.has_detail_source,
+        s.has_attachments_metadata,
+        s.has_local_media,
+        s.has_external_links_metadata,
+        s.has_perimeter_payload,
+        s.has_response_history
+      FROM incidents AS i
+      LEFT JOIN incident_capture_status AS s
+        ON s.fire_year = i.fire_year
+       AND s.incident_number = i.incident_number
+      ORDER BY COALESCE(i.updated_date, i.discovery_date, i.last_captured_at) DESC
+      `
     );
     const collection = rows.length
-      ? rows[0].values.map((valueRow) => safeJsonParse(String(valueRow[0]), null)).filter(Boolean)
+      ? rows[0].values
+          .map((valueRow) => {
+            const parsedRow = safeJsonParse(String(valueRow[2] || ''), null);
+            if (!parsedRow) return null;
+            const parsedDetail = safeJsonParse(String(valueRow[3] || ''), null);
+            const captureStatus = {
+              hasDetailSource: Boolean(valueRow[4]),
+              hasAttachmentsMetadata: Boolean(valueRow[5]),
+              hasLocalMedia: Boolean(valueRow[6]),
+              hasExternalLinksMetadata: Boolean(valueRow[7]),
+              hasPerimeterPayload: Boolean(valueRow[8]),
+              hasResponseHistory: Boolean(valueRow[9]),
+            };
+            return {
+              ...parsedRow,
+              affordances: buildIncidentListAffordances(
+                String(valueRow[0] || parsedRow.fireYear || ''),
+                String(valueRow[1] || parsedRow.incidentNumber || ''),
+                parsedDetail,
+                captureStatus
+              ),
+            };
+          })
+          .filter(Boolean)
       : [];
     return {
       ok: true,

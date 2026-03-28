@@ -561,6 +561,7 @@ export async function fetchIncidentDetail(fireYear, incidentNumber, seedIncident
     title: item.attachmentTitle || item.fileName || 'Untitled asset',
     description: item.attachmentDescription,
     fileName: item.fileName || item.attachmentTitle || '',
+    downloadUrl: toPublicAttachmentUrl(incident.incidentNumber, item.attachmentGuid, fireYear, false),
     imageUrl: String(item.mimeType || '').toLowerCase().startsWith('image/')
       ? toPublicAttachmentUrl(incident.incidentNumber, item.attachmentGuid, fireYear, false)
       : '',
