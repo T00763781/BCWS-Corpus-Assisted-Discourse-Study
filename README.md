@@ -1,26 +1,68 @@
 # Open Fireside
 
-Open Fireside is a shell-first React/Vite workspace.
+Open Fireside is a local-first BC Wildfire archival and verification workspace built with Electron, React, and SQLite.
 
-Current repo state:
-- `Dashboard` is wired to live BCWS public wildfire and evacuation endpoints
-- `Incidents` is wired to the live BCWS public incident list and internal detail route
-- `Configure > Sources` preserves the factual BCWS perimeter widget
-- `Weather`, `Maps`, and `Discourse` remain blank shell surfaces
+## Current Scope
+
+- Incident capture archives the published 2025 BCWS incident set into a selected SQLite database.
+- Incident detail pages prefer local SQLite data and fall back to live BCWS only when required artifacts are missing.
+- Gallery media can be stored as SQLite blobs and rendered locally before any live fallback.
+- Settings exposes capture progress, last-run diagnostics, archival completeness, and storage footprint.
 
 ## Run
 
-```bash
-npm install
-npm run dev
+```powershell
+npm.cmd install
+npm.cmd run dev:desktop
 ```
 
-Open:
-- `http://127.0.0.1:5173/#/dashboard`
-- `http://127.0.0.1:5173/#/incidents`
+## Public QA Deployment
+
+- GitHub Pages can be used as a public QA / visual-audit surface for the web build at `https://T00763781.github.io/BCWS-Corpus-Assisted-Discourse-Study/`.
+- This Pages deployment is for browser-based inspection only.
+- The Electron desktop runtime remains the primary incident archive workflow for SQLite selection, capture, recovery, and local-media verification.
+- The public web build must stay truthful about those desktop-only limits instead of implying local DB capability.
+
+To start against a fresh archival database:
+
+```powershell
+$env:OF_DB_CREATE_PATH='C:\Users\earl\OneDrive\Documents\open-fireside-incident-archive-2025.sqlite'
+npm.cmd run dev:desktop
+```
+
+## Archival Modes
+
+### Published-set archival
+
+This is the current working archival mode.
+
+- Source: BCWS `publicPublishedIncident`
+- Scope: `fireYear=2025`
+- Filters: `stageOfControlList=OUT_CNTRL,HOLDING,UNDR_CNTRL,OUT`
+- Behavior: paginates until endpoint exhaustion, then captures detail, attachments, external links, perimeter payloads, response-history extraction, and local media blobs
+
+### Historical completeness status
+
+Open Fireside is currently truthful but endpoint-limited.
+
+- It can prove complete capture of the validated public 2025 published-set query above.
+- It does not currently claim full historical-season completeness beyond that upstream public source.
+- Phase 4j source investigation did not validate a broader trustworthy and incident-joinable public 2025 source.
+
+See `docs/audits/phase4j-historical-source-expansion.md` for the source-discovery audit.
+
+## Operator Visibility
+
+Settings currently shows:
+
+- active DB path
+- live capture progress and current stage
+- last completed run diagnostics
+- archival completeness counts
+- media/storage totals
 
 ## Notes
 
-- The app only keeps factual endpoint-backed dashboard and incident views.
-- Stubbed dashboard panels are limited to `Discourse Signals` and `Incidents (pinned)`.
-- No fabricated summaries or placeholder data panels should be added.
+- The incident archival path is the primary maintained workflow.
+- G70422 has been used as a recurring verification incident for local detail and local media behavior.
+- Weather and discourse remain out of scope for the current archival hardening phases.
