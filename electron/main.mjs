@@ -72,6 +72,10 @@ async function loadRenderer(win, hash = '#/dashboard') {
   await win.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(hash)};`, true);
 }
 
+async function setRendererHash(win, hash = '#/dashboard') {
+  await win.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(hash)};`, true);
+}
+
 async function captureView(win, hash, fileName) {
   if (!CAPTURE_DIR) return;
   await loadRenderer(win, hash);
@@ -325,7 +329,8 @@ app.whenReady().then(async () => {
     await clickButtonByText(win, BOOT_TAB_LABEL);
   }
   if (HOLD_HASH) {
-    await loadRenderer(win, HOLD_HASH);
+    await waitForSelector(win, '.app-shell');
+    await setRendererHash(win, HOLD_HASH);
     if (HOLD_TAB_LABEL) {
       await waitForSelector(win, '.incident-tabs');
       await clickButtonByText(win, HOLD_TAB_LABEL);

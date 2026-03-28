@@ -221,6 +221,14 @@ async function fetchCaptureSummary() {
       mediaRecordCount: 0,
       thumbnailStoredCount: 0,
       fullImageStoredCount: 0,
+      imageAssetCount: 0,
+      documentAssetCount: 0,
+      videoAssetCount: 0,
+      otherAssetCount: 0,
+      imageAssetBytes: 0,
+      documentAssetBytes: 0,
+      videoAssetBytes: 0,
+      otherAssetBytes: 0,
       totalMediaBytes: 0,
       archivalFireYear: 0,
       endpointTotalRowCount: 0,
@@ -1203,6 +1211,35 @@ function getGalleryLiveUrl(asset) {
   return asset?.imageUrl || asset?.thumbnailUrl || '';
 }
 
+function getAssetOpenUrl(incident, asset) {
+  return getLocalOriginalAsset(asset)?.base64
+    ? null
+    : getAttachmentDownloadUrl(incident, asset) || getGalleryLiveUrl(asset) || '';
+}
+
+function getAssetSourceState(incident, asset) {
+  if (getLocalOriginalAsset(asset)?.base64) return 'local';
+  if (getAssetOpenUrl(incident, asset)) return 'live';
+  if (asset?.attachmentGuid || asset?.fileName || asset?.title) return 'metadata';
+  return 'unavailable';
+}
+
+function assetSourceLabel(sourceState) {
+  if (sourceState === 'local') return 'Local archived bytes';
+  if (sourceState === 'live') return 'Live fallback';
+  if (sourceState === 'metadata') return 'Local metadata only';
+  return 'Unavailable';
+}
+
+function formatAssetMeta(asset, localAsset = null) {
+  const bits = [];
+  const mimeType = localAsset?.mimeType || asset?.mimeType || '';
+  if (mimeType) bits.push(mimeType);
+  const byteLength = localAsset?.byteLength ?? asset?.byteLength ?? 0;
+  if (byteLength) bits.push(formatBytes(byteLength));
+  return bits.join(' | ') || 'File details unavailable';
+}
+
 function getGalleryMediaState(attachments, pageSource, captureStatus) {
   const items = Array.isArray(attachments) ? attachments : [];
   const renderable = items.filter((asset) => isRenderableGalleryAsset(asset) && (getLocalOriginalAsset(asset) || getGalleryLiveUrl(asset)));
@@ -1224,13 +1261,13 @@ function gallerySourceNote(galleryState, attachments, captureStatus) {
   const renderable = items.filter((asset) => isRenderableGalleryAsset(asset) && (getLocalOriginalAsset(asset) || getGalleryLiveUrl(asset)));
   const localCount = renderable.filter((asset) => getLocalOriginalAsset(asset)).length;
   if (galleryState === 'local') {
-    return `Gallery source: Local archived asset bytes from SQLite. Original local bytes available for ${localCount} of ${renderable.length} displayable assets.`;
+    return `Gallery source: Local archived bytes. Original local files are available for ${localCount} of ${renderable.length} displayable assets.`;
   }
   if (galleryState === 'mixed') {
-    return `Gallery source: Local archived asset bytes + live fallback. Original local bytes available for ${localCount} of ${renderable.length} displayable assets.`;
+    return `Gallery source: Mixed local archived bytes and live fallback. Original local files are available for ${localCount} of ${renderable.length} displayable assets.`;
   }
   if (galleryState === 'live') {
-    return `Gallery source: Live BCWS only. Local attachment metadata: ${captureStatus?.hasAttachmentsMetadata ? 'yes' : 'no'}.`;
+    return `Gallery source: Live fallback only. Local attachment metadata: ${captureStatus?.hasAttachmentsMetadata ? 'yes' : 'no'}.`;
   }
   return 'Gallery source: Unavailable. No local archived bytes or live display URLs are available for this incident.';
 }
@@ -1289,18 +1326,18 @@ function getAttachmentDownloadUrl(incident, asset) {
 
 function mapsSourceNote(source, captureStatus) {
   if (source === 'local') {
-    return `Maps source: Local archived map/document bytes when available. Local perimeter: ${
+    return `Maps source: Local archived bytes first. Local perimeter: ${
       captureStatus?.hasPerimeterPayload ? 'yes' : 'no'
     } | local attachment bytes: ${captureStatus?.hasLocalAssets ? 'yes' : 'no'}.`;
   }
   if (source === 'mixed') {
-    return `Maps source: Local metadata/bytes + live fallback. Local perimeter: ${
+    return `Maps source: Mixed local bytes/metadata with live fallback. Local perimeter: ${
       captureStatus?.hasPerimeterPayload ? 'yes' : 'no'
     } | local attachment bytes: ${captureStatus?.hasLocalAssets ? 'yes' : 'no'} | local external links: ${
       captureStatus?.hasExternalLinksMetadata ? 'yes' : 'no'
     }.`;
   }
-  return 'Maps source: Live BCWS.';
+  return 'Maps source: Live fallback.';
 }
 
 function mergeLiveIncidentWithLocalAssets(localData, liveData) {
@@ -1537,8 +1574,10 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus, pinnedIncident
             <div className="gallery-grid">
               {state.data.attachments.map((asset) => (
                 <article key={asset.attachmentGuid} className="gallery-card">
-                  <GalleryAsset asset={asset} onOpen={(payload) => setLightbox(payload)} />
+                  <GalleryAsset incident={incident} asset={asset} onOpen={(payload) => setLightbox(payload)} />
                   <div className="gallery-card__title">{asset.title}</div>
+                  <div className={`asset-source-pill is-${getAssetSourceState(incident, asset)}`}>{assetSourceLabel(getAssetSourceState(incident, asset))}</div>
+                  <div className="gallery-card__meta">{formatAssetMeta(asset, asset?.localOriginalAsset || null)}</div>
                   <div className="gallery-card__date">{formatDate(asset.uploadedTimestamp)}</div>
                 </article>
               ))}
@@ -1585,11 +1624,29 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus, pinnedIncident
       {lightbox ? (
         <div className="lightbox-backdrop" role="dialog" aria-modal="true" onClick={() => setLightbox(null)}>
           <div className="lightbox-panel" onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="lightbox-close" onClick={() => setLightbox(null)}>
-              Close
-            </button>
+            <div className="lightbox-actions">
+              <div className={`asset-source-pill is-${lightbox.sourceState}`}>{assetSourceLabel(lightbox.sourceState)}</div>
+              <div className="lightbox-actions__buttons">
+                {lightbox.openHref ? (
+                  <a href={lightbox.openHref} target="_blank" rel="noreferrer" className="lightbox-link">
+                    {lightbox.sourceState === 'local' ? 'Open archived original' : 'Open live source'}
+                  </a>
+                ) : null}
+                {lightbox.downloadHref ? (
+                  <a href={lightbox.downloadHref} download={lightbox.downloadName || 'incident-image'} className="lightbox-link">
+                    Download original
+                  </a>
+                ) : null}
+                <button type="button" className="lightbox-close" onClick={() => setLightbox(null)}>
+                  Close
+                </button>
+              </div>
+            </div>
             <img src={lightbox.src} alt={lightbox.title} className="lightbox-image" />
-            <div className="lightbox-caption">{lightbox.title}</div>
+            <div className="lightbox-caption">
+              <div>{lightbox.title}</div>
+              <div className="lightbox-caption__meta">{lightbox.meta}</div>
+            </div>
           </div>
         </div>
       ) : null}
@@ -1877,11 +1934,12 @@ function useAssetObjectUrl(localAsset) {
   return { failed, setFailed, localObjectUrl };
 }
 
-function GalleryAsset({ asset, onOpen }) {
+function GalleryAsset({ incident, asset, onOpen }) {
   const localAsset = asset?.localOriginalAsset || null;
   const { failed, setFailed, localObjectUrl } = useAssetObjectUrl(localAsset);
   const liveUrl = getGalleryLiveUrl(asset);
   const sourceUrl = !failed && localObjectUrl ? localObjectUrl : liveUrl;
+  const sourceState = getAssetSourceState(incident, asset);
 
   if (isVideoAttachment(asset)) {
     if (!sourceUrl) {
@@ -1910,7 +1968,17 @@ function GalleryAsset({ asset, onOpen }) {
     <button
       type="button"
       className="gallery-card__button"
-      onClick={() => onOpen?.({ src: sourceUrl, title: asset.title || 'Incident image' })}
+      onClick={() =>
+        onOpen?.({
+          src: sourceUrl,
+          title: asset.title || 'Incident image',
+          meta: formatAssetMeta(asset, localAsset),
+          sourceState,
+          openHref: sourceUrl,
+          downloadHref: localObjectUrl || '',
+          downloadName: asset.fileName || asset.title || 'incident-image',
+        })
+      }
     >
       <img
         src={sourceUrl}
@@ -1934,21 +2002,30 @@ function AssetDownloadCard({ incident, asset }) {
   const localAsset = asset?.localOriginalAsset || null;
   const { localObjectUrl } = useAssetObjectUrl(localAsset);
   const href = localObjectUrl || getAttachmentDownloadUrl(incident, asset) || asset.imageUrl || '';
-  const archivedLocally = Boolean(localAsset?.base64);
+  const sourceState = getAssetSourceState(incident, asset);
+  const archivedLocally = sourceState === 'local';
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="download-card"
-      download={archivedLocally ? asset.fileName || asset.title || 'incident-asset' : undefined}
-    >
+    <article className="download-card">
       <div className="download-card__title">{asset.title || asset.fileName || 'Map document'}</div>
-      <div className="download-card__meta">
-        {archivedLocally ? 'Local archived binary' : 'Archived metadata + live download fallback'}
-        {asset.mimeType ? ` · ${asset.mimeType}` : ''}
+      <div className={`asset-source-pill is-${sourceState}`}>{assetSourceLabel(sourceState)}</div>
+      <div className="download-card__meta">{formatAssetMeta(asset, localAsset)}</div>
+      <div className="download-card__actions">
+        {href ? (
+          <a href={href} target="_blank" rel="noreferrer" className="download-card__action">
+            {archivedLocally ? 'Open archived copy' : 'Open live file'}
+          </a>
+        ) : null}
+        {archivedLocally ? (
+          <a
+            href={localObjectUrl}
+            className="download-card__action is-secondary"
+            download={asset.fileName || asset.title || 'incident-asset'}
+          >
+            Download archived file
+          </a>
+        ) : null}
       </div>
-    </a>
+    </article>
   );
 }
 
@@ -2058,6 +2135,14 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
     mediaRecordCount: 0,
     thumbnailStoredCount: 0,
     fullImageStoredCount: 0,
+    imageAssetCount: 0,
+    documentAssetCount: 0,
+    videoAssetCount: 0,
+    otherAssetCount: 0,
+    imageAssetBytes: 0,
+    documentAssetBytes: 0,
+    videoAssetBytes: 0,
+    otherAssetBytes: 0,
     totalMediaBytes: 0,
     archivalFireYear: 0,
     endpointTotalRowCount: 0,
@@ -2327,9 +2412,17 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
               { label: 'Captured incidents', value: displayValue(dbStatus.capturedIncidentCount) },
               { label: 'Incidents with assets', value: displayValue(captureCompleteness.localMediaIncidentCount) },
               { label: 'Asset records', value: displayValue(captureCompleteness.mediaRecordCount) },
+              { label: 'Archived images', value: displayValue(captureCompleteness.imageAssetCount) },
+              { label: 'Archived documents', value: displayValue(captureCompleteness.documentAssetCount) },
+              { label: 'Archived videos', value: displayValue(captureCompleteness.videoAssetCount) },
+              { label: 'Other archived assets', value: displayValue(captureCompleteness.otherAssetCount) },
               { label: 'Thumbnail records', value: displayValue(captureCompleteness.thumbnailStoredCount) },
               { label: 'Original asset records', value: displayValue(captureCompleteness.fullImageStoredCount) },
-              { label: 'Asset bytes', value: formatBytes(captureCompleteness.totalMediaBytes) },
+              { label: 'Image bytes', value: formatBytes(captureCompleteness.imageAssetBytes) },
+              { label: 'Document bytes', value: formatBytes(captureCompleteness.documentAssetBytes) },
+              { label: 'Video bytes', value: formatBytes(captureCompleteness.videoAssetBytes) },
+              { label: 'Other asset bytes', value: formatBytes(captureCompleteness.otherAssetBytes) },
+              { label: 'Total asset bytes', value: formatBytes(captureCompleteness.totalMediaBytes) },
               { label: 'Attachments metadata', value: displayValue(captureCompleteness.attachmentsMetadataCount) },
               { label: 'External links metadata', value: displayValue(captureCompleteness.externalLinksMetadataCount) },
               { label: 'Perimeter payloads', value: displayValue(captureCompleteness.perimeterPayloadCount) },
@@ -2344,6 +2437,10 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
               { label: 'Last capture error', value: dbStatus.lastCaptureError || '--' },
             ]}
           />
+          <div className="settings-helper-block">
+            <div><strong>Retention:</strong> archived asset bytes stay inside the selected SQLite file until the archive is replaced or deleted.</div>
+            <div><strong>Desktop vs web:</strong> desktop can open archived local files directly; the public QA build can only show live BCWS fallbacks.</div>
+          </div>
         </SettingsSectionCard>
 
         <SettingsSectionCard title="Controls and maintenance" eyebrow="Operator actions" className="settings-section-card--wide">
