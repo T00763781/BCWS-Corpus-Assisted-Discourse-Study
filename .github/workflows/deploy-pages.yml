@@ -3,8 +3,7 @@ name: Build and Deploy (Pages)
 on:
   push:
     branches:
-      - main
-      - restore/open-fireside-app
+      - codex/phase-5b-pages-deploy
   workflow_dispatch:
 
 permissions:
@@ -32,11 +31,13 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev
 
-      - name: Build
-        run: npm run build -- --base=/${{ github.event.repository.name }}/
-
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
+      - name: Build
+        env:
+          VITE_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}/
+        run: npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

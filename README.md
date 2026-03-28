@@ -16,6 +16,13 @@ npm.cmd install
 npm.cmd run dev:desktop
 ```
 
+## Public QA Deployment
+
+- GitHub Pages can be used as a public QA / visual-audit surface for the web build at `https://T00763781.github.io/BCWS-Corpus-Assisted-Discourse-Study/`.
+- This Pages deployment is for browser-based inspection only.
+- The Electron desktop runtime remains the primary incident archive workflow for SQLite selection, capture, recovery, and local-media verification.
+- The public web build must stay truthful about those desktop-only limits instead of implying local DB capability.
+
 To start against a fresh archival database:
 
 ```powershell

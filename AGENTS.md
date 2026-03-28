@@ -8,6 +8,7 @@ Use it to preserve working truth, current constraints, and prioritized next step
 ## Current product truth
 
 - Open Fireside is a Windows/Electron desktop incident archive tool under active development.
+- A GitHub Pages web build can be used as a public QA / visual-audit surface, but it is not the primary archive runtime.
 - The incident pipeline now captures and stores the **published 2025 BCWS incident set** exposed by the validated public query.
 - The archive is still **endpoint-limited**. Do **not** claim full 2025 historical-season completeness unless a broader trustworthy upstream source is actually validated.
 - The app can now store:
@@ -19,6 +20,7 @@ Use it to preserve working truth, current constraints, and prioritized next step
   - response-history entries when extractable
   - local media blobs in SQLite
 - Local vs live vs mixed rendering must remain explicit and truthful in the UI.
+- Public web QA builds must stay explicit that desktop SQLite selection, capture, and recovery controls are unavailable there.
 
 ## Do not regress
 

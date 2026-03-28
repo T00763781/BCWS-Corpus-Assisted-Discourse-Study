@@ -1871,7 +1871,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
       />
       <section className="settings-note-card">
         <div className="mini-list">
-          <div>Runtime: {desktopActive ? 'Electron desktop shell' : 'Browser fallback with no DB controls'}</div>
+          <div>Runtime: {desktopActive ? 'Electron desktop shell' : 'Public QA web build with no desktop DB controls'}</div>
           <div>Storage: {dbStatus.hasActiveDb ? 'SQLite DB selected' : 'No DB selected'}</div>
           <div>Capture state: {dbStatus.captureStateLabel}</div>
           <div>Auto-check: {dbStatus.autoCheckEnabled ? `Enabled (${dbStatus.autoCheckMinutes} min)` : 'Disabled'}</div>
@@ -2048,7 +2048,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
         Capture incidents refreshes the current 2025 published incident set, detail records, media, maps, and run summary.
         Recover response history reprocesses already archived raw detail payloads without rerunning a full capture.
       </div>
-      {!desktopActive ? <p>DB lifecycle controls are available only in desktop runtime.</p> : null}
+      {!desktopActive ? <p>Desktop DB lifecycle and capture controls are unavailable in the public QA web build.</p> : null}
       {captureSummary ? <div className="list-results-label">{captureSummary}</div> : null}
       {recoverySummary ? <div className="list-results-label">{recoverySummary}</div> : null}
       {error ? <div className="error-banner">{error}</div> : null}
