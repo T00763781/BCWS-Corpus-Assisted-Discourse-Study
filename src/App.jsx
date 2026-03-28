@@ -2,9 +2,12 @@ import React from 'react';
 import L from 'leaflet';
 import { fetchBcwsPerimeterWidget } from './bcwsPerimeter.js';
 import {
+  ARCHIVAL_FIRE_YEAR,
+  ARCHIVAL_STAGE_CODES,
   DASHBOARD_FIRE_YEAR,
   FIRE_CENTRES,
   STAGE_DEFS,
+  fetchArchivalIncidentList,
   fetchDashboardData,
   fetchIncidentDetail,
   fetchIncidentList,
@@ -122,6 +125,14 @@ async function fetchCaptureSummary() {
       thumbnailStoredCount: 0,
       fullImageStoredCount: 0,
       totalMediaBytes: 0,
+      archivalFireYear: 0,
+      endpointTotalRowCount: 0,
+      endpointRowsFetched: 0,
+      endpointPageCount: 0,
+      persistedIncidentCount: 0,
+      completenessStatus: 'partial',
+      completenessWarning: '',
+      queryScope: {},
       lastRun: null,
       failureCategoryCounts: {},
     };
@@ -157,12 +168,59 @@ async function runIncidentCapture({ trigger = 'manual' } = {}) {
   const capturedAt = new Date().toISOString();
   let listRows = [];
   let targetRows = [];
+  let listMetadata = {
+    fireYear: ARCHIVAL_FIRE_YEAR,
+    totalRowCount: 0,
+    endpointRowsFetched: 0,
+    pageCountFetched: 0,
+    queryScope: {
+      fireYear: ARCHIVAL_FIRE_YEAR,
+      fireCentreName: '',
+      stageCodes: ARCHIVAL_STAGE_CODES,
+      searchText: '',
+      newFires: false,
+      orderBy: 'lastUpdatedTimestamp DESC',
+    },
+  };
   const detailRecords = [];
   const detailFailures = [];
   try {
-    await dbApi.markCaptureRunning({ trigger, startedAt: capturedAt });
-    const listPayload = await fetchIncidentList({ pageRowCount: 1000 });
+    await dbApi.markCaptureRunning({
+      trigger,
+      startedAt: capturedAt,
+      archivalFireYear: ARCHIVAL_FIRE_YEAR,
+      currentStageKey: 'list_ingest',
+      currentStageLabel: 'List ingest',
+      currentArtifactLabel: 'archival pagination',
+      currentActivity: `Loading 2025 archival incident pages`,
+    });
+    const listPayload = await fetchArchivalIncidentList({
+      fireYear: ARCHIVAL_FIRE_YEAR,
+      stageCodes: ARCHIVAL_STAGE_CODES,
+      pageRowCount: 200,
+      onProgress: async (progress) => {
+        await dbApi.markCaptureProgress({
+          archivalFireYear: ARCHIVAL_FIRE_YEAR,
+          endpointTotalRowCount: progress.endpointTotalRowCount,
+          endpointRowsFetched: progress.endpointRowsFetched,
+          endpointPageCount: progress.pageCountFetched,
+          listedIncidentCount: progress.matchingRowsFetched,
+          currentStageKey: 'list_ingest',
+          currentStageLabel: 'List ingest',
+          currentArtifactLabel: 'archival pagination',
+          currentActivity: `Fetched page ${progress.pageNumber}; ${progress.matchingRowsFetched} matching 2025 rows of ${progress.endpointTotalRowCount || '?'}`,
+          forcePersist: true,
+        });
+      },
+    });
     listRows = listPayload.rows || [];
+    listMetadata = {
+      fireYear: listPayload.fireYear || ARCHIVAL_FIRE_YEAR,
+      totalRowCount: listPayload.totalRowCount || listRows.length,
+      endpointRowsFetched: listPayload.endpointRowsFetched || listRows.length,
+      pageCountFetched: listPayload.pageCountFetched || 0,
+      queryScope: listPayload.queryScope || listMetadata.queryScope,
+    };
     const captureTargets = await fetchCaptureTargets();
     const incompleteSet = new Set(Object.keys(captureTargets?.incompleteKeySet || {}));
     targetRows = captureTargets?.recordedCount
@@ -171,6 +229,10 @@ async function runIncidentCapture({ trigger = 'manual' } = {}) {
       ? listRows.filter((row) => incompleteSet.has(`${String(row.fireYear)}:${String(row.incidentNumber)}`))
       : listRows;
     await dbApi.markCaptureProgress({
+      archivalFireYear: listMetadata.fireYear,
+      endpointTotalRowCount: listMetadata.totalRowCount,
+      endpointRowsFetched: listMetadata.endpointRowsFetched,
+      endpointPageCount: listMetadata.pageCountFetched,
       listedIncidentCount: listRows.length,
       targetedIncidentCount: targetRows.length,
       currentStageKey: 'detail',
@@ -184,6 +246,10 @@ async function runIncidentCapture({ trigger = 'manual' } = {}) {
       const chunk = targetRows.slice(index, index + chunkSize);
       const chunkLead = chunk[0];
       await dbApi.markCaptureProgress({
+        archivalFireYear: listMetadata.fireYear,
+        endpointTotalRowCount: listMetadata.totalRowCount,
+        endpointRowsFetched: listMetadata.endpointRowsFetched,
+        endpointPageCount: listMetadata.pageCountFetched,
         listedIncidentCount: listRows.length,
         targetedIncidentCount: targetRows.length,
         completedIncidentCount: detailRecords.length,
@@ -224,6 +290,10 @@ async function runIncidentCapture({ trigger = 'manual' } = {}) {
         });
       });
       await dbApi.markCaptureProgress({
+        archivalFireYear: listMetadata.fireYear,
+        endpointTotalRowCount: listMetadata.totalRowCount,
+        endpointRowsFetched: listMetadata.endpointRowsFetched,
+        endpointPageCount: listMetadata.pageCountFetched,
         listedIncidentCount: listRows.length,
         targetedIncidentCount: targetRows.length,
         completedIncidentCount: detailRecords.length,
@@ -238,6 +308,10 @@ async function runIncidentCapture({ trigger = 'manual' } = {}) {
     }
 
     await dbApi.markCaptureProgress({
+      archivalFireYear: listMetadata.fireYear,
+      endpointTotalRowCount: listMetadata.totalRowCount,
+      endpointRowsFetched: listMetadata.endpointRowsFetched,
+      endpointPageCount: listMetadata.pageCountFetched,
       listedIncidentCount: listRows.length,
       targetedIncidentCount: targetRows.length,
       completedIncidentCount: detailRecords.length,
@@ -254,6 +328,7 @@ async function runIncidentCapture({ trigger = 'manual' } = {}) {
       listRows,
       detailRecords,
       detailFailures,
+      listMetadata,
     });
     if (!saved?.ok) {
       throw new Error(saved?.error || 'Capture write failed.');
@@ -274,6 +349,10 @@ async function runIncidentCapture({ trigger = 'manual' } = {}) {
     await dbApi.markCaptureError(message, {
       trigger,
       startedAt: capturedAt,
+      archivalFireYear: listMetadata.fireYear,
+      endpointTotalRowCount: listMetadata.totalRowCount,
+      endpointRowsFetched: listMetadata.endpointRowsFetched,
+      endpointPageCount: listMetadata.pageCountFetched,
       listedIncidentCount: listRows.length,
       targetedIncidentCount: targetRows.length,
       completedIncidentCount: detailRecords.length,
@@ -1379,6 +1458,14 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
     thumbnailStoredCount: 0,
     fullImageStoredCount: 0,
     totalMediaBytes: 0,
+    archivalFireYear: 0,
+    endpointTotalRowCount: 0,
+    endpointRowsFetched: 0,
+    endpointPageCount: 0,
+    persistedIncidentCount: 0,
+    completenessStatus: 'partial',
+    completenessWarning: '',
+    queryScope: {},
     lastRun: null,
     failureCategoryCounts: {},
   });
@@ -1462,7 +1549,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
         throw new Error(result?.error || 'Incident capture failed');
       }
       setCaptureSummary(
-        `Captured ${result.capturedListCount} incidents | targeted detail retries ${result.saved.runSummary?.targetedIncidentCount ?? result.targetedIncidentCount ?? 0} | detail archived ${result.saved.runSummary?.detailCaptureSuccessCount ?? result.capturedDetailCount} | detail failures ${result.saved.runSummary?.detailCaptureFailureCount ?? result.detailFailureCount} | attachments ${result.saved.runSummary?.attachmentsCaptureCount ?? 0} | media attempts ${result.saved.runSummary?.mediaDownloadAttemptedCount ?? 0} | media stored ${result.saved.runSummary?.mediaStoredCount ?? 0} | media failures ${result.saved.runSummary?.mediaFailureCount ?? 0} | external links ${result.saved.runSummary?.externalLinksCaptureCount ?? 0} | perimeter ${result.saved.runSummary?.perimeterCaptureCount ?? 0} | response history ${result.saved.runSummary?.responseHistoryExtractedCount ?? 0}.`
+        `Captured ${result.capturedListCount} incidents for fire year ${result.saved.runSummary?.archivalFireYear ?? ARCHIVAL_FIRE_YEAR} | endpoint rows ${result.saved.runSummary?.endpointRowsFetched ?? result.capturedListCount} of ${result.saved.runSummary?.endpointTotalRowCount ?? result.capturedListCount} across ${result.saved.runSummary?.endpointPageCount ?? 0} pages | completeness ${result.saved.runSummary?.completenessStatus ?? 'partial'} | targeted detail retries ${result.saved.runSummary?.targetedIncidentCount ?? result.targetedIncidentCount ?? 0} | detail archived ${result.saved.runSummary?.detailCaptureSuccessCount ?? result.capturedDetailCount} | detail failures ${result.saved.runSummary?.detailCaptureFailureCount ?? result.detailFailureCount}.`
       );
       await refreshCaptureRuntime();
       await refreshCaptureSummary();
@@ -1541,6 +1628,10 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
               <div>Run mode: {activeRun.trigger || 'manual'}</div>
               <div>Started: {activeRun.startedAt ? formatDateTime(Date.parse(activeRun.startedAt)) : '--'}</div>
               <div>Elapsed: {formatDurationMs(shownElapsedMs)}</div>
+              <div>Archival fire year: {displayValue(activeRun.archivalFireYear || ARCHIVAL_FIRE_YEAR)}</div>
+              <div>Endpoint rows fetched: {displayValue(activeRun.endpointRowsFetched)}</div>
+              <div>Endpoint total rows: {displayValue(activeRun.endpointTotalRowCount)}</div>
+              <div>Endpoint pages fetched: {displayValue(activeRun.endpointPageCount)}</div>
               <div>Targeted incidents: {displayValue(activeRun.targetedIncidentCount)}</div>
               <div>Incidents completed: {displayValue(activeRun.completedIncidentCount)}</div>
               <div>Incidents failed: {displayValue(activeRun.failedIncidentCount)}</div>
@@ -1556,6 +1647,14 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
             <div>Started: {lastRun.startedAt ? formatDateTime(Date.parse(lastRun.startedAt)) : '--'}</div>
             <div>Finished: {lastRun.finishedAt ? formatDateTime(Date.parse(lastRun.finishedAt)) : '--'}</div>
             <div>Duration: {formatDurationMs(lastRun.durationMs)}</div>
+            <div>Archival fire year: {displayValue(lastRun.archivalFireYear)}</div>
+            <div>Endpoint total rows: {displayValue(lastRun.endpointTotalRowCount)}</div>
+            <div>Endpoint rows fetched: {displayValue(lastRun.endpointRowsFetched)}</div>
+            <div>Endpoint pages fetched: {displayValue(lastRun.endpointPageCount)}</div>
+            <div>Local incidents persisted: {displayValue(lastRun.persistedIncidentCount)}</div>
+            <div>Completeness status: {lastRun.completenessStatus || '--'}</div>
+            <div>Query scope: {formatQueryScope(lastRun.queryScope)}</div>
+            <div>Completeness warning: {lastRun.completenessWarning || '--'}</div>
             <div>Listed incidents: {displayValue(lastRun.listedIncidentCount)}</div>
             <div>Targeted incidents: {displayValue(lastRun.targetedIncidentCount)}</div>
             <div>Detail archived: {displayValue(lastRun.detailCaptureSuccessCount)}</div>
@@ -1581,6 +1680,12 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
         )}
       </section>
       <p>
+        Archival completeness: fire year {captureCompleteness.archivalFireYear || ARCHIVAL_FIRE_YEAR} | endpoint rows{' '}
+        {captureCompleteness.endpointRowsFetched} of {captureCompleteness.endpointTotalRowCount} | persisted locally{' '}
+        {captureCompleteness.persistedIncidentCount} | pages fetched {captureCompleteness.endpointPageCount} | status{' '}
+        {captureCompleteness.completenessStatus} | scope {formatQueryScope(captureCompleteness.queryScope)}.
+      </p>
+      <p>
         Capture completeness: listed {captureCompleteness.listedIncidentCount} | detail archived{' '}
         {captureCompleteness.detailArchivedCount} | detail failures {captureCompleteness.detailFailureCount} |
         attachments {captureCompleteness.attachmentsMetadataCount} | incidents with local media {captureCompleteness.localMediaIncidentCount} |
@@ -1596,6 +1701,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
           .map(([key, count]) => `${key} ${count}`)
           .join(' | ') || '--'}
       </p>
+      <p>Archival warning: {captureCompleteness.completenessWarning || '--'}</p>
       {dbStatus.hasActiveDb ? (
         <div className="mini-list">
           <div>Active DB: {dbStatus.name}</div>
@@ -1967,6 +2073,20 @@ function displayValue(value) {
     return '--';
   }
   return Number(value).toLocaleString('en-CA');
+}
+
+function formatQueryScope(scope) {
+  if (!scope || typeof scope !== 'object') return '--';
+  const parts = [
+    scope.fireYear ? `fireYear ${scope.fireYear}` : null,
+    Array.isArray(scope.stageCodes) && scope.stageCodes.length ? `stages ${scope.stageCodes.join(', ')}` : null,
+    scope.searchText === '' ? 'search empty' : scope.searchText ? `search ${scope.searchText}` : null,
+    scope.fireCentreName ? `fire centre ${scope.fireCentreName}` : null,
+    Number(scope.pageCountFetched || 0) > 0 ? `pages ${scope.pageCountFetched}` : null,
+    scope.clientSideFireYearFilterApplied ? 'client filtered to 2025' : null,
+    scope.scopeKind ? `scope ${scope.scopeKind}` : null,
+  ].filter(Boolean);
+  return parts.join(' | ') || '--';
 }
 
 function formatBytes(value) {

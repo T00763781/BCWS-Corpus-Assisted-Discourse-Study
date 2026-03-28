@@ -16,9 +16,10 @@ const PHASE4C_AUTO_RECOVER = process.env.OF_PHASE4C_AUTO_RECOVER === '1';
 const PHASE4D_AUTO_VERIFY = process.env.OF_PHASE4D_AUTO_VERIFY === '1';
 const PHASE4G_AUTO_VERIFY = process.env.OF_PHASE4G_AUTO_VERIFY === '1';
 const PHASE4H_AUTO_VERIFY = process.env.OF_PHASE4H_AUTO_VERIFY === '1';
+const PHASE4I_AUTO_VERIFY = process.env.OF_PHASE4I_AUTO_VERIFY === '1';
 const EXTRA_INCIDENT_CAPTURE_ROUTE = process.env.OF_CAPTURE_INCIDENT_ROUTE || '';
 const SHOULD_CONTINUE_AFTER_AUTO_CAPTURE =
-  PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY || PHASE4H_AUTO_VERIFY;
+  PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY || PHASE4H_AUTO_VERIFY || PHASE4I_AUTO_VERIFY;
 const dbLifecycle = createDbLifecycleManager({ app, dialog, BrowserWindow });
 let autoCheckTimer = null;
 
@@ -245,9 +246,22 @@ app.whenReady().then(async () => {
     if (PHASE4H_AUTO_VERIFY) {
       await captureView(win, '#/configure', 'phase4h-settings-after-capture.png');
     }
+    if (PHASE4I_AUTO_VERIFY) {
+      await captureView(win, '#/configure', 'phase4i-settings-after-capture.png');
+    }
     await captureView(win, '#/incidents', 'phase4b-incidents-after-capture.png');
     await loadRenderer(win, '#/incidents/2025/G70422');
     await captureCurrentView(win, 'phase4b-g70422-after-capture.png', 4000);
+    if (SMOKE_MODE && !SHOULD_CONTINUE_AFTER_AUTO_CAPTURE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE4I_AUTO_VERIFY) {
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase4i-g70422-detail.png', 3500);
     if (SMOKE_MODE) {
       app.quit();
       return;

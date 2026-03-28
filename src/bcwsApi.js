@@ -8,6 +8,8 @@ const WFNEWS_ARCGIS = import.meta.env.DEV
   ? '/wfnews-arcgis/services6/ubm4tcTYICKBpist/ArcGIS/rest/services'
   : 'https://wfnews-prd.bcwildfireservices.com/services6/ubm4tcTYICKBpist/ArcGIS/rest/services';
 export const DASHBOARD_FIRE_YEAR = 2025;
+export const ARCHIVAL_FIRE_YEAR = 2025;
+export const ARCHIVAL_STAGE_CODES = ['OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL', 'OUT'];
 
 export const STAGE_DEFS = {
   FIRE_OF_NOTE: { label: 'Wildfire of Note', color: '#c01855' },
@@ -25,6 +27,8 @@ export const FIRE_CENTRES = [
   'Prince George Fire Centre',
   'Southeast Fire Centre',
 ];
+
+const INCIDENT_LIST_ORDER = 'lastUpdatedTimestamp DESC';
 
 function toQuery(params) {
   const sp = new URLSearchParams();
@@ -282,25 +286,135 @@ function normalizeIncidentRow(row, rawSource = null) {
 export async function fetchIncidentList({
   search = '',
   fireCentre = '',
-  stageCodes = ['OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL', 'OUT'],
+  stageCodes = ARCHIVAL_STAGE_CODES,
   includeNewOnly = false,
+  fireYear = null,
   pageRowCount = 500,
+  pageNumber = 1,
 } = {}) {
   const query = toQuery({
-    pageNumber: 1,
+    pageNumber,
     pageRowCount,
     stageOfControlList: stageCodes,
     newFires: includeNewOnly,
     fireCentreName: fireCentre || null,
+    fireYear: fireYear || null,
     searchText: search || null,
-    orderBy: 'lastUpdatedTimestamp DESC',
+    orderBy: INCIDENT_LIST_ORDER,
   });
   const sourceUrl = `${BCWS_API}/wfnews-api/publicPublishedIncident?${query}`;
   const payload = await fetchJson(sourceUrl);
-  const rows = (payload.collection || []).map((row) => normalizeIncidentRow(row, { url: sourceUrl, status: 'ok' }));
+  const collection = payload.collection || [];
+  const rows = collection.map((row) =>
+    normalizeIncidentRow(row, {
+      url: sourceUrl,
+      status: 'ok',
+      pageNumber,
+      pageRowCount,
+      requestedFireYear: fireYear || null,
+    })
+  );
   return {
     totalRowCount: payload.totalRowCount ?? rows.length,
+    endpointRowsFetched: collection.length,
+    pageCountFetched: 1,
+    pageNumber,
+    pageRowCount,
+    queryScope: {
+      fireYear: fireYear || null,
+      fireCentreName: fireCentre || '',
+      stageCodes: Array.isArray(stageCodes) ? stageCodes : [],
+      searchText: search || '',
+      newFires: Boolean(includeNewOnly),
+      orderBy: INCIDENT_LIST_ORDER,
+      pageRowCount,
+    },
     rows,
+  };
+}
+
+export async function fetchArchivalIncidentList({
+  fireYear = ARCHIVAL_FIRE_YEAR,
+  search = '',
+  fireCentre = '',
+  stageCodes = ARCHIVAL_STAGE_CODES,
+  includeNewOnly = false,
+  pageRowCount = 200,
+  onProgress = null,
+} = {}) {
+  const requestedFireYear = Number(fireYear || ARCHIVAL_FIRE_YEAR);
+  const deduped = new Map();
+  let endpointTotalRowCount = 0;
+  let endpointRowsFetched = 0;
+  let pageCountFetched = 0;
+  let endpointRowsMatchingFireYear = 0;
+  let endpointFireYearHonored = true;
+
+  for (let pageNumber = 1; ; pageNumber += 1) {
+    const page = await fetchIncidentList({
+      search,
+      fireCentre,
+      stageCodes,
+      includeNewOnly,
+      fireYear: requestedFireYear,
+      pageRowCount,
+      pageNumber,
+    });
+    const pageRows = Array.isArray(page.rows) ? page.rows : [];
+    pageCountFetched += 1;
+    endpointTotalRowCount = Number(page.totalRowCount || endpointTotalRowCount || 0);
+    endpointRowsFetched += Number(page.endpointRowsFetched || pageRows.length || 0);
+
+    pageRows.forEach((row) => {
+      if (Number(row.fireYear) !== requestedFireYear) {
+        endpointFireYearHonored = false;
+        return;
+      }
+      endpointRowsMatchingFireYear += 1;
+      const key = `${String(row.fireYear)}:${String(row.incidentNumber)}`;
+      if (!deduped.has(key)) {
+        deduped.set(key, row);
+      }
+    });
+
+    if (onProgress) {
+      await onProgress({
+        fireYear: requestedFireYear,
+        pageNumber,
+        pageCountFetched,
+        endpointTotalRowCount,
+        endpointRowsFetched,
+        matchingRowsFetched: endpointRowsMatchingFireYear,
+      });
+    }
+
+    if (!pageRows.length) break;
+    if (endpointTotalRowCount > 0 && endpointRowsFetched >= endpointTotalRowCount) break;
+    if (pageRows.length < pageRowCount) break;
+  }
+
+  const queryScope = {
+    fireYear: requestedFireYear,
+    fireCentreName: fireCentre || '',
+    stageCodes: Array.isArray(stageCodes) ? stageCodes : [],
+    searchText: search || '',
+    newFires: Boolean(includeNewOnly),
+    orderBy: INCIDENT_LIST_ORDER,
+    pageRowCount,
+    pageCountFetched,
+    endpointFireYearHonored,
+    clientSideFireYearFilterApplied: !endpointFireYearHonored,
+    scopeKind: stageCodes?.length ? 'current-published-stage-filtered' : 'published-result-set',
+  };
+
+  return {
+    fireYear: requestedFireYear,
+    totalRowCount: endpointTotalRowCount,
+    endpointRowsFetched,
+    endpointRowsMatchingFireYear,
+    pageCountFetched,
+    rows: Array.from(deduped.values()),
+    queryScope,
   };
 }
 
@@ -371,10 +485,14 @@ export async function fetchEvacuationSummary() {
 export async function fetchIncidentDetail(fireYear, incidentNumber, seedIncident = null) {
   const incident = seedIncident
     ? seedIncident
-    : (await fetchIncidentList({ pageRowCount: 1000 })).rows.find(
-        (row) =>
-          String(row.fireYear) === String(fireYear) &&
-          String(row.incidentNumber) === String(incidentNumber)
+    : (
+        await fetchArchivalIncidentList({
+          fireYear,
+          stageCodes: ARCHIVAL_STAGE_CODES,
+          pageRowCount: 200,
+        })
+      ).rows.find(
+        (row) => String(row.fireYear) === String(fireYear) && String(row.incidentNumber) === String(incidentNumber)
       );
 
   if (!incident) {

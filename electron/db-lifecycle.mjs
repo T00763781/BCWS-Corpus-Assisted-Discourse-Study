@@ -270,6 +270,35 @@ function toDurationMs(startedAt, finishedAt = nowIso()) {
   return Math.max(0, end - start);
 }
 
+function deriveArchivalCompletenessStatus({
+  endpointTotalRowCount = 0,
+  endpointRowsFetched = 0,
+  persistedIncidentCount = 0,
+  endpointScopeLimited = false,
+} = {}) {
+  if (Number(endpointRowsFetched) < Number(endpointTotalRowCount)) return 'partial';
+  if (Number(persistedIncidentCount) < Number(endpointRowsFetched)) return 'partial';
+  return endpointScopeLimited ? 'endpoint-limited' : 'complete';
+}
+
+function buildArchivalCompletenessWarning({
+  endpointTotalRowCount = 0,
+  endpointRowsFetched = 0,
+  persistedIncidentCount = 0,
+  endpointScopeLimited = false,
+} = {}) {
+  if (Number(endpointRowsFetched) < Number(endpointTotalRowCount)) {
+    return `Fetched ${endpointRowsFetched} of ${endpointTotalRowCount} endpoint rows for the archival query.`;
+  }
+  if (Number(persistedIncidentCount) < Number(endpointRowsFetched)) {
+    return `Persisted ${persistedIncidentCount} of ${endpointRowsFetched} fetched rows locally.`;
+  }
+  if (endpointScopeLimited) {
+    return 'Upstream archival scope appears limited to the current published 2025 incident subset defined by the stage filters.';
+  }
+  return '';
+}
+
 export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
   const runtimeConfigPath = path.join(app.getPath('userData'), RUNTIME_CONFIG_FILE);
   let sqlPromise;
@@ -346,6 +375,18 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       externalLinksCaptureCount: Number(value.externalLinksCaptureCount || 0),
       perimeterCaptureCount: Number(value.perimeterCaptureCount || 0),
       responseHistoryExtractedCount: Number(value.responseHistoryExtractedCount || 0),
+      archivalFireYear: Number(value.archivalFireYear || 0),
+      endpointTotalRowCount: Number(value.endpointTotalRowCount || 0),
+      endpointRowsFetched: Number(value.endpointRowsFetched || 0),
+      endpointPageCount: Number(value.endpointPageCount || 0),
+      persistedIncidentCount: Number(value.persistedIncidentCount || 0),
+      endpointScopeLimited: Boolean(value.endpointScopeLimited),
+      completenessStatus: value.completenessStatus ? String(value.completenessStatus) : '',
+      completenessWarning: value.completenessWarning ? String(value.completenessWarning) : '',
+      queryScope:
+        value.queryScope && typeof value.queryScope === 'object'
+          ? value.queryScope
+          : safeJsonParse(String(value.queryScope || '{}'), {}),
       failureCategoryCounts:
         value.failureCategoryCounts && typeof value.failureCategoryCounts === 'object'
           ? value.failureCategoryCounts
@@ -565,6 +606,15 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         external_links_capture_count INTEGER NOT NULL DEFAULT 0,
         perimeter_capture_count INTEGER NOT NULL DEFAULT 0,
         response_history_extracted_count INTEGER NOT NULL DEFAULT 0,
+        archival_fire_year INTEGER NOT NULL DEFAULT 0,
+        endpoint_total_row_count INTEGER NOT NULL DEFAULT 0,
+        endpoint_rows_fetched INTEGER NOT NULL DEFAULT 0,
+        endpoint_page_count INTEGER NOT NULL DEFAULT 0,
+        persisted_incident_count INTEGER NOT NULL DEFAULT 0,
+        endpoint_scope_limited INTEGER NOT NULL DEFAULT 0,
+        completeness_status TEXT NOT NULL DEFAULT 'partial',
+        completeness_warning TEXT,
+        query_scope_json TEXT NOT NULL DEFAULT '{}',
         artifact_failure_counts_json TEXT NOT NULL DEFAULT '{}'
       )
     `);
@@ -629,6 +679,50 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       'capture_runs',
       'response_history_extracted_count',
       'response_history_extracted_count INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(database, 'capture_runs', 'archival_fire_year', 'archival_fire_year INTEGER NOT NULL DEFAULT 0');
+    ensureColumn(
+      database,
+      'capture_runs',
+      'endpoint_total_row_count',
+      'endpoint_total_row_count INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(
+      database,
+      'capture_runs',
+      'endpoint_rows_fetched',
+      'endpoint_rows_fetched INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(
+      database,
+      'capture_runs',
+      'endpoint_page_count',
+      'endpoint_page_count INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(
+      database,
+      'capture_runs',
+      'persisted_incident_count',
+      'persisted_incident_count INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(
+      database,
+      'capture_runs',
+      'endpoint_scope_limited',
+      'endpoint_scope_limited INTEGER NOT NULL DEFAULT 0'
+    );
+    ensureColumn(
+      database,
+      'capture_runs',
+      'completeness_status',
+      "completeness_status TEXT NOT NULL DEFAULT 'partial'"
+    );
+    ensureColumn(database, 'capture_runs', 'completeness_warning', 'completeness_warning TEXT');
+    ensureColumn(
+      database,
+      'capture_runs',
+      'query_scope_json',
+      "query_scope_json TEXT NOT NULL DEFAULT '{}'"
     );
     ensureColumn(
       database,
@@ -805,6 +899,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     startedAt = nowIso(),
     listedIncidentCount = 0,
     targetedIncidentCount = 0,
+    ...extra
   } = {}) => {
     if (!db) return { ok: false, error: 'No active DB selected.', status: getStatus() };
     setValue(db, 'app_state', 'capture_state', 'capture_running');
@@ -819,10 +914,11 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         targetedIncidentCount,
         completedIncidentCount: 0,
         failedIncidentCount: 0,
-        currentStageKey: 'list_ingest',
-        currentStageLabel: 'List ingest',
-        currentArtifactLabel: '',
-        currentActivity: 'Loading current incident list',
+        currentStageKey: extra.currentStageKey || 'list_ingest',
+        currentStageLabel: extra.currentStageLabel || 'List ingest',
+        currentArtifactLabel: extra.currentArtifactLabel || '',
+        currentActivity: extra.currentActivity || 'Loading current incident list',
+        ...extra,
       },
       { forcePersist: true }
     );
@@ -1177,7 +1273,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     return { updates: deduped, reason: deduped.length ? 'heading_blocks' : 'no_blocks_after_heading' };
   };
 
-  const writeCaptureRecords = async ({ listRows, detailRecords, detailFailures, capturedAt, trigger }) => {
+  const writeCaptureRecords = async ({ listRows, detailRecords, detailFailures, capturedAt, trigger, listMetadata = {} }) => {
     const captureTime = capturedAt || nowIso();
     const detailByIncidentKey = new Map();
     const detailFailureByIncidentKey = new Map();
@@ -1566,14 +1662,34 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         }
       }
 
+      const archivalFireYear = Number(listMetadata.fireYear || 0);
+      const endpointTotalRowCount = Number(listMetadata.totalRowCount || listRows.length || 0);
+      const endpointRowsFetched = Number(listMetadata.endpointRowsFetched || listRows.length || 0);
+      const endpointPageCount = Number(listMetadata.pageCountFetched || 0);
+      const persistedIncidentCount = Number(listRows.length || 0);
+      const endpointScopeLimited = Boolean(listMetadata.queryScope?.stageCodes?.length);
+      const completenessStatus = deriveArchivalCompletenessStatus({
+        endpointTotalRowCount,
+        endpointRowsFetched,
+        persistedIncidentCount,
+        endpointScopeLimited,
+      });
+      const completenessWarning = buildArchivalCompletenessWarning({
+        endpointTotalRowCount,
+        endpointRowsFetched,
+        persistedIncidentCount,
+        endpointScopeLimited,
+      });
+
       db.run(
         `
         INSERT INTO capture_runs (
           captured_at, trigger, listed_incident_count, targeted_incident_count, detail_capture_success_count,
           detail_capture_failure_count, attachments_capture_count, media_download_attempted_count, media_stored_count,
           media_failure_count, external_links_capture_count, perimeter_capture_count, response_history_extracted_count,
-          artifact_failure_counts_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          archival_fire_year, endpoint_total_row_count, endpoint_rows_fetched, endpoint_page_count, persisted_incident_count,
+          endpoint_scope_limited, completeness_status, completeness_warning, query_scope_json, artifact_failure_counts_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           captureTime,
@@ -1589,6 +1705,15 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           externalLinksCaptureCount,
           perimeterCaptureCount,
           responseHistoryExtractedCount,
+          archivalFireYear,
+          endpointTotalRowCount,
+          endpointRowsFetched,
+          endpointPageCount,
+          persistedIncidentCount,
+          endpointScopeLimited ? 1 : 0,
+          completenessStatus,
+          completenessWarning || null,
+          JSON.stringify(listMetadata.queryScope || {}),
           JSON.stringify(failureCategoryCounts),
         ]
       );
@@ -1621,6 +1746,15 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           externalLinksCaptureCount,
           perimeterCaptureCount,
           responseHistoryExtractedCount,
+          archivalFireYear,
+          endpointTotalRowCount,
+          endpointRowsFetched,
+          endpointPageCount,
+          persistedIncidentCount,
+          endpointScopeLimited,
+          completenessStatus,
+          completenessWarning,
+          queryScope: listMetadata.queryScope || {},
           failureCategoryCounts,
         },
         { forcePersist: true }
@@ -1645,6 +1779,15 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           externalLinksCaptureCount,
           perimeterCaptureCount,
           responseHistoryExtractedCount,
+          archivalFireYear,
+          endpointTotalRowCount,
+          endpointRowsFetched,
+          endpointPageCount,
+          persistedIncidentCount,
+          endpointScopeLimited,
+          completenessStatus,
+          completenessWarning,
+          queryScope: listMetadata.queryScope || {},
           failureCategoryCounts,
         },
         runtime,
@@ -1655,10 +1798,17 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     }
   };
 
-  const saveIncidentCapture = async ({ listRows = [], detailRecords = [], detailFailures = [], capturedAt, trigger } = {}) => {
+  const saveIncidentCapture = async ({
+    listRows = [],
+    detailRecords = [],
+    detailFailures = [],
+    capturedAt,
+    trigger,
+    listMetadata = {},
+  } = {}) => {
     if (!db) return { ok: false, error: 'No active DB selected.', status: getStatus() };
     try {
-      return await writeCaptureRecords({ listRows, detailRecords, detailFailures, capturedAt, trigger });
+      return await writeCaptureRecords({ listRows, detailRecords, detailFailures, capturedAt, trigger, listMetadata });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Capture write failed.';
       setValue(db, 'app_state', 'capture_state', 'error');
@@ -1992,6 +2142,14 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         thumbnailStoredCount: 0,
         fullImageStoredCount: 0,
         totalMediaBytes: 0,
+        archivalFireYear: 0,
+        endpointTotalRowCount: 0,
+        endpointRowsFetched: 0,
+        endpointPageCount: 0,
+        persistedIncidentCount: 0,
+        completenessStatus: 'partial',
+        completenessWarning: '',
+        queryScope: {},
         lastRun: null,
         failureCategoryCounts: {},
       };
@@ -2038,6 +2196,15 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         external_links_capture_count,
         perimeter_capture_count,
         response_history_extracted_count,
+        archival_fire_year,
+        endpoint_total_row_count,
+        endpoint_rows_fetched,
+        endpoint_page_count,
+        persisted_incident_count,
+        endpoint_scope_limited,
+        completeness_status,
+        completeness_warning,
+        query_scope_json,
         artifact_failure_counts_json
       FROM capture_runs
       ORDER BY id DESC
@@ -2058,6 +2225,14 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       thumbnailStoredCount: mediaSummaryRow ? Number(mediaSummaryRow[2] || 0) : 0,
       fullImageStoredCount: mediaSummaryRow ? Number(mediaSummaryRow[3] || 0) : 0,
       totalMediaBytes: mediaSummaryRow ? Number(mediaSummaryRow[4] || 0) : 0,
+      archivalFireYear: runRow ? Number(runRow[13] || 0) : 0,
+      endpointTotalRowCount: runRow ? Number(runRow[14] || 0) : 0,
+      endpointRowsFetched: runRow ? Number(runRow[15] || 0) : 0,
+      endpointPageCount: runRow ? Number(runRow[16] || 0) : 0,
+      persistedIncidentCount: runRow ? Number(runRow[17] || 0) : 0,
+      completenessStatus: runRow ? String(runRow[19] || 'partial') : 'partial',
+      completenessWarning: runRow && runRow[20] ? String(runRow[20]) : '',
+      queryScope: runRow ? safeJsonParse(String(runRow[21] || '{}'), {}) : {},
       lastRun: runRow
         ? {
             capturedAt: String(runRow[0] || ''),
@@ -2073,10 +2248,19 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
             externalLinksCaptureCount: Number(runRow[10] || 0),
             perimeterCaptureCount: Number(runRow[11] || 0),
             responseHistoryExtractedCount: Number(runRow[12] || 0),
-            failureCategoryCounts: safeJsonParse(String(runRow[13] || '{}'), {}),
+            archivalFireYear: Number(runRow[13] || 0),
+            endpointTotalRowCount: Number(runRow[14] || 0),
+            endpointRowsFetched: Number(runRow[15] || 0),
+            endpointPageCount: Number(runRow[16] || 0),
+            persistedIncidentCount: Number(runRow[17] || 0),
+            endpointScopeLimited: Boolean(runRow[18]),
+            completenessStatus: String(runRow[19] || 'partial'),
+            completenessWarning: runRow[20] ? String(runRow[20]) : '',
+            queryScope: safeJsonParse(String(runRow[21] || '{}'), {}),
+            failureCategoryCounts: safeJsonParse(String(runRow[22] || '{}'), {}),
           }
         : null,
-      failureCategoryCounts: runRow ? safeJsonParse(String(runRow[13] || '{}'), {}) : {},
+      failureCategoryCounts: runRow ? safeJsonParse(String(runRow[22] || '{}'), {}) : {},
     };
   };
 
