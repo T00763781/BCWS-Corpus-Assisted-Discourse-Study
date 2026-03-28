@@ -1249,12 +1249,23 @@ function IncidentHeroMap({ incident, perimeterData }) {
 
 function ResourcesAssigned({ incident }) {
   const items = [];
-  if (incident?.resources.personnel) items.push(`Personnel${incident.resources.personnelCount ? ` (${incident.resources.personnelCount})` : ''}`);
-  if (incident?.resources.imt) items.push(`IMT${incident.resources.imtCount ? ` (${incident.resources.imtCount})` : ''}`);
-  if (incident?.resources.aviation) items.push(`Aviation${incident.resources.aviationCount ? ` (${incident.resources.aviationCount})` : ''}`);
-  if (incident?.resources.heavy) items.push(`Heavy equipment${incident.resources.heavyCount ? ` (${incident.resources.heavyCount})` : ''}`);
-  if (incident?.resources.spu) items.push(`SPU${incident.resources.spuCount ? ` (${incident.resources.spuCount})` : ''}`);
-  return <div>{items.length ? items.join(', ') : 'No resource assignment flags are published for this incident.'}</div>;
+  const resources = incident?.resources || {};
+  if (resources.personnel || Number(resources.personnelCount || 0) > 0) {
+    items.push(`Personnel${resources.personnelCount ? ` (${resources.personnelCount})` : ''}`);
+  }
+  if (resources.imt || Number(resources.imtCount || 0) > 0) {
+    items.push(`IMT${resources.imtCount ? ` (${resources.imtCount})` : ''}`);
+  }
+  if (resources.aviation || Number(resources.aviationCount || 0) > 0) {
+    items.push(`Aviation${resources.aviationCount ? ` (${resources.aviationCount})` : ''}`);
+  }
+  if (resources.heavy || Number(resources.heavyCount || 0) > 0) {
+    items.push(`Heavy equipment${resources.heavyCount ? ` (${resources.heavyCount})` : ''}`);
+  }
+  if (resources.spu || Number(resources.spuCount || 0) > 0) {
+    items.push(`SPU${resources.spuCount ? ` (${resources.spuCount})` : ''}`);
+  }
+  return <div>{items.length ? items.join(', ') : 'No resource counts or assignment flags are published for this incident.'}</div>;
 }
 
 function MetricCard({ label, value, large = false }) {

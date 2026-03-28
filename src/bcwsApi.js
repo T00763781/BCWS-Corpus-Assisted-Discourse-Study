@@ -333,6 +333,31 @@ export async function fetchIncidentList({
   };
 }
 
+function mergeIncidentResources(primary = {}, fallback = {}) {
+  return {
+    personnel: Boolean(primary.personnel || fallback.personnel),
+    imt: Boolean(primary.imt || fallback.imt),
+    aviation: Boolean(primary.aviation || fallback.aviation),
+    heavy: Boolean(primary.heavy || fallback.heavy),
+    spu: Boolean(primary.spu || fallback.spu),
+    personnelCount: primary.personnelCount ?? fallback.personnelCount ?? null,
+    imtCount: primary.imtCount ?? fallback.imtCount ?? null,
+    aviationCount: primary.aviationCount ?? fallback.aviationCount ?? null,
+    heavyCount: primary.heavyCount ?? fallback.heavyCount ?? null,
+    spuCount: primary.spuCount ?? fallback.spuCount ?? null,
+  };
+}
+
+function mergeIncidentRecord(primary = {}, fallback = {}) {
+  return {
+    ...fallback,
+    ...primary,
+    resources: mergeIncidentResources(primary.resources || {}, fallback.resources || {}),
+    raw: primary.raw ?? fallback.raw ?? null,
+    rawSource: primary.rawSource ?? fallback.rawSource ?? null,
+  };
+}
+
 export async function fetchArchivalIncidentList({
   fireYear = ARCHIVAL_FIRE_YEAR,
   search = '',
@@ -521,7 +546,10 @@ export async function fetchIncidentDetail(fireYear, incidentNumber, seedIncident
 
   const detailPayload = detailApiResult.ok ? detailApiResult.payload : null;
   const normalizedIncident = detailPayload
-    ? normalizeIncidentRow(detailPayload, { url: detailApiUrl, status: detailApiResult.status || 'ok' })
+    ? mergeIncidentRecord(
+        normalizeIncidentRow(detailPayload, { url: detailApiUrl, status: detailApiResult.status || 'ok' }),
+        incident
+      )
     : incident;
 
   const parsed = mergeIncidentResponse(
