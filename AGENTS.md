@@ -18,8 +18,9 @@ Use it to preserve working truth, current constraints, and prioritized next step
   - external links
   - perimeter payloads
   - response-history entries when extractable
-  - local media blobs in SQLite
+  - original incident attachment binaries in SQLite, including images and downloadable documents
 - Local vs live vs mixed rendering must remain explicit and truthful in the UI.
+- Do not call an attachment/document asset "local" unless the original archived binary bytes are actually present in SQLite.
 - Public web QA builds must stay explicit that desktop SQLite selection, capture, and recovery controls are unavailable there.
 - Incident pinning is now wired:
   - desktop runtime with an active DB persists pins in SQLite

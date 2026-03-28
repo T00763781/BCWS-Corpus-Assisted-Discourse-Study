@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('openFiresideDesktop', {
     getIncidentListLocal: () => ipcRenderer.invoke('db:incidents-list-local'),
     getIncidentDetailLocal: (fireYear, incidentNumber) =>
       ipcRenderer.invoke('db:incident-detail-local', fireYear, incidentNumber),
+    getIncidentAttachmentAsset: (fireYear, incidentNumber, attachmentGuid, variantRole) =>
+      ipcRenderer.invoke('db:incident-attachment-asset', fireYear, incidentNumber, attachmentGuid, variantRole),
     getPinnedIncidents: () => ipcRenderer.invoke('db:pins-list'),
     setIncidentPinned: (payload) => ipcRenderer.invoke('db:pin-set', payload),
     removeIncidentPinned: (fireYear, incidentNumber) => ipcRenderer.invoke('db:pin-remove', fireYear, incidentNumber),

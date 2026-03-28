@@ -112,6 +112,13 @@ async function fetchLocalIncidentDetail(fireYear, incidentNumber) {
   return window.openFiresideDesktop.db.getIncidentDetailLocal(fireYear, incidentNumber);
 }
 
+async function fetchLocalIncidentAttachmentAsset(fireYear, incidentNumber, attachmentGuid, variantRole = 'original') {
+  if (!hasDesktopDbBridge() || !window.openFiresideDesktop.db.getIncidentAttachmentAsset) {
+    return { ok: false, found: false };
+  }
+  return window.openFiresideDesktop.db.getIncidentAttachmentAsset(fireYear, incidentNumber, attachmentGuid, variantRole);
+}
+
 function pinKey(fireYear, incidentNumber) {
   return `${String(fireYear)}:${String(incidentNumber)}`;
 }
@@ -1176,13 +1183,33 @@ function responseSourceNote(source, captureStatus) {
   return 'Response source: Live BCWS.';
 }
 
+function isVideoAttachment(asset) {
+  const mimeType = String(asset?.mimeType || '').toLowerCase();
+  return mimeType.startsWith('video/');
+}
+
+function isRenderableGalleryAsset(asset) {
+  return isImageAttachment(asset) || isVideoAttachment(asset);
+}
+
+function getLocalOriginalAsset(asset) {
+  return asset?.localOriginalAsset || null;
+}
+
+function getGalleryLiveUrl(asset) {
+  if (isVideoAttachment(asset)) {
+    return asset?.downloadUrl || '';
+  }
+  return asset?.imageUrl || asset?.thumbnailUrl || '';
+}
+
 function getGalleryMediaState(attachments, pageSource, captureStatus) {
   const items = Array.isArray(attachments) ? attachments : [];
-  const renderable = items.filter((asset) => asset?.localMedia || asset?.imageUrl || asset?.thumbnailUrl);
+  const renderable = items.filter((asset) => isRenderableGalleryAsset(asset) && (getLocalOriginalAsset(asset) || getGalleryLiveUrl(asset)));
   if (!renderable.length) {
     return 'unavailable';
   }
-  const localCount = renderable.filter((asset) => asset?.localMedia).length;
+  const localCount = renderable.filter((asset) => getLocalOriginalAsset(asset)).length;
   if (localCount === renderable.length) {
     return 'local';
   }
@@ -1194,18 +1221,18 @@ function getGalleryMediaState(attachments, pageSource, captureStatus) {
 
 function gallerySourceNote(galleryState, attachments, captureStatus) {
   const items = Array.isArray(attachments) ? attachments : [];
-  const renderable = items.filter((asset) => asset?.localMedia || asset?.imageUrl || asset?.thumbnailUrl);
-  const localCount = renderable.filter((asset) => asset?.localMedia).length;
+  const renderable = items.filter((asset) => isRenderableGalleryAsset(asset) && (getLocalOriginalAsset(asset) || getGalleryLiveUrl(asset)));
+  const localCount = renderable.filter((asset) => getLocalOriginalAsset(asset)).length;
   if (galleryState === 'local') {
-    return `Gallery source: Local media from SQLite. Local image bytes available for ${localCount} of ${renderable.length} assets.`;
+    return `Gallery source: Local archived asset bytes from SQLite. Original local bytes available for ${localCount} of ${renderable.length} displayable assets.`;
   }
   if (galleryState === 'mixed') {
-    return `Gallery source: Local metadata + live image fallback. Local image bytes available for ${localCount} of ${renderable.length} assets.`;
+    return `Gallery source: Local archived asset bytes + live fallback. Original local bytes available for ${localCount} of ${renderable.length} displayable assets.`;
   }
   if (galleryState === 'live') {
     return `Gallery source: Live BCWS only. Local attachment metadata: ${captureStatus?.hasAttachmentsMetadata ? 'yes' : 'no'}.`;
   }
-  return 'Gallery source: Unavailable. No local image bytes or live image URLs are available for this incident.';
+  return 'Gallery source: Unavailable. No local archived bytes or live display URLs are available for this incident.';
 }
 
 function base64ToBlob(base64, mimeType) {
@@ -1262,28 +1289,39 @@ function getAttachmentDownloadUrl(incident, asset) {
 
 function mapsSourceNote(source, captureStatus) {
   if (source === 'local') {
-    return 'Maps source: Local perimeter and external-link metadata. Link targets still open live URLs.';
+    return `Maps source: Local archived map/document bytes when available. Local perimeter: ${
+      captureStatus?.hasPerimeterPayload ? 'yes' : 'no'
+    } | local attachment bytes: ${captureStatus?.hasLocalAssets ? 'yes' : 'no'}.`;
   }
   if (source === 'mixed') {
-    return `Maps source: Live BCWS fallback. Local perimeter: ${
+    return `Maps source: Local metadata/bytes + live fallback. Local perimeter: ${
       captureStatus?.hasPerimeterPayload ? 'yes' : 'no'
-    } | local external links: ${captureStatus?.hasExternalLinksMetadata ? 'yes' : 'no'}.`;
+    } | local attachment bytes: ${captureStatus?.hasLocalAssets ? 'yes' : 'no'} | local external links: ${
+      captureStatus?.hasExternalLinksMetadata ? 'yes' : 'no'
+    }.`;
   }
   return 'Maps source: Live BCWS.';
 }
 
-function mergeLiveIncidentWithLocalMedia(localData, liveData) {
-  const localMediaByAttachmentGuid = new Map(
+function mergeLiveIncidentWithLocalAssets(localData, liveData) {
+  const localAssetByAttachmentGuid = new Map(
     (localData?.attachments || [])
-      .filter((asset) => asset?.attachmentGuid && asset?.localMedia)
-      .map((asset) => [String(asset.attachmentGuid), asset.localMedia])
+      .filter((asset) => asset?.attachmentGuid && (asset?.localOriginalAsset || asset?.localThumbnailAsset))
+      .map((asset) => [
+        String(asset.attachmentGuid),
+        {
+          localOriginalAsset: asset.localOriginalAsset || null,
+          localThumbnailAsset: asset.localThumbnailAsset || null,
+          localMedia: asset.localMedia || asset.localOriginalAsset || null,
+        },
+      ])
   );
   return {
     ...liveData,
     attachments: Array.isArray(liveData?.attachments)
       ? liveData.attachments.map((asset) => ({
           ...asset,
-          localMedia: localMediaByAttachmentGuid.get(String(asset?.attachmentGuid || '')) || null,
+          ...(localAssetByAttachmentGuid.get(String(asset?.attachmentGuid || '')) || {}),
         }))
       : [],
   };
@@ -1322,7 +1360,7 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus, pinnedIncident
           setState({
             phase: 'success',
             error: '',
-            data: mergeLiveIncidentWithLocalMedia(local.data, live),
+            data: mergeLiveIncidentWithLocalAssets(local.data, live),
             source: 'mixed',
             captureStatus: local.captureStatus || null,
             sourceReason:
@@ -1406,7 +1444,8 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus, pinnedIncident
           {state.captureStatus ? (
             <div className="detail-source-note">
               Local artifacts: detail {state.captureStatus.hasDetailSource ? 'yes' : 'no'} | attachments{' '}
-              {state.captureStatus.hasAttachmentsMetadata ? 'yes' : 'no'} | media{' '}
+              {state.captureStatus.hasAttachmentsMetadata ? 'yes' : 'no'} | asset bytes{' '}
+              {state.captureStatus.hasLocalAssets ? 'yes' : 'no'} | media{' '}
               {state.captureStatus.hasLocalMedia ? 'yes' : 'no'} | external links{' '}
               {state.captureStatus.hasExternalLinksMetadata ? 'yes' : 'no'} | perimeter{' '}
               {state.captureStatus.hasPerimeterPayload ? 'yes' : 'no'} | response history{' '}
@@ -1498,10 +1537,7 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus, pinnedIncident
             <div className="gallery-grid">
               {state.data.attachments.map((asset) => (
                 <article key={asset.attachmentGuid} className="gallery-card">
-                  <GalleryImage
-                    asset={asset}
-                    onOpen={(payload) => setLightbox(payload)}
-                  />
+                  <GalleryAsset asset={asset} onOpen={(payload) => setLightbox(payload)} />
                   <div className="gallery-card__title">{asset.title}</div>
                   <div className="gallery-card__date">{formatDate(asset.uploadedTimestamp)}</div>
                 </article>
@@ -1519,16 +1555,11 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus, pinnedIncident
           {mapResources.attachmentDocs.length || mapResources.externalDocs.length ? (
             <div className="maps-download-grid">
               {mapResources.attachmentDocs.map((asset) => (
-                <a
+                <AssetDownloadCard
                   key={asset.attachmentGuid}
-                  href={getAttachmentDownloadUrl(incident, asset) || asset.imageUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="download-card"
-                >
-                  <div className="download-card__title">{asset.title || asset.fileName || 'Map document'}</div>
-                  <div className="download-card__meta">Archived attachment metadata {asset.mimeType ? `· ${asset.mimeType}` : ''}</div>
-                </a>
+                  incident={incident}
+                  asset={asset}
+                />
               ))}
               {mapResources.externalDocs.map((link) => (
                 <a key={link.id} href={link.url} target="_blank" rel="noreferrer" className="download-card">
@@ -1737,9 +1768,9 @@ function ArchiveTotalsPanel({ captureSummary, hasActiveDb, className = '' }) {
         <MetricCard label="Attachments" value={displayValue(captureSummary?.attachmentsMetadataCount)} large />
         <MetricCard label="External links" value={displayValue(captureSummary?.externalLinksMetadataCount)} large />
         <MetricCard label="Perimeters" value={displayValue(captureSummary?.perimeterPayloadCount)} large />
-        <MetricCard label="Incidents with media" value={displayValue(captureSummary?.localMediaIncidentCount)} large />
-        <MetricCard label="Media records" value={displayValue(captureSummary?.mediaRecordCount)} large />
-        <MetricCard label="Media stored" value={formatBytes(captureSummary?.totalMediaBytes)} large />
+        <MetricCard label="Incidents with assets" value={displayValue(captureSummary?.localMediaIncidentCount)} large />
+        <MetricCard label="Asset records" value={displayValue(captureSummary?.mediaRecordCount)} large />
+        <MetricCard label="Stored asset bytes" value={formatBytes(captureSummary?.totalMediaBytes)} large />
       </div>
       <div className="archive-totals-panel__meta">
         <div>
@@ -1827,24 +1858,45 @@ function DetailCard({ title, children }) {
   );
 }
 
-function GalleryImage({ asset, onOpen }) {
+function useAssetObjectUrl(localAsset) {
   const [failed, setFailed] = React.useState(false);
   const [localObjectUrl, setLocalObjectUrl] = React.useState('');
 
   React.useEffect(() => {
-    if (!asset?.localMedia?.base64) {
+    if (!localAsset?.base64) {
       setLocalObjectUrl('');
       return undefined;
     }
-    const blob = base64ToBlob(asset.localMedia.base64, asset.localMedia.mimeType);
+    const blob = base64ToBlob(localAsset.base64, localAsset.mimeType);
     const nextUrl = URL.createObjectURL(blob);
     setLocalObjectUrl(nextUrl);
     setFailed(false);
     return () => URL.revokeObjectURL(nextUrl);
-  }, [asset?.localMedia?.base64, asset?.localMedia?.mimeType]);
+  }, [localAsset?.base64, localAsset?.mimeType]);
 
-  const liveUrl = asset?.imageUrl || asset?.thumbnailUrl || '';
+  return { failed, setFailed, localObjectUrl };
+}
+
+function GalleryAsset({ asset, onOpen }) {
+  const localAsset = asset?.localOriginalAsset || null;
+  const { failed, setFailed, localObjectUrl } = useAssetObjectUrl(localAsset);
+  const liveUrl = getGalleryLiveUrl(asset);
   const sourceUrl = !failed && localObjectUrl ? localObjectUrl : liveUrl;
+
+  if (isVideoAttachment(asset)) {
+    if (!sourceUrl) {
+      return <div className="gallery-card__empty">Video unavailable</div>;
+    }
+    return (
+      <video
+        src={sourceUrl}
+        className="gallery-card__image"
+        controls
+        preload="metadata"
+        referrerPolicy="no-referrer"
+      />
+    );
+  }
 
   if (!sourceUrl) {
     return <div className="gallery-card__empty">Image unavailable</div>;
@@ -1875,6 +1927,28 @@ function GalleryImage({ asset, onOpen }) {
         }}
       />
     </button>
+  );
+}
+
+function AssetDownloadCard({ incident, asset }) {
+  const localAsset = asset?.localOriginalAsset || null;
+  const { localObjectUrl } = useAssetObjectUrl(localAsset);
+  const href = localObjectUrl || getAttachmentDownloadUrl(incident, asset) || asset.imageUrl || '';
+  const archivedLocally = Boolean(localAsset?.base64);
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="download-card"
+      download={archivedLocally ? asset.fileName || asset.title || 'incident-asset' : undefined}
+    >
+      <div className="download-card__title">{asset.title || asset.fileName || 'Map document'}</div>
+      <div className="download-card__meta">
+        {archivedLocally ? 'Local archived binary' : 'Archived metadata + live download fallback'}
+        {asset.mimeType ? ` · ${asset.mimeType}` : ''}
+      </div>
+    </a>
   );
 }
 
@@ -2193,9 +2267,9 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
               { label: 'External links', value: displayValue(lastRun.externalLinksCaptureCount) },
               { label: 'Perimeter', value: displayValue(lastRun.perimeterCaptureCount) },
               { label: 'Response history', value: displayValue(lastRun.responseHistoryExtractedCount) },
-              { label: 'Media attempted', value: displayValue(lastRun.mediaDownloadAttemptedCount) },
-              { label: 'Media stored', value: displayValue(lastRun.mediaStoredCount) },
-              { label: 'Media failed', value: displayValue(lastRun.mediaFailureCount) },
+              { label: 'Assets attempted', value: displayValue(lastRun.mediaDownloadAttemptedCount) },
+              { label: 'Assets stored', value: displayValue(lastRun.mediaStoredCount) },
+              { label: 'Assets failed', value: displayValue(lastRun.mediaFailureCount) },
               {
                 label: 'Failure categories',
                 value:
@@ -2251,11 +2325,11 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
           <SettingsDataGrid
             items={[
               { label: 'Captured incidents', value: displayValue(dbStatus.capturedIncidentCount) },
-              { label: 'Incidents with media', value: displayValue(captureCompleteness.localMediaIncidentCount) },
-              { label: 'Media records', value: displayValue(captureCompleteness.mediaRecordCount) },
-              { label: 'Thumbnails stored', value: displayValue(captureCompleteness.thumbnailStoredCount) },
-              { label: 'Full images stored', value: displayValue(captureCompleteness.fullImageStoredCount) },
-              { label: 'Media bytes', value: formatBytes(captureCompleteness.totalMediaBytes) },
+              { label: 'Incidents with assets', value: displayValue(captureCompleteness.localMediaIncidentCount) },
+              { label: 'Asset records', value: displayValue(captureCompleteness.mediaRecordCount) },
+              { label: 'Thumbnail records', value: displayValue(captureCompleteness.thumbnailStoredCount) },
+              { label: 'Original asset records', value: displayValue(captureCompleteness.fullImageStoredCount) },
+              { label: 'Asset bytes', value: formatBytes(captureCompleteness.totalMediaBytes) },
               { label: 'Attachments metadata', value: displayValue(captureCompleteness.attachmentsMetadataCount) },
               { label: 'External links metadata', value: displayValue(captureCompleteness.externalLinksMetadataCount) },
               { label: 'Perimeter payloads', value: displayValue(captureCompleteness.perimeterPayloadCount) },

@@ -22,9 +22,14 @@ const PHASE6_AUTO_VERIFY = process.env.OF_PHASE6_AUTO_VERIFY === '1';
 const PHASE6B_AUTO_VERIFY = process.env.OF_PHASE6B_AUTO_VERIFY === '1';
 const PHASE6B_DASHBOARD_ONLY = process.env.OF_PHASE6B_DASHBOARD_ONLY === '1';
 const PHASE6B_UNPIN_ONLY = process.env.OF_PHASE6B_UNPIN_ONLY === '1';
+const PHASE6C_AUTO_VERIFY = process.env.OF_PHASE6C_AUTO_VERIFY === '1';
+const BOOT_HASH = process.env.OF_BOOT_HASH || '#/dashboard';
+const BOOT_TAB_LABEL = process.env.OF_BOOT_TAB_LABEL || '';
+const HOLD_HASH = process.env.OF_HOLD_HASH || '';
+const HOLD_TAB_LABEL = process.env.OF_HOLD_TAB_LABEL || '';
 const EXTRA_INCIDENT_CAPTURE_ROUTE = process.env.OF_CAPTURE_INCIDENT_ROUTE || '';
 const SHOULD_CONTINUE_AFTER_AUTO_CAPTURE =
-  PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY || PHASE4H_AUTO_VERIFY || PHASE4I_AUTO_VERIFY || PHASE5_AUTO_VERIFY || PHASE6_AUTO_VERIFY || PHASE6B_AUTO_VERIFY || PHASE6B_DASHBOARD_ONLY || PHASE6B_UNPIN_ONLY;
+  PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY || PHASE4H_AUTO_VERIFY || PHASE4I_AUTO_VERIFY || PHASE5_AUTO_VERIFY || PHASE6_AUTO_VERIFY || PHASE6B_AUTO_VERIFY || PHASE6B_DASHBOARD_ONLY || PHASE6B_UNPIN_ONLY || PHASE6C_AUTO_VERIFY;
 const dbLifecycle = createDbLifecycleManager({ app, dialog, BrowserWindow });
 let autoCheckTimer = null;
 const APP_ICON_PATH = path.join(__dirname, '..', 'public', 'assets', 'icon.svg');
@@ -111,6 +116,24 @@ async function captureIncidentTab(win, hash, tabLabel, fileName, waitMs = 1500) 
     true
   );
   await captureCurrentView(win, fileName, waitMs);
+}
+
+async function waitForSelector(win, selector, timeoutMs = 15000) {
+  await win.webContents.executeJavaScript(
+    `
+      (async () => {
+        const started = Date.now();
+        while (Date.now() - started < ${Number(timeoutMs)}) {
+          if (document.querySelector(${JSON.stringify(selector)})) {
+            return true;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        return false;
+      })();
+    `,
+    true
+  );
 }
 
 async function clickFirstGalleryAsset(win) {
@@ -286,6 +309,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:incident-detail-local', async (_event, fireYear, incidentNumber) =>
     dbLifecycle.getIncidentDetailLocal(fireYear, incidentNumber)
   );
+  ipcMain.handle('db:incident-attachment-asset', async (_event, fireYear, incidentNumber, attachmentGuid, variantRole) =>
+    dbLifecycle.getIncidentAttachmentAsset(fireYear, incidentNumber, attachmentGuid, variantRole)
+  );
   ipcMain.handle('db:pins-list', async () => dbLifecycle.getPinnedIncidents());
   ipcMain.handle('db:pin-set', async (_event, payload) => dbLifecycle.setIncidentPinned(payload));
   ipcMain.handle('db:pin-remove', async (_event, fireYear, incidentNumber) =>
@@ -293,7 +319,18 @@ app.whenReady().then(async () => {
   );
 
   const win = createWindow();
-  await loadRenderer(win);
+  await loadRenderer(win, BOOT_HASH);
+  if (BOOT_TAB_LABEL) {
+    await waitForSelector(win, '.incident-tabs');
+    await clickButtonByText(win, BOOT_TAB_LABEL);
+  }
+  if (HOLD_HASH) {
+    await loadRenderer(win, HOLD_HASH);
+    if (HOLD_TAB_LABEL) {
+      await waitForSelector(win, '.incident-tabs');
+      await clickButtonByText(win, HOLD_TAB_LABEL);
+    }
+  }
 
   if (PHASE4_AUTO_CAPTURE) {
     await captureView(win, '#/configure', 'phase4b-settings-before-capture.png');
@@ -492,6 +529,25 @@ app.whenReady().then(async () => {
     await loadRenderer(win, '#/incidents/2025/G70422');
     await clickButtonByText(win, 'Unpin incident');
     await loadRenderer(win, '#/dashboard');
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE6C_AUTO_VERIFY) {
+    await captureView(win, '#/configure', 'phase6c-settings-after-capture.png');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await waitForSelector(win, '.incident-tabs');
+    await clickButtonByText(win, 'Gallery');
+    await waitForSelector(win, '.gallery-grid, .gallery-card, .gallery-card__button');
+    await captureCurrentView(win, 'phase6c-g70422-gallery.png', 3500);
+    await loadRenderer(win, '#/incidents/2025/G90425');
+    await waitForSelector(win, '.incident-tabs');
+    await clickButtonByText(win, 'Maps');
+    await waitForSelector(win, '.maps-download-grid, .download-card');
+    await captureCurrentView(win, 'phase6c-g90425-maps.png', 3500);
     if (SMOKE_MODE) {
       app.quit();
       return;

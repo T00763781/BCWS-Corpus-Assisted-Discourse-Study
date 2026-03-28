@@ -69,9 +69,55 @@ function normalizeBcwsUrl(value) {
   return `https://wildfiresituation.nrs.gov.bc.ca/${text.replace(/^\/+/, '')}`;
 }
 
+function buildAttachmentBinaryUrl(incidentNumber, attachmentGuid, fireYear, thumbnail = false) {
+  if (!incidentNumber || !attachmentGuid) return '';
+  const params = new URLSearchParams();
+  if (fireYear) params.set('fireYear', String(fireYear));
+  if (thumbnail) params.set('thumbnail', 'true');
+  const query = params.toString();
+  return `https://wildfiresituation.nrs.gov.bc.ca/wfnews-api/publicPublishedIncidentAttachment/${encodeURIComponent(
+    String(incidentNumber)
+  )}/attachments/${encodeURIComponent(String(attachmentGuid))}/bytes${query ? `?${query}` : ''}`;
+}
+
 function isImageAttachment(asset) {
   const mimeType = String(asset?.mimeType || '').toLowerCase();
   return mimeType.startsWith('image/') || Boolean(asset?.imageUrl) || Boolean(asset?.thumbnailUrl);
+}
+
+function isVideoAttachment(asset) {
+  const mimeType = String(asset?.mimeType || '').toLowerCase();
+  return mimeType.startsWith('video/');
+}
+
+function isRenderableGalleryAttachment(asset) {
+  return isImageAttachment(asset) || isVideoAttachment(asset);
+}
+
+function getAttachmentOriginalUrl(asset, fireYear, incidentNumber) {
+  return (
+    normalizeBcwsUrl(asset?.downloadUrl) ||
+    normalizeBcwsUrl(asset?.imageUrl) ||
+    buildAttachmentBinaryUrl(incidentNumber, asset?.attachmentGuid, fireYear, false)
+  );
+}
+
+function getAttachmentThumbnailUrl(asset, fireYear, incidentNumber) {
+  return (
+    normalizeBcwsUrl(asset?.thumbnailUrl) ||
+    (isImageAttachment(asset) ? buildAttachmentBinaryUrl(incidentNumber, asset?.attachmentGuid, fireYear, true) : '')
+  );
+}
+
+function isDownloadableAttachment(asset, fireYear, incidentNumber) {
+  return Boolean(getAttachmentOriginalUrl(asset, fireYear, incidentNumber) || getAttachmentThumbnailUrl(asset, fireYear, incidentNumber));
+}
+
+function attachmentAssetKind(asset) {
+  if (isImageAttachment(asset)) return 'image';
+  if (isVideoAttachment(asset)) return 'video';
+  if (isMapAttachment(asset)) return 'document';
+  return 'download';
 }
 
 function isMapAttachment(asset) {
@@ -105,27 +151,33 @@ function isMapLink(link) {
 function buildIncidentListAffordances(fireYear, incidentNumber, parsedDetail, captureStatus) {
   const attachments = Array.isArray(parsedDetail?.attachments) ? parsedDetail.attachments : [];
   const externalLinks = Array.isArray(parsedDetail?.externalLinks) ? parsedDetail.externalLinks : [];
-  const renderableAttachments = attachments.filter((asset) => isImageAttachment(asset));
+  const renderableAttachments = attachments.filter((asset) => isRenderableGalleryAttachment(asset));
   const hasMapDownloads = attachments.some(isMapAttachment) || externalLinks.some(isMapLink);
+  const hasLocalRenderableAssets = renderableAttachments.length
+    ? hasCompleteLocalAssetsForAttachments(fireYear, incidentNumber, renderableAttachments)
+    : false;
   return {
     hasMedia:
       renderableAttachments.length > 0 &&
-      (Boolean(captureStatus?.hasLocalMedia) ||
-        renderableAttachments.some((asset) => Boolean(asset?.imageUrl) || Boolean(asset?.thumbnailUrl))),
+      (hasLocalRenderableAssets ||
+        renderableAttachments.some((asset) =>
+          Boolean(getAttachmentOriginalUrl(asset, fireYear, incidentNumber) || getAttachmentThumbnailUrl(asset, fireYear, incidentNumber))
+        )),
     hasMapDownloads,
     hasResponseHistory: Boolean(captureStatus?.hasResponseHistory),
   };
 }
 
-function getAttachmentMediaTargets(asset) {
+function getAttachmentAssetTargets(asset, fireYear, incidentNumber) {
   const targets = [];
-  const fullUrl = normalizeBcwsUrl(asset?.imageUrl);
-  const thumbnailUrl = normalizeBcwsUrl(asset?.thumbnailUrl);
+  const fullUrl = getAttachmentOriginalUrl(asset, fireYear, incidentNumber);
+  const thumbnailUrl = getAttachmentThumbnailUrl(asset, fireYear, incidentNumber);
+  const assetKind = attachmentAssetKind(asset);
   if (fullUrl) {
-    targets.push({ isThumbnail: false, sourceUrl: fullUrl });
+    targets.push({ isThumbnail: false, variantRole: 'original', assetKind, sourceUrl: fullUrl });
   }
-  if (thumbnailUrl && thumbnailUrl !== fullUrl) {
-    targets.push({ isThumbnail: true, sourceUrl: thumbnailUrl });
+  if (assetKind === 'image' && thumbnailUrl && thumbnailUrl !== fullUrl) {
+    targets.push({ isThumbnail: true, variantRole: 'thumbnail', assetKind, sourceUrl: thumbnailUrl });
   }
   return targets;
 }
@@ -622,6 +674,8 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         fire_year TEXT NOT NULL,
         incident_number TEXT NOT NULL,
         attachment_guid TEXT NOT NULL,
+        asset_kind TEXT NOT NULL DEFAULT 'image',
+        variant_role TEXT NOT NULL DEFAULT 'original',
         source_url TEXT NOT NULL,
         file_name TEXT,
         mime_type TEXT,
@@ -718,6 +772,8 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       'has_local_media',
       'has_local_media INTEGER NOT NULL DEFAULT 0'
     );
+    ensureColumn(database, 'incident_media', 'asset_kind', "asset_kind TEXT NOT NULL DEFAULT 'image'");
+    ensureColumn(database, 'incident_media', 'variant_role', "variant_role TEXT NOT NULL DEFAULT 'original'");
     ensureColumn(
       database,
       'capture_runs',
@@ -1039,7 +1095,12 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
   const getExistingMediaRows = (fireYear, incidentNumber) => {
     const rows = db.exec(
       `
-      SELECT attachment_guid, is_thumbnail, source_url
+      SELECT attachment_guid, is_thumbnail, source_url,
+        CASE
+          WHEN variant_role IS NULL OR TRIM(variant_role) = '' THEN CASE WHEN is_thumbnail = 1 THEN 'thumbnail' ELSE 'original' END
+          WHEN variant_role = 'original' AND is_thumbnail = 1 THEN 'thumbnail'
+          ELSE variant_role
+        END AS normalized_variant_role
       FROM incident_media
       WHERE fire_year = ? AND incident_number = ?
       `,
@@ -1048,20 +1109,34 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     return rows.length ? rows[0].values : [];
   };
 
-  const getStoredMediaAttachmentGuids = (fireYear, incidentNumber) =>
-    new Set(getExistingMediaRows(fireYear, incidentNumber).map((row) => String(row[0] || '')).filter(Boolean));
+  const getStoredAssetAttachmentGuids = (fireYear, incidentNumber, { originalOnly = false } = {}) =>
+    new Set(
+      getExistingMediaRows(fireYear, incidentNumber)
+        .filter((row) => !originalOnly || String(row[3] || (Number(row[1] || 0) ? 'thumbnail' : 'original')) === 'original')
+        .map((row) => String(row[0] || ''))
+        .filter(Boolean)
+    );
 
   const hasCompleteLocalMediaForAttachments = (fireYear, incidentNumber, attachments = []) => {
-    const renderableAttachments = attachments.filter(isImageAttachment);
+    const renderableAttachments = attachments.filter(isRenderableGalleryAttachment);
     if (!renderableAttachments.length) return true;
-    const storedAttachmentGuids = getStoredMediaAttachmentGuids(fireYear, incidentNumber);
+    const storedAttachmentGuids = getStoredAssetAttachmentGuids(fireYear, incidentNumber, { originalOnly: true });
     return renderableAttachments.every((asset) => storedAttachmentGuids.has(String(asset.attachmentGuid || '')));
+  };
+
+  const hasCompleteLocalAssetsForAttachments = (fireYear, incidentNumber, attachments = []) => {
+    const downloadableAttachments = attachments.filter((asset) => isDownloadableAttachment(asset, fireYear, incidentNumber));
+    if (!downloadableAttachments.length) return true;
+    const storedAttachmentGuids = getStoredAssetAttachmentGuids(fireYear, incidentNumber, { originalOnly: true });
+    return downloadableAttachments.every((asset) => storedAttachmentGuids.has(String(asset.attachmentGuid || '')));
   };
 
   const storeIncidentMediaRecord = ({
     fireYear,
     incidentNumber,
     attachmentGuid,
+    assetKind,
+    variantRole,
     sourceUrl,
     fileName,
     mimeType,
@@ -1074,10 +1149,12 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     db.run(
       `
       INSERT INTO incident_media (
-        fire_year, incident_number, attachment_guid, source_url, file_name, mime_type,
+        fire_year, incident_number, attachment_guid, asset_kind, variant_role, source_url, file_name, mime_type,
         byte_length, content_hash, fetched_at, is_thumbnail, blob_bytes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(fire_year, incident_number, attachment_guid, is_thumbnail) DO UPDATE SET
+        asset_kind = excluded.asset_kind,
+        variant_role = excluded.variant_role,
         source_url = excluded.source_url,
         file_name = excluded.file_name,
         mime_type = excluded.mime_type,
@@ -1090,6 +1167,8 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         String(fireYear),
         String(incidentNumber),
         String(attachmentGuid || ''),
+        assetKind || 'download',
+        variantRole || (isThumbnail ? 'thumbnail' : 'original'),
         sourceUrl,
         fileName || null,
         mimeType || null,
@@ -1102,21 +1181,21 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     );
   };
 
-  const captureIncidentMedia = async ({ fireYear, incidentNumber, attachments = [], capturedAt, countFailure }) => {
+  const captureIncidentAssets = async ({ fireYear, incidentNumber, attachments = [], capturedAt, countFailure }) => {
     const existingKeys = new Set(
       getExistingMediaRows(fireYear, incidentNumber).map((row) =>
-        `${String(row[0] || '')}:${Number(row[1] || 0)}:${String(row[2] || '')}`
+        `${String(row[0] || '')}:${String(row[3] || (Number(row[1] || 0) ? 'thumbnail' : 'original'))}:${String(row[2] || '')}`
       )
     );
-    const displayableAssets = attachments.filter(isImageAttachment);
+    const downloadableAssets = attachments.filter((asset) => isDownloadableAttachment(asset, fireYear, incidentNumber));
     let mediaDownloadAttemptedCount = 0;
     let mediaStoredCount = 0;
     let mediaFailureCount = 0;
 
-    for (const asset of displayableAssets) {
-      const targets = getAttachmentMediaTargets(asset);
+    for (const asset of downloadableAssets) {
+      const targets = getAttachmentAssetTargets(asset, fireYear, incidentNumber);
       for (const target of targets) {
-        const key = `${String(asset.attachmentGuid || '')}:${target.isThumbnail ? 1 : 0}:${target.sourceUrl}`;
+        const key = `${String(asset.attachmentGuid || '')}:${target.variantRole}:${target.sourceUrl}`;
         if (existingKeys.has(key)) {
           continue;
         }
@@ -1136,6 +1215,8 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           fireYear,
           incidentNumber,
           attachmentGuid: asset.attachmentGuid,
+          assetKind: target.assetKind,
+          variantRole: target.variantRole,
           sourceUrl: target.sourceUrl,
           fileName: asset.fileName || asset.title || null,
           mimeType: fetched.mimeType || asset.mimeType || null,
@@ -1154,6 +1235,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       mediaDownloadAttemptedCount,
       mediaStoredCount,
       mediaFailureCount,
+      hasLocalAssets: hasCompleteLocalAssetsForAttachments(fireYear, incidentNumber, attachments),
       hasLocalMedia: hasCompleteLocalMediaForAttachments(fireYear, incidentNumber, attachments),
     };
   };
@@ -1566,7 +1648,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
               },
               { forcePersist: true }
             );
-            const mediaCapture = await captureIncidentMedia({
+            const mediaCapture = await captureIncidentAssets({
               fireYear: incident.fireYear,
               incidentNumber: incident.incidentNumber,
               attachments: detail?.attachments || [],
@@ -2173,6 +2255,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       ? [
           captureStatus.hasDetailSource ? null : 'detail source',
           captureStatus.hasAttachmentsMetadata ? null : 'attachments metadata',
+          captureStatus.hasLocalAssets || !captureStatus.hasAttachmentsMetadata ? null : 'archived attachment bytes',
           captureStatus.hasLocalMedia || !captureStatus.hasAttachmentsMetadata ? null : 'local media bytes',
           captureStatus.hasExternalLinksMetadata ? null : 'external links metadata',
           captureStatus.hasPerimeterPayload ? null : 'perimeter payload',
@@ -2181,7 +2264,13 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
 
     const mediaQuery = db.exec(
       `
-      SELECT attachment_guid, mime_type, byte_length, is_thumbnail, blob_bytes
+      SELECT attachment_guid, asset_kind,
+        CASE
+          WHEN variant_role IS NULL OR TRIM(variant_role) = '' THEN CASE WHEN is_thumbnail = 1 THEN 'thumbnail' ELSE 'original' END
+          WHEN variant_role = 'original' AND is_thumbnail = 1 THEN 'thumbnail'
+          ELSE variant_role
+        END AS normalized_variant_role,
+        file_name, mime_type, byte_length, is_thumbnail, source_url, blob_bytes
       FROM incident_media
       WHERE fire_year = ? AND incident_number = ?
       ORDER BY is_thumbnail ASC, fetched_at DESC, id DESC
@@ -2189,19 +2278,26 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       [effectiveFireYear, String(incidentNumber)]
     );
     const mediaRows = mediaQuery.length ? mediaQuery[0].values : [];
-    const attachmentMediaMap = new Map();
+    const attachmentAssetMap = new Map();
     mediaRows.forEach((row) => {
       const attachmentGuid = String(row[0] || '');
-      if (!attachmentGuid || attachmentMediaMap.has(attachmentGuid)) return;
-      const blobValue = row[4];
+      if (!attachmentGuid) return;
+      const variantRole = String(row[2] || (Boolean(row[6]) ? 'thumbnail' : 'original'));
+      const blobValue = row[8];
       const bytes = blobValue instanceof Uint8Array ? blobValue : new Uint8Array(blobValue || []);
       if (!bytes.byteLength) return;
-      attachmentMediaMap.set(attachmentGuid, {
-        mimeType: String(row[1] || 'application/octet-stream'),
-        byteLength: Number(row[2] || bytes.byteLength || 0),
-        isThumbnail: Boolean(row[3]),
+      const existing = attachmentAssetMap.get(attachmentGuid) || {};
+      existing[variantRole] = {
+        assetKind: String(row[1] || 'download'),
+        variantRole,
+        fileName: row[3] ? String(row[3]) : '',
+        mimeType: String(row[4] || 'application/octet-stream'),
+        byteLength: Number(row[5] || bytes.byteLength || 0),
+        isThumbnail: Boolean(row[6]),
+        sourceUrl: row[7] ? String(row[7]) : '',
         base64: Buffer.from(bytes).toString('base64'),
-      });
+      };
+      attachmentAssetMap.set(attachmentGuid, existing);
     });
 
     parsed.response = parsed.response || {};
@@ -2209,15 +2305,23 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     parsed.attachments = Array.isArray(parsed.attachments)
       ? parsed.attachments.map((asset) => ({
           ...asset,
-          localMedia: attachmentMediaMap.get(String(asset?.attachmentGuid || '')) || null,
+          localOriginalAsset: attachmentAssetMap.get(String(asset?.attachmentGuid || ''))?.original || null,
+          localThumbnailAsset: attachmentAssetMap.get(String(asset?.attachmentGuid || ''))?.thumbnail || null,
+          localMedia: attachmentAssetMap.get(String(asset?.attachmentGuid || ''))?.original || null,
         }))
       : [];
+    const actualHasLocalAssets = hasCompleteLocalAssetsForAttachments(
+      effectiveFireYear,
+      String(incidentNumber),
+      parsed.attachments
+    );
     const actualHasLocalMedia = hasCompleteLocalMediaForAttachments(
       effectiveFireYear,
       String(incidentNumber),
       parsed.attachments
     );
     if (captureStatus) {
+      captureStatus.hasLocalAssets = actualHasLocalAssets;
       captureStatus.hasLocalMedia = actualHasLocalMedia;
     }
     return {
@@ -2249,6 +2353,56 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       updates: count('incident_updates'),
       rawSourceRecords: count('raw_source_records'),
       incidentMedia: count('incident_media'),
+    };
+  };
+
+  const getIncidentAttachmentAsset = (fireYear, incidentNumber, attachmentGuid, variantRole = 'original') => {
+    if (!db) return { ok: false, error: 'No active DB selected.', found: false };
+    const query = db.exec(
+      `
+      SELECT asset_kind,
+        CASE
+          WHEN variant_role IS NULL OR TRIM(variant_role) = '' THEN CASE WHEN is_thumbnail = 1 THEN 'thumbnail' ELSE 'original' END
+          WHEN variant_role = 'original' AND is_thumbnail = 1 THEN 'thumbnail'
+          ELSE variant_role
+        END AS normalized_variant_role,
+        source_url, file_name, mime_type, byte_length, is_thumbnail, blob_bytes
+      FROM incident_media
+      WHERE fire_year = ? AND incident_number = ? AND attachment_guid = ?
+        AND (
+          CASE
+            WHEN variant_role IS NULL OR TRIM(variant_role) = '' THEN CASE WHEN is_thumbnail = 1 THEN 'thumbnail' ELSE 'original' END
+            WHEN variant_role = 'original' AND is_thumbnail = 1 THEN 'thumbnail'
+            ELSE variant_role
+          END
+        ) = ?
+      ORDER BY fetched_at DESC, id DESC
+      LIMIT 1
+      `,
+      [String(fireYear), String(incidentNumber), String(attachmentGuid), String(variantRole || 'original')]
+    );
+    if (!query.length || !query[0].values.length) {
+      return { ok: true, found: false };
+    }
+    const row = query[0].values[0];
+    const blobValue = row[7];
+    const bytes = blobValue instanceof Uint8Array ? blobValue : new Uint8Array(blobValue || []);
+    if (!bytes.byteLength) {
+      return { ok: true, found: false };
+    }
+    return {
+      ok: true,
+      found: true,
+      asset: {
+        assetKind: String(row[0] || 'download'),
+        variantRole: String(row[1] || variantRole || 'original'),
+        sourceUrl: row[2] ? String(row[2]) : '',
+        fileName: row[3] ? String(row[3]) : '',
+        mimeType: String(row[4] || 'application/octet-stream'),
+        byteLength: Number(row[5] || bytes.byteLength || 0),
+        isThumbnail: Boolean(row[6]),
+        base64: Buffer.from(bytes).toString('base64'),
+      },
     };
   };
 
@@ -2285,12 +2439,16 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         const hasExternalLinksMetadata = Boolean(row[4]);
         const hasPerimeterPayload = Boolean(row[5]);
         const parsedDetail = safeJsonParse(String(row[6] || ''), null);
+        const actualHasLocalAssets = hasAttachmentsMetadata
+          ? hasCompleteLocalAssetsForAttachments(fireYear, incidentNumber, parsedDetail?.attachments || [])
+          : false;
         const actualHasLocalMedia = hasAttachmentsMetadata
           ? hasCompleteLocalMediaForAttachments(fireYear, incidentNumber, parsedDetail?.attachments || [])
           : false;
         return (
           !hasDetailSource ||
           !hasAttachmentsMetadata ||
+          !actualHasLocalAssets ||
           !actualHasLocalMedia ||
           !hasExternalLinksMetadata ||
           !hasPerimeterPayload
@@ -2482,6 +2640,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     recoverResponseHistoryFromArchivedRaw,
     getIncidentListLocal,
     getIncidentDetailLocal,
+    getIncidentAttachmentAsset,
     getPinnedIncidents,
     setIncidentPinned,
     removeIncidentPinned,
