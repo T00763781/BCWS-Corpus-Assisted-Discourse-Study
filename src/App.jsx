@@ -2,9 +2,12 @@ import React from 'react';
 import L from 'leaflet';
 import { fetchBcwsPerimeterWidget } from './bcwsPerimeter.js';
 import {
+  ARCHIVAL_FIRE_YEAR,
+  ARCHIVAL_STAGE_CODES,
   DASHBOARD_FIRE_YEAR,
   FIRE_CENTRES,
   STAGE_DEFS,
+  fetchArchivalIncidentList,
   fetchDashboardData,
   fetchIncidentDetail,
   fetchIncidentList,
@@ -29,16 +32,17 @@ const ROUTES = [
   { id: 'incidents', label: 'Incidents' },
   { id: 'maps', label: 'Maps' },
   { id: 'discourse', label: 'Discourse' },
-  { id: 'configure', label: 'Configure' },
+  { id: 'configure', label: 'Settings' },
 ];
 
 const STATIC_ASSET_BASE = import.meta.env.BASE_URL;
+const APP_ICON_SRC = `${STATIC_ASSET_BASE}assets/icon.svg`;
 
 const STAGE_ICON_SRC = {
   FIRE_OF_NOTE: `${STATIC_ASSET_BASE}fire-of-note.svg`,
-  UNDR_CNTRL: `${STATIC_ASSET_BASE}under-control.svg`,
-  HOLDING: `${STATIC_ASSET_BASE}being-held.svg`,
-  OUT_CNTRL: `${STATIC_ASSET_BASE}out-of-control.svg`,
+  UNDR_CNTRL: `${STATIC_ASSET_BASE}assets/under-control.svg`,
+  HOLDING: `${STATIC_ASSET_BASE}assets/being-held.svg`,
+  OUT_CNTRL: `${STATIC_ASSET_BASE}assets/out-of-control.svg`,
 };
 
 function parseHashRoute() {
@@ -66,10 +70,321 @@ function navigateTo(next) {
   window.location.hash = next.startsWith('#') ? next.slice(1) : next;
 }
 
+function hasDesktopDbBridge() {
+  return Boolean(window.openFiresideDesktop?.db);
+}
+
+async function fetchDesktopDbStatus() {
+  if (!hasDesktopDbBridge()) {
+    return {
+      hasActiveDb: false,
+      dbStateLabel: 'No DB',
+      captureStateLabel: 'No DB',
+      captureStateCode: 'no_db',
+      name: null,
+      path: null,
+      createdAt: null,
+      lastOpenedAt: null,
+      lastCapturedAt: null,
+      lastSuccessfulCaptureAt: null,
+      lastCaptureError: null,
+      capturedIncidentCount: 0,
+      dbFileSizeBytes: 0,
+      autoCheckMinutes: 0,
+      autoCheckEnabled: false,
+    };
+  }
+  return window.openFiresideDesktop.db.getStatus();
+}
+
+async function fetchLocalIncidentList() {
+  if (!hasDesktopDbBridge()) {
+    return { ok: false, rows: [], totalRowCount: 0, hasLocalData: false };
+  }
+  return window.openFiresideDesktop.db.getIncidentListLocal();
+}
+
+async function fetchLocalIncidentDetail(fireYear, incidentNumber) {
+  if (!hasDesktopDbBridge()) {
+    return { ok: false, found: false };
+  }
+  return window.openFiresideDesktop.db.getIncidentDetailLocal(fireYear, incidentNumber);
+}
+
+async function fetchCaptureSummary() {
+  if (!hasDesktopDbBridge() || !window.openFiresideDesktop.db.getCaptureSummary) {
+    return {
+      listedIncidentCount: 0,
+      detailArchivedCount: 0,
+      detailFailureCount: 0,
+      attachmentsMetadataCount: 0,
+      localMediaIncidentCount: 0,
+      externalLinksMetadataCount: 0,
+      perimeterPayloadCount: 0,
+      responseHistoryCount: 0,
+      mediaRecordCount: 0,
+      thumbnailStoredCount: 0,
+      fullImageStoredCount: 0,
+      totalMediaBytes: 0,
+      archivalFireYear: 0,
+      endpointTotalRowCount: 0,
+      endpointRowsFetched: 0,
+      endpointPageCount: 0,
+      persistedIncidentCount: 0,
+      completenessStatus: 'partial',
+      completenessWarning: '',
+      queryScope: {},
+      lastRun: null,
+      failureCategoryCounts: {},
+    };
+  }
+  return window.openFiresideDesktop.db.getCaptureSummary();
+}
+
+async function fetchCaptureRuntime() {
+  if (!hasDesktopDbBridge() || !window.openFiresideDesktop.db.getCaptureRuntime) {
+    return {
+      activeRun: null,
+      lastRun: null,
+      dbFileSizeBytes: 0,
+      lastSuccessfulCaptureAt: null,
+    };
+  }
+  return window.openFiresideDesktop.db.getCaptureRuntime();
+}
+
+async function fetchCaptureTargets() {
+  if (!hasDesktopDbBridge() || !window.openFiresideDesktop.db.getCaptureTargets) {
+    return { ok: false, incompleteKeys: [], incompleteKeySet: {}, recordedCount: 0 };
+  }
+  return window.openFiresideDesktop.db.getCaptureTargets();
+}
+
+async function runIncidentCapture({ trigger = 'manual' } = {}) {
+  if (!hasDesktopDbBridge()) {
+    return { ok: false, error: 'Desktop DB bridge unavailable.' };
+  }
+
+  const dbApi = window.openFiresideDesktop.db;
+  const capturedAt = new Date().toISOString();
+  let listRows = [];
+  let targetRows = [];
+  let listMetadata = {
+    fireYear: ARCHIVAL_FIRE_YEAR,
+    totalRowCount: 0,
+    endpointRowsFetched: 0,
+    pageCountFetched: 0,
+    queryScope: {
+      fireYear: ARCHIVAL_FIRE_YEAR,
+      fireCentreName: '',
+      stageCodes: ARCHIVAL_STAGE_CODES,
+      searchText: '',
+      newFires: false,
+      orderBy: 'lastUpdatedTimestamp DESC',
+    },
+  };
+  const detailRecords = [];
+  const detailFailures = [];
+  try {
+    await dbApi.markCaptureRunning({
+      trigger,
+      startedAt: capturedAt,
+      archivalFireYear: ARCHIVAL_FIRE_YEAR,
+      currentStageKey: 'list_ingest',
+      currentStageLabel: 'List ingest',
+      currentArtifactLabel: 'archival pagination',
+      currentActivity: `Loading 2025 archival incident pages`,
+    });
+    const listPayload = await fetchArchivalIncidentList({
+      fireYear: ARCHIVAL_FIRE_YEAR,
+      stageCodes: ARCHIVAL_STAGE_CODES,
+      pageRowCount: 200,
+      onProgress: async (progress) => {
+        await dbApi.markCaptureProgress({
+          archivalFireYear: ARCHIVAL_FIRE_YEAR,
+          endpointTotalRowCount: progress.endpointTotalRowCount,
+          endpointRowsFetched: progress.endpointRowsFetched,
+          endpointPageCount: progress.pageCountFetched,
+          listedIncidentCount: progress.matchingRowsFetched,
+          currentStageKey: 'list_ingest',
+          currentStageLabel: 'List ingest',
+          currentArtifactLabel: 'archival pagination',
+          currentActivity: `Fetched page ${progress.pageNumber}; ${progress.matchingRowsFetched} matching 2025 rows of ${progress.endpointTotalRowCount || '?'}`,
+          forcePersist: true,
+        });
+      },
+    });
+    listRows = listPayload.rows || [];
+    listMetadata = {
+      fireYear: listPayload.fireYear || ARCHIVAL_FIRE_YEAR,
+      totalRowCount: listPayload.totalRowCount || listRows.length,
+      endpointRowsFetched: listPayload.endpointRowsFetched || listRows.length,
+      pageCountFetched: listPayload.pageCountFetched || 0,
+      queryScope: listPayload.queryScope || listMetadata.queryScope,
+    };
+    const captureTargets = await fetchCaptureTargets();
+    const incompleteSet = new Set(Object.keys(captureTargets?.incompleteKeySet || {}));
+    targetRows = captureTargets?.recordedCount
+      ? listRows.filter((row) => incompleteSet.has(`${String(row.fireYear)}:${String(row.incidentNumber)}`))
+      : incompleteSet.size
+      ? listRows.filter((row) => incompleteSet.has(`${String(row.fireYear)}:${String(row.incidentNumber)}`))
+      : listRows;
+    await dbApi.markCaptureProgress({
+      archivalFireYear: listMetadata.fireYear,
+      endpointTotalRowCount: listMetadata.totalRowCount,
+      endpointRowsFetched: listMetadata.endpointRowsFetched,
+      endpointPageCount: listMetadata.pageCountFetched,
+      listedIncidentCount: listRows.length,
+      targetedIncidentCount: targetRows.length,
+      currentStageKey: 'detail',
+      currentStageLabel: 'Detail capture',
+      currentArtifactLabel: 'detail + attachments + external links + perimeter',
+      currentActivity: `Capturing details for ${targetRows.length} incidents`,
+      forcePersist: true,
+    });
+    const chunkSize = 8;
+    for (let index = 0; index < targetRows.length; index += chunkSize) {
+      const chunk = targetRows.slice(index, index + chunkSize);
+      const chunkLead = chunk[0];
+      await dbApi.markCaptureProgress({
+        archivalFireYear: listMetadata.fireYear,
+        endpointTotalRowCount: listMetadata.totalRowCount,
+        endpointRowsFetched: listMetadata.endpointRowsFetched,
+        endpointPageCount: listMetadata.pageCountFetched,
+        listedIncidentCount: listRows.length,
+        targetedIncidentCount: targetRows.length,
+        completedIncidentCount: detailRecords.length,
+        failedIncidentCount: detailFailures.length,
+        currentStageKey: 'detail',
+        currentStageLabel: 'Detail capture',
+        currentArtifactLabel: 'detail + attachments + external links + perimeter',
+        currentIncidentName: chunkLead?.incidentName || '',
+        currentIncidentNumber: chunkLead?.incidentNumber || '',
+        currentActivity: `Capturing incident details ${Math.min(index + 1, targetRows.length)}-${Math.min(
+          index + chunk.length,
+          targetRows.length
+        )} of ${targetRows.length}`,
+      });
+      const settled = await Promise.all(
+        chunk.map(async (row) => {
+          try {
+            const detail = await fetchIncidentDetail(row.fireYear, row.incidentNumber, row);
+            return { ok: true, row, detail };
+          } catch (error) {
+            return {
+              ok: false,
+              row,
+              error: error instanceof Error ? error.message : 'Detail capture failed',
+            };
+          }
+        })
+      );
+      settled.forEach((result) => {
+        if (result.ok) {
+          detailRecords.push(result.detail);
+          return;
+        }
+        detailFailures.push({
+          fireYear: result.row.fireYear,
+          incidentNumber: result.row.incidentNumber,
+          error: result.error,
+        });
+      });
+      await dbApi.markCaptureProgress({
+        archivalFireYear: listMetadata.fireYear,
+        endpointTotalRowCount: listMetadata.totalRowCount,
+        endpointRowsFetched: listMetadata.endpointRowsFetched,
+        endpointPageCount: listMetadata.pageCountFetched,
+        listedIncidentCount: listRows.length,
+        targetedIncidentCount: targetRows.length,
+        completedIncidentCount: detailRecords.length,
+        failedIncidentCount: detailFailures.length,
+        currentStageKey: 'detail',
+        currentStageLabel: 'Detail capture',
+        currentArtifactLabel: 'detail + attachments + external links + perimeter',
+        currentIncidentName: '',
+        currentIncidentNumber: '',
+        currentActivity: `Captured detail for ${detailRecords.length} incidents; ${detailFailures.length} failed`,
+      });
+    }
+
+    await dbApi.markCaptureProgress({
+      archivalFireYear: listMetadata.fireYear,
+      endpointTotalRowCount: listMetadata.totalRowCount,
+      endpointRowsFetched: listMetadata.endpointRowsFetched,
+      endpointPageCount: listMetadata.pageCountFetched,
+      listedIncidentCount: listRows.length,
+      targetedIncidentCount: targetRows.length,
+      completedIncidentCount: detailRecords.length,
+      failedIncidentCount: detailFailures.length,
+      currentStageKey: 'persisting',
+      currentStageLabel: 'Persisting run',
+      currentArtifactLabel: 'SQLite archive',
+      currentActivity: `Writing ${detailRecords.length} archived incidents and media to SQLite`,
+      forcePersist: true,
+    });
+    const saved = await dbApi.saveCapture({
+      trigger,
+      capturedAt,
+      listRows,
+      detailRecords,
+      detailFailures,
+      listMetadata,
+    });
+    if (!saved?.ok) {
+      throw new Error(saved?.error || 'Capture write failed.');
+    }
+
+    const metrics = await dbApi.getCaptureMetrics();
+    return {
+      ok: true,
+      saved,
+      metrics,
+      capturedListCount: saved.capturedListCount ?? listRows.length,
+      capturedDetailCount: saved.capturedDetailCount ?? detailRecords.length,
+      detailFailureCount: detailFailures.length,
+      targetedIncidentCount: targetRows.length,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Incident capture failed';
+    await dbApi.markCaptureError(message, {
+      trigger,
+      startedAt: capturedAt,
+      archivalFireYear: listMetadata.fireYear,
+      endpointTotalRowCount: listMetadata.totalRowCount,
+      endpointRowsFetched: listMetadata.endpointRowsFetched,
+      endpointPageCount: listMetadata.pageCountFetched,
+      listedIncidentCount: listRows.length,
+      targetedIncidentCount: targetRows.length,
+      completedIncidentCount: detailRecords.length,
+      failedIncidentCount: detailFailures.length,
+    });
+    return { ok: false, error: message };
+  }
+}
+
 export default function App() {
   const route = useHashRoute();
   const [configureTab, setConfigureTab] = React.useState('sources');
   const [pageLayouts, setPageLayouts] = React.useState(initialPageLayouts);
+  const [dbStatus, setDbStatus] = React.useState({
+    hasActiveDb: false,
+    dbStateLabel: 'No DB',
+    captureStateLabel: 'No DB',
+    captureStateCode: 'no_db',
+    name: null,
+    path: null,
+    createdAt: null,
+    lastOpenedAt: null,
+    lastCapturedAt: null,
+    lastSuccessfulCaptureAt: null,
+    lastCaptureError: null,
+    capturedIncidentCount: 0,
+    dbFileSizeBytes: 0,
+    autoCheckMinutes: 0,
+    autoCheckEnabled: false,
+  });
+  const captureInFlightRef = React.useRef(false);
 
   const updatePageLayout = React.useCallback((pageId, recipe) => {
     setPageLayouts((current) => ({
@@ -87,12 +402,45 @@ export default function App() {
     [updatePageLayout]
   );
 
+  const refreshDbStatus = React.useCallback(async () => {
+    const next = await fetchDesktopDbStatus();
+    setDbStatus(next);
+    return next;
+  }, []);
+
+  React.useEffect(() => {
+    refreshDbStatus();
+  }, [refreshDbStatus]);
+
+  const captureIncidents = React.useCallback(
+    async (options = {}) => {
+      if (captureInFlightRef.current) {
+        return { ok: false, error: 'Capture is already running.' };
+      }
+      captureInFlightRef.current = true;
+      const result = await runIncidentCapture(options);
+      await refreshDbStatus();
+      captureInFlightRef.current = false;
+      return result;
+    },
+    [refreshDbStatus]
+  );
+
+  React.useEffect(() => {
+    if (!hasDesktopDbBridge() || !window.openFiresideDesktop.db.onAutoCheckTick) return undefined;
+    const unsubscribe = window.openFiresideDesktop.db.onAutoCheckTick(async () => {
+      if (captureInFlightRef.current) return;
+      await captureIncidents({ trigger: 'auto-check' });
+    });
+    return unsubscribe;
+  }, [captureIncidents]);
+
   return (
     <div className="app-shell">
       <main className="shell-frame">
         <aside className="left-rail">
           <div className="brand-block">
-            <img src={`${STATIC_ASSET_BASE}assets/logo.svg`} alt="Open Fireside" className="brand-logo" />
+            <img src={APP_ICON_SRC} alt="" className="brand-icon" aria-hidden="true" />
           </div>
           <nav className="route-nav" aria-label="Primary navigation">
             {ROUTES.map((item) => {
@@ -113,20 +461,24 @@ export default function App() {
         </aside>
 
         <section className="workspace">
-          {route.id === 'dashboard' ? <DashboardPage /> : null}
-          {route.id === 'incidents' ? <IncidentsListPage /> : null}
+          {route.id === 'dashboard' ? <DashboardPage dbStatus={dbStatus} /> : null}
+          {route.id === 'incidents' ? <IncidentsListPage dbStatus={dbStatus} /> : null}
           {route.id === 'incident-detail' ? (
-            <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} />
+            <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} dbStatus={dbStatus} />
           ) : null}
-          {route.id === 'weather' ? <BlankRoute /> : null}
-          {route.id === 'maps' ? <BlankRoute /> : null}
-          {route.id === 'discourse' ? <BlankRoute /> : null}
+          {route.id === 'weather' ? <PlaceholderPage title="Weather" message="Weather workflow is not wired in this runtime yet." /> : null}
+          {route.id === 'maps' ? (
+            <PlaceholderPage
+              title="Maps"
+              message="Standalone map workspace is not wired yet. Use incident pages for the currently available perimeter and map-download views."
+            />
+          ) : null}
+          {route.id === 'discourse' ? <PlaceholderPage title="Discourse" message="Discourse workflow is not wired in this runtime yet." /> : null}
           {route.id === 'configure' ? (
-            <ConfigureWorkspace
-              configureTab={configureTab}
-              setConfigureTab={setConfigureTab}
-              pageLayouts={pageLayouts}
-              builderActions={builderActions}
+            <SettingsHonestyPage
+              dbStatus={dbStatus}
+              onDbStatusChange={refreshDbStatus}
+              onCaptureIncidents={captureIncidents}
             />
           ) : null}
         </section>
@@ -135,16 +487,101 @@ export default function App() {
   );
 }
 
-function DashboardPage() {
-  const [state, setState] = React.useState({ phase: 'loading', error: '', data: null });
+function PageHeader({ title, subtitle = '', chips = [], actions = null }) {
+  return (
+    <div className="page-header">
+      <div className="page-header__identity">
+        <div className="page-header__title-row">
+          <h1 className="page-header__title">{title}</h1>
+          {subtitle ? <div className="page-header__subtitle">{subtitle}</div> : null}
+        </div>
+        {chips.length ? (
+          <div className="source-health-row page-header__chips" aria-label={`${title} status`}>
+            {chips.map((chip) => (
+              <SourceHealthChip key={`${chip.label}-${chip.status}`} label={chip.label} status={chip.status} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <div className="page-header__actions">{actions}</div>
+    </div>
+  );
+}
+
+function ToolbarField({ label, children }) {
+  return (
+    <label className="toolbar-field">
+      <span className="toolbar-field__label">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function SettingsSectionCard({ title, eyebrow = '', children, className = '' }) {
+  return (
+    <section className={`settings-section-card ${className}`.trim()}>
+      <div className="settings-section-card__header">
+        {eyebrow ? <div className="settings-section-card__eyebrow">{eyebrow}</div> : null}
+        <h2>{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SettingsDataGrid({ items }) {
+  const rows = (items || []).filter((item) => item && item.label);
+  return (
+    <div className="settings-data-grid">
+      {rows.map((item) => (
+        <div key={item.label} className="settings-data-grid__item">
+          <div className="settings-data-grid__label">{item.label}</div>
+          <div className="settings-data-grid__value">{item.value ?? '--'}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CaptureStatusGrid({ items }) {
+  const rows = (items || []).filter((item) => item && item.label);
+  return (
+    <div className="capture-status-grid">
+      {rows.map((item) => (
+        <div key={item.label} className="capture-status-grid__item">
+          <div className="capture-status-grid__label">{item.label}</div>
+          <div className="capture-status-grid__value">{item.value ?? '--'}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DashboardPage({ dbStatus }) {
+  const [state, setState] = React.useState({
+    phase: 'loading',
+    error: '',
+    data: null,
+    captureSummary: null,
+  });
 
   const load = React.useCallback(async () => {
-    setState({ phase: 'loading', error: '', data: null });
+    setState((current) => ({
+      phase: 'loading',
+      error: '',
+      data: current.data,
+      captureSummary: current.captureSummary,
+    }));
     try {
-      const data = await fetchDashboardData();
-      setState({ phase: 'success', error: '', data });
+      const [data, captureSummary] = await Promise.all([fetchDashboardData(), fetchCaptureSummary()]);
+      setState({ phase: 'success', error: '', data, captureSummary });
     } catch (error) {
-      setState({ phase: 'failure', error: error.message || 'Failed to load dashboard', data: null });
+      setState((current) => ({
+        phase: 'failure',
+        error: error.message || 'Failed to load dashboard',
+        data: current.data,
+        captureSummary: current.captureSummary,
+      }));
     }
   }, []);
 
@@ -153,33 +590,37 @@ function DashboardPage() {
   }, [load]);
 
   const stats = state.data?.stats;
+  const captureSummary = state.captureSummary;
   const activeCount = stats
     ? (stats.activeOutOfControlFires || 0) +
       (stats.activeBeingHeldFires || 0) +
       (stats.activeUnderControlFires || 0)
     : null;
-  const sourceSignals = React.useMemo(() => buildDashboardSourceSignals(state), [state]);
+  const sourceSignals = React.useMemo(
+    () => [
+      {
+        label: 'Incidents',
+        status: dbStatus.hasActiveDb ? dbStatus.captureStateCode : 'no_db',
+      },
+      { label: 'Weather', status: 'not_wired' },
+      { label: 'Discourse', status: 'not_wired' },
+      { label: 'Archive', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
+    ],
+    [dbStatus.captureStateCode, dbStatus.hasActiveDb]
+  );
 
   return (
     <div className="dashboard-page">
-      <div className="dashboard-header">
-        <div>
-          <div className="dashboard-kicker">
-            {`Fire year ${state.data?.fireYear ?? DASHBOARD_FIRE_YEAR}`}
-          </div>
-          <h1 className="dashboard-title">Dashboard</h1>
-        </div>
-        <div className="dashboard-header__actions">
-          <div className="source-health-row" aria-label="Dashboard source status">
-            {sourceSignals.map((signal) => (
-              <SourceHealthChip key={signal.label} label={signal.label} status={signal.status} />
-            ))}
-          </div>
+      <PageHeader
+        title="Dashboard"
+        subtitle="Live BCWS snapshot with local archive context."
+        chips={sourceSignals}
+        actions={
           <button type="button" className="refresh-chip" onClick={load}>
             Refresh
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {state.phase === 'failure' ? <div className="error-banner">{state.error}</div> : null}
 
@@ -188,7 +629,7 @@ function DashboardPage() {
           <div className="card-title-row">
             <div className="card-title">Wildfire Overview</div>
             <div className="dashboard-updated">
-              {stats?.updateDate ? `Updated ${formatDateTime(stats.updateDate)}` : ''}
+              {stats?.updateDate ? `Live update ${formatDateTime(stats.updateDate)}` : 'Live BCWS feed'}
             </div>
           </div>
           <div className="stage-legend is-inline">
@@ -204,17 +645,17 @@ function DashboardPage() {
 
         <div className="dashboard-overview-stack dashboard-grid__overview">
           <div className="metrics-card-grid is-four">
-            <MetricCard label="Active" value={displayValue(activeCount)} />
-            <MetricCard label="New in 24" value={displayValue(stats?.newFires24Hours)} />
-            <MetricCard label="Out in 24" value={displayValue(stats?.outFires24Hours)} />
-            <MetricCard label="Out in 7" value={displayValue(stats?.outFires7Days)} />
+            <MetricCard label="Active wildfires" value={displayValue(activeCount)} />
+            <MetricCard label="New in 24 hours" value={displayValue(stats?.newFires24Hours)} />
+            <MetricCard label="Controlled or out in 24 hours" value={displayValue(stats?.outFires24Hours)} />
+            <MetricCard label="Controlled or out in 7 days" value={displayValue(stats?.outFires7Days)} />
           </div>
 
           <StageControlPanel stats={stats} />
 
           <FireCentreTable statsList={state.data?.fireCentreStats || []} />
 
-          <ResourceStubStrip />
+          <ArchiveTotalsPanel captureSummary={captureSummary} hasActiveDb={dbStatus.hasActiveDb} />
 
           <div className="dashboard-evac-grid">
             <MetricCard label="Evacuation Orders" value={displayValue(state.data?.evacuations.orders)} large />
@@ -223,7 +664,10 @@ function DashboardPage() {
         </div>
 
         <StubPanel title="Discourse Signals" className="dashboard-discourse dashboard-grid__discourse" />
-        <StubPanel title="Pinned Incidents" className="dashboard-pinned dashboard-grid__pinned" />
+        <PinnedIncidentsPanel
+          className="dashboard-pinned dashboard-grid__pinned"
+          hasActiveDb={dbStatus.hasActiveDb}
+        />
       </div>
     </div>
   );
@@ -320,17 +764,19 @@ function FireCentreTable({ statsList }) {
   );
 }
 
-function IncidentsListPage() {
+function IncidentsListPage({ dbStatus }) {
   const [search, setSearch] = React.useState('');
   const [fireCentre, setFireCentre] = React.useState('');
   const [quickFilter, setQuickFilter] = React.useState('all');
   const [selectedStages, setSelectedStages] = React.useState(['OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL', 'OUT']);
   const [sortState, setSortState] = React.useState({ key: 'updatedDate', direction: 'desc' });
-  const [state, setState] = React.useState({ phase: 'loading', error: '', rows: [] });
+  const [state, setState] = React.useState({ phase: 'loading', error: '', rows: [], source: 'live' });
   const columnDefs = React.useMemo(
     () => ({
       incidentName: { label: 'Wildfire Name', type: 'text' },
       stage: { label: 'Stage of Control', type: 'text' },
+      sizeHa: { label: 'Size', type: 'number' },
+      affordances: { label: 'Archive', type: 'text' },
       fireCentre: { label: 'Fire Centre', type: 'text' },
       location: { label: 'Location', type: 'text' },
       discoveryDate: { label: 'Discovery Date', type: 'date' },
@@ -342,10 +788,17 @@ function IncidentsListPage() {
   const load = React.useCallback(async () => {
     setState((current) => ({ ...current, phase: 'loading', error: '' }));
     try {
+      if (hasDesktopDbBridge()) {
+        const local = await fetchLocalIncidentList();
+        if (local?.ok && local?.hasLocalData) {
+          setState({ phase: 'success', error: '', rows: local.rows, source: 'local' });
+          return;
+        }
+      }
       const data = await fetchIncidentList({ search, fireCentre, stageCodes: selectedStages, pageRowCount: 500 });
-      setState({ phase: 'success', error: '', rows: data.rows });
+      setState({ phase: 'success', error: '', rows: data.rows, source: 'live' });
     } catch (error) {
-      setState({ phase: 'failure', error: error.message || 'Failed to load incidents', rows: [] });
+      setState({ phase: 'failure', error: error.message || 'Failed to load incidents', rows: [], source: 'live' });
     }
   }, [search, fireCentre, selectedStages]);
 
@@ -354,12 +807,18 @@ function IncidentsListPage() {
   }, [load]);
 
   const rows = React.useMemo(() => {
-    const filtered = quickFilter === 'fireOfNote'
-      ? state.rows.filter((row) => row.fireOfNote)
-      : [...state.rows];
+    const searchNeedle = search.trim().toLowerCase();
+    const filtered = [...state.rows].filter((row) => {
+      if (quickFilter === 'fireOfNote' && !row.fireOfNote) return false;
+      if (fireCentre && row.fireCentre !== fireCentre) return false;
+      if (selectedStages.length && !selectedStages.includes(row.stage)) return false;
+      if (!searchNeedle) return true;
+      const haystack = `${row.incidentName || ''} ${row.incidentNumber || ''} ${row.location || ''}`.toLowerCase();
+      return haystack.includes(searchNeedle);
+    });
     filtered.sort((a, b) => compareRows(a, b, sortState, columnDefs));
     return filtered;
-  }, [columnDefs, quickFilter, sortState, state.rows]);
+  }, [columnDefs, fireCentre, quickFilter, search, selectedStages, sortState, state.rows]);
 
   const sortOptions = React.useMemo(
     () => [
@@ -407,52 +866,82 @@ function IncidentsListPage() {
   if (fireCentre) activeFilters.push(fireCentre);
   if (selectedStages.length === 1) activeFilters.push(stageLabel(selectedStages[0]));
   const resultsLabel = activeFilters.length ? `Filtered by ${activeFilters.join(' | ')}` : 'All active incidents';
-  const noResultsMessage =
-    state.phase === 'loading' ? 'Loading incidents...' : 'No incidents matched the current filters.';
+  const sourceLabel =
+    state.source === 'local'
+      ? 'Local archive incidents'
+      : dbStatus.hasActiveDb
+      ? 'Live BCWS fallback for list rows'
+      : 'Live BCWS incidents';
+  const headerChips = [
+    { label: 'Source', status: state.source === 'local' ? 'db_selected' : dbStatus.hasActiveDb ? 'browser_fallback' : 'healthy' },
+    { label: 'Archive', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
+  ];
 
   return (
     <div className="incidents-page">
-      <div className="list-toolbar">
-        <input
-          className="toolbar-input"
-          placeholder="Search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        <select className="toolbar-input" value={quickFilter} onChange={(event) => setQuickFilter(event.target.value)}>
-          <option value="all">Filter: All incidents</option>
-          <option value="fireOfNote">Filter: Fire of note only</option>
-        </select>
-        <select className="toolbar-input" value={fireCentre} onChange={(event) => setFireCentre(event.target.value)}>
-          <option value="">All fire centres</option>
-          {FIRE_CENTRES.map((name) => (
-            <option key={name} value={name}>{name}</option>
-          ))}
-        </select>
-        <select className="toolbar-input toolbar-select" value={`${sortState.key}:${sortState.direction}`} onChange={handleSortDropdownChange}>
-          {sortOptions.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="list-results-row">
-        <div className="list-results-label">{resultsLabel}</div>
-      </div>
-
-      <div className="stage-toggle-row">
-        {['OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL', 'OUT'].map((code) => (
-          <button
-            key={code}
-            type="button"
-            className={`stage-toggle ${stageIsExclusive(code) ? 'is-active' : ''}`}
-            data-stage={code}
-            onClick={() => toggleStage(code)}
-          >
-            {stageLabel(code)}
+      <PageHeader
+        title="Incidents"
+        subtitle={sourceLabel}
+        chips={headerChips}
+        actions={
+          <button type="button" className="refresh-chip" onClick={load}>
+            Refresh
           </button>
-        ))}
-      </div>
+        }
+      />
+      <section className="list-control-panel">
+        <div className="list-toolbar">
+          <ToolbarField label="Search">
+            <input
+              className="toolbar-input"
+              placeholder="Fire name, number, or location"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </ToolbarField>
+          <ToolbarField label="Quick filter">
+            <select className="toolbar-input" value={quickFilter} onChange={(event) => setQuickFilter(event.target.value)}>
+              <option value="all">All incidents</option>
+              <option value="fireOfNote">Fire of note only</option>
+            </select>
+          </ToolbarField>
+          <ToolbarField label="Fire centre">
+            <select className="toolbar-input" value={fireCentre} onChange={(event) => setFireCentre(event.target.value)}>
+              <option value="">All fire centres</option>
+              {FIRE_CENTRES.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </ToolbarField>
+          <ToolbarField label="Sort">
+            <select className="toolbar-input toolbar-select" value={`${sortState.key}:${sortState.direction}`} onChange={handleSortDropdownChange}>
+              {sortOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </ToolbarField>
+        </div>
+
+        <div className="list-meta-strip">
+          <div className="list-results-label">{resultsLabel}</div>
+          <div className="list-results-label">{`${rows.length} incidents shown`}</div>
+          <div className="list-results-label">{sourceLabel}</div>
+        </div>
+
+        <div className="stage-toggle-row list-stage-row">
+          {['OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL', 'OUT'].map((code) => (
+            <button
+              key={code}
+              type="button"
+              className={`stage-toggle ${stageIsExclusive(code) ? 'is-active' : ''}`}
+              data-stage={code}
+              onClick={() => toggleStage(code)}
+            >
+              {stageLabel(code)}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {state.phase === 'failure' ? <div className="error-banner">{state.error}</div> : null}
 
@@ -486,6 +975,8 @@ function IncidentsListPage() {
                 <td>
                   <span className={`stage-pill stage-pill--${row.stage}`}>{stageLabel(row.stage)}</span>
                 </td>
+                <td>{formatSizeHa(row.sizeHa)}</td>
+                <td><IncidentAffordanceRow affordances={row.affordances} /></td>
                 <td>{row.fireCentre}</td>
                 <td>{row.location || '—'}</td>
                 <td>{formatDate(row.discoveryDate)}</td>
@@ -494,7 +985,7 @@ function IncidentsListPage() {
             ))}
             {!rows.length ? (
               <tr>
-                <td colSpan="6" className="table-empty">{state.phase === 'loading' ? 'Loading incidents…' : 'No incidents matched the current filters.'}</td>
+                <td colSpan="8" className="table-empty">{state.phase === 'loading' ? 'Loading incidents…' : 'No incidents matched the current filters.'}</td>
               </tr>
             ) : null}
           </tbody>
@@ -504,17 +995,192 @@ function IncidentsListPage() {
   );
 }
 
-function IncidentDetailPage({ fireYear, incidentNumber }) {
+function formatMissingArtifacts(missingArtifacts) {
+  const items = (missingArtifacts || []).filter(Boolean);
+  return items.length ? items.join(', ') : 'required local artifacts are incomplete';
+}
+
+function responseSourceNote(source, captureStatus) {
+  if (source === 'local') {
+    return captureStatus?.hasResponseHistory
+      ? 'Response source: Local DB history extracted from archived detail payload.'
+      : 'Response source: Local DB detail. No response-history entries were extracted for this incident.';
+  }
+  if (source === 'mixed') {
+    return `Response source: Live BCWS fallback. Local DB response history: ${
+      captureStatus?.hasResponseHistory ? 'yes' : 'no'
+    }.`;
+  }
+  return 'Response source: Live BCWS.';
+}
+
+function getGalleryMediaState(attachments, pageSource, captureStatus) {
+  const items = Array.isArray(attachments) ? attachments : [];
+  const renderable = items.filter((asset) => asset?.localMedia || asset?.imageUrl || asset?.thumbnailUrl);
+  if (!renderable.length) {
+    return 'unavailable';
+  }
+  const localCount = renderable.filter((asset) => asset?.localMedia).length;
+  if (localCount === renderable.length) {
+    return 'local';
+  }
+  if (localCount > 0 || captureStatus?.hasAttachmentsMetadata) {
+    return 'mixed';
+  }
+  return pageSource === 'live' ? 'live' : 'mixed';
+}
+
+function gallerySourceNote(galleryState, attachments, captureStatus) {
+  const items = Array.isArray(attachments) ? attachments : [];
+  const renderable = items.filter((asset) => asset?.localMedia || asset?.imageUrl || asset?.thumbnailUrl);
+  const localCount = renderable.filter((asset) => asset?.localMedia).length;
+  if (galleryState === 'local') {
+    return `Gallery source: Local media from SQLite. Local image bytes available for ${localCount} of ${renderable.length} assets.`;
+  }
+  if (galleryState === 'mixed') {
+    return `Gallery source: Local metadata + live image fallback. Local image bytes available for ${localCount} of ${renderable.length} assets.`;
+  }
+  if (galleryState === 'live') {
+    return `Gallery source: Live BCWS only. Local attachment metadata: ${captureStatus?.hasAttachmentsMetadata ? 'yes' : 'no'}.`;
+  }
+  return 'Gallery source: Unavailable. No local image bytes or live image URLs are available for this incident.';
+}
+
+function base64ToBlob(base64, mimeType) {
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mimeType || 'application/octet-stream' });
+}
+
+function isMapAttachment(asset) {
+  const mimeType = String(asset?.mimeType || '').toLowerCase();
+  const title = String(asset?.title || asset?.fileName || '').toLowerCase();
+  const description = String(asset?.description || '').toLowerCase();
+  return (
+    mimeType.includes('pdf') ||
+    mimeType.includes('geopdf') ||
+    title.includes('map') ||
+    title.includes('perimeter') ||
+    description.includes('map') ||
+    description.includes('perimeter')
+  );
+}
+
+function isMapLink(link) {
+  const category = String(link?.category || '').toLowerCase();
+  const label = String(link?.label || '').toLowerCase();
+  const url = String(link?.url || '').toLowerCase();
+  return (
+    category.includes('map') ||
+    category.includes('pdf') ||
+    label.includes('map') ||
+    label.includes('perimeter') ||
+    label.includes('document') ||
+    url.includes('.pdf')
+  );
+}
+
+function getMapResources(data) {
+  const attachmentDocs = (Array.isArray(data?.attachments) ? data.attachments : []).filter(isMapAttachment);
+  const externalDocs = (Array.isArray(data?.externalLinks) ? data.externalLinks : []).filter(isMapLink);
+  return { attachmentDocs, externalDocs };
+}
+
+function getAttachmentDownloadUrl(incident, asset) {
+  if (asset?.downloadUrl) return asset.downloadUrl;
+  if (!incident?.incidentNumber || !asset?.attachmentGuid) return '';
+  const fireYear = incident?.fireYear ? `?fireYear=${encodeURIComponent(incident.fireYear)}` : '';
+  return `https://wildfiresituation.nrs.gov.bc.ca/wfnews-api/publicPublishedIncidentAttachment/${encodeURIComponent(
+    incident.incidentNumber
+  )}/attachments/${encodeURIComponent(asset.attachmentGuid)}/bytes${fireYear}`;
+}
+
+function mapsSourceNote(source, captureStatus) {
+  if (source === 'local') {
+    return 'Maps source: Local perimeter and external-link metadata. Link targets still open live URLs.';
+  }
+  if (source === 'mixed') {
+    return `Maps source: Live BCWS fallback. Local perimeter: ${
+      captureStatus?.hasPerimeterPayload ? 'yes' : 'no'
+    } | local external links: ${captureStatus?.hasExternalLinksMetadata ? 'yes' : 'no'}.`;
+  }
+  return 'Maps source: Live BCWS.';
+}
+
+function mergeLiveIncidentWithLocalMedia(localData, liveData) {
+  const localMediaByAttachmentGuid = new Map(
+    (localData?.attachments || [])
+      .filter((asset) => asset?.attachmentGuid && asset?.localMedia)
+      .map((asset) => [String(asset.attachmentGuid), asset.localMedia])
+  );
+  return {
+    ...liveData,
+    attachments: Array.isArray(liveData?.attachments)
+      ? liveData.attachments.map((asset) => ({
+          ...asset,
+          localMedia: localMediaByAttachmentGuid.get(String(asset?.attachmentGuid || '')) || null,
+        }))
+      : [],
+  };
+}
+
+function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
   const [tab, setTab] = React.useState('response');
-  const [state, setState] = React.useState({ phase: 'loading', error: '', data: null });
+  const [lightbox, setLightbox] = React.useState(null);
+  const [state, setState] = React.useState({
+    phase: 'loading',
+    error: '',
+    data: null,
+    source: 'live',
+    captureStatus: null,
+    sourceReason: '',
+  });
 
   const load = React.useCallback(async () => {
-    setState({ phase: 'loading', error: '', data: null });
+    setState({ phase: 'loading', error: '', data: null, source: 'live', captureStatus: null, sourceReason: '' });
     try {
+      if (hasDesktopDbBridge()) {
+        const local = await fetchLocalIncidentDetail(fireYear, incidentNumber);
+        if (local?.ok && local?.found) {
+          if (local.hasCompleteLocalDetail) {
+            setState({
+              phase: 'success',
+              error: '',
+              data: local.data,
+              source: 'local',
+              captureStatus: local.captureStatus || null,
+              sourceReason: '',
+            });
+            return;
+          }
+          const live = await fetchIncidentDetail(fireYear, incidentNumber, local.data?.incident || null);
+          setState({
+            phase: 'success',
+            error: '',
+            data: mergeLiveIncidentWithLocalMedia(local.data, live),
+            source: 'mixed',
+            captureStatus: local.captureStatus || null,
+            sourceReason:
+              local.captureStatus?.lastCaptureError ||
+              `Missing local artifacts: ${formatMissingArtifacts(local.missingArtifacts)}`,
+          });
+          return;
+        }
+      }
       const data = await fetchIncidentDetail(fireYear, incidentNumber);
-      setState({ phase: 'success', error: '', data });
+      setState({ phase: 'success', error: '', data, source: 'live', captureStatus: null, sourceReason: '' });
     } catch (error) {
-      setState({ phase: 'failure', error: error.message || 'Failed to load incident', data: null });
+      setState({
+        phase: 'failure',
+        error: error.message || 'Failed to load incident',
+        data: null,
+        source: 'live',
+        captureStatus: null,
+        sourceReason: '',
+      });
     }
   }, [fireYear, incidentNumber]);
 
@@ -522,16 +1188,57 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
 
   const incident = state.data?.incident;
   const response = state.data?.response;
+  const galleryState = getGalleryMediaState(state.data?.attachments, state.source, state.captureStatus);
+  const mapResources = getMapResources(state.data);
+  const detailSourceLabel =
+    state.source === 'local'
+      ? 'Local DB capture'
+      : state.source === 'mixed'
+      ? `Partial local detail + live fallback${state.sourceReason ? ` (${state.sourceReason})` : ''}`
+      : dbStatus.hasActiveDb
+      ? 'Live BCWS fallback (no local detail record)'
+      : 'Live BCWS';
+  const headerChips = [
+    {
+      label: 'Detail',
+      status: state.source === 'local' ? 'db_selected' : state.source === 'mixed' ? 'browser_fallback' : 'healthy',
+    },
+    { label: 'Storage', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
+  ];
 
   return (
     <div className="incident-detail-page">
-      <button type="button" className="back-button" onClick={() => navigateTo('/incidents')}>&larr;</button>
+      <PageHeader
+        title={incident?.incidentName || incidentNumber}
+        subtitle={`${incident?.incidentNumber || incidentNumber} · ${incident?.fireCentre || 'Incident detail'}`}
+        chips={headerChips}
+        actions={
+          <>
+            <button type="button" className="refresh-chip refresh-chip--secondary" onClick={() => navigateTo('/incidents')}>
+              Back to list
+            </button>
+            <button type="button" className="refresh-chip" onClick={load}>
+              Refresh
+            </button>
+          </>
+        }
+      />
 
       {state.phase === 'failure' ? <div className="error-banner">{state.error}</div> : null}
 
       <div className="incident-hero">
         <div className="incident-summary-card">
-          <div className="incident-summary-card__title">{incident?.incidentName || incidentNumber}</div>
+          <div className="incident-summary-card__title">{detailSourceLabel}</div>
+          {state.captureStatus ? (
+            <div className="detail-source-note">
+              Local artifacts: detail {state.captureStatus.hasDetailSource ? 'yes' : 'no'} | attachments{' '}
+              {state.captureStatus.hasAttachmentsMetadata ? 'yes' : 'no'} | media{' '}
+              {state.captureStatus.hasLocalMedia ? 'yes' : 'no'} | external links{' '}
+              {state.captureStatus.hasExternalLinksMetadata ? 'yes' : 'no'} | perimeter{' '}
+              {state.captureStatus.hasPerimeterPayload ? 'yes' : 'no'} | response history{' '}
+              {state.captureStatus.hasResponseHistory ? 'yes' : 'no'}
+            </div>
+          ) : null}
           <div className="incident-summary-card__list">
             <SummaryRow label={stageLabel(incident?.stage)} color={STAGE_DEFS[incident?.stage]?.color} />
             <SummaryRow label={`Fire Number ${incident?.incidentNumber || incidentNumber}`} />
@@ -565,7 +1272,10 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
       {tab === 'response' ? (
         <div className="incident-tab-panel incident-response-layout">
           <section className="response-big-card">
-            <h2>Response Update</h2>
+            <div className="card-title-row">
+              <h2>Response updates</h2>
+              <div className="response-source-chip">{responseSourceNote(state.source, state.captureStatus)}</div>
+            </div>
             {response?.responseUpdates?.length ? (
               response.responseUpdates.map((item, index) => (
                 <article key={`resp-${index}`} className="response-update-block">
@@ -573,7 +1283,11 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
                 </article>
               ))
             ) : (
-              <div className="text-muted">No response update was parsed from the live BCWS incident page.</div>
+              <div className="text-muted">
+                {state.source === 'local'
+                  ? 'No response update is stored in local DB for this incident.'
+                  : 'No response update is available from the current source path.'}
+              </div>
             )}
           </section>
           <div className="response-lower-grid">
@@ -605,11 +1319,15 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
 
       {tab === 'gallery' ? (
         <div className="incident-tab-panel">
+          <div className="text-muted">{gallerySourceNote(galleryState, state.data?.attachments, state.captureStatus)}</div>
           {state.data?.attachments?.length ? (
             <div className="gallery-grid">
               {state.data.attachments.map((asset) => (
                 <article key={asset.attachmentGuid} className="gallery-card">
-                  <GalleryImage asset={asset} />
+                  <GalleryImage
+                    asset={asset}
+                    onOpen={(payload) => setLightbox(payload)}
+                  />
                   <div className="gallery-card__title">{asset.title}</div>
                   <div className="gallery-card__date">{formatDate(asset.uploadedTimestamp)}</div>
                 </article>
@@ -623,22 +1341,51 @@ function IncidentDetailPage({ fireYear, incidentNumber }) {
 
       {tab === 'maps' ? (
         <div className="incident-tab-panel maps-panel">
-          {state.data?.externalLinks?.filter((item) => /map|pdf/i.test(item.category || '') || /map/i.test(item.label || '')).length ? (
-            <div className="mini-list">
-              {state.data.externalLinks
-                .filter((item) => /map|pdf/i.test(item.category || '') || /map/i.test(item.label || ''))
-                .map((link) => (
-                  <a key={link.id} href={link.url} target="_blank" rel="noreferrer" className="link-row">
-                    {link.label || link.url}
-                  </a>
-                ))}
+          <div className="text-muted">{mapsSourceNote(state.source, state.captureStatus)}</div>
+          {mapResources.attachmentDocs.length || mapResources.externalDocs.length ? (
+            <div className="maps-download-grid">
+              {mapResources.attachmentDocs.map((asset) => (
+                <a
+                  key={asset.attachmentGuid}
+                  href={getAttachmentDownloadUrl(incident, asset) || asset.imageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="download-card"
+                >
+                  <div className="download-card__title">{asset.title || asset.fileName || 'Map document'}</div>
+                  <div className="download-card__meta">Archived attachment metadata {asset.mimeType ? `· ${asset.mimeType}` : ''}</div>
+                </a>
+              ))}
+              {mapResources.externalDocs.map((link) => (
+                <a key={link.id} href={link.url} target="_blank" rel="noreferrer" className="download-card">
+                  <div className="download-card__title">{link.label || link.url}</div>
+                  <div className="download-card__meta">External map link {link.category ? `· ${link.category}` : ''}</div>
+                </a>
+              ))}
             </div>
           ) : (
             <>
               <h2>Map Downloads</h2>
-              <p>{response?.mapMessage || 'There are currently no maps associated with this incident.'}</p>
+              <p>
+                {response?.mapMessage ||
+                  (state.captureStatus?.hasAttachmentsMetadata || state.captureStatus?.hasExternalLinksMetadata
+                    ? 'No archived map download was identified in captured attachments or external links for this incident.'
+                    : 'There are currently no maps associated with this incident.')}
+              </p>
             </>
           )}
+        </div>
+      ) : null}
+
+      {lightbox ? (
+        <div className="lightbox-backdrop" role="dialog" aria-modal="true" onClick={() => setLightbox(null)}>
+          <div className="lightbox-panel" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="lightbox-close" onClick={() => setLightbox(null)}>
+              Close
+            </button>
+            <img src={lightbox.src} alt={lightbox.title} className="lightbox-image" />
+            <div className="lightbox-caption">{lightbox.title}</div>
+          </div>
         </div>
       ) : null}
 
@@ -697,12 +1444,23 @@ function IncidentHeroMap({ incident, perimeterData }) {
 
 function ResourcesAssigned({ incident }) {
   const items = [];
-  if (incident?.resources.personnel) items.push(`Personnel${incident.resources.personnelCount ? ` (${incident.resources.personnelCount})` : ''}`);
-  if (incident?.resources.imt) items.push(`IMT${incident.resources.imtCount ? ` (${incident.resources.imtCount})` : ''}`);
-  if (incident?.resources.aviation) items.push(`Aviation${incident.resources.aviationCount ? ` (${incident.resources.aviationCount})` : ''}`);
-  if (incident?.resources.heavy) items.push(`Heavy equipment${incident.resources.heavyCount ? ` (${incident.resources.heavyCount})` : ''}`);
-  if (incident?.resources.spu) items.push(`SPU${incident.resources.spuCount ? ` (${incident.resources.spuCount})` : ''}`);
-  return <div>{items.length ? items.join(', ') : 'No resource assignment flags are published for this incident.'}</div>;
+  const resources = incident?.resources || {};
+  if (resources.personnel || Number(resources.personnelCount || 0) > 0) {
+    items.push(`Personnel${resources.personnelCount ? ` (${resources.personnelCount})` : ''}`);
+  }
+  if (resources.imt || Number(resources.imtCount || 0) > 0) {
+    items.push(`IMT${resources.imtCount ? ` (${resources.imtCount})` : ''}`);
+  }
+  if (resources.aviation || Number(resources.aviationCount || 0) > 0) {
+    items.push(`Aviation${resources.aviationCount ? ` (${resources.aviationCount})` : ''}`);
+  }
+  if (resources.heavy || Number(resources.heavyCount || 0) > 0) {
+    items.push(`Heavy equipment${resources.heavyCount ? ` (${resources.heavyCount})` : ''}`);
+  }
+  if (resources.spu || Number(resources.spuCount || 0) > 0) {
+    items.push(`SPU${resources.spuCount ? ` (${resources.spuCount})` : ''}`);
+  }
+  return <div>{items.length ? items.join(', ') : 'No resource counts or assignment flags are published for this incident.'}</div>;
 }
 
 function MetricCard({ label, value, large = false }) {
@@ -710,6 +1468,28 @@ function MetricCard({ label, value, large = false }) {
     <div className={`metric-card ${large ? 'metric-card--large' : ''}`.trim()}>
       <div className="metric-card__label">{label}</div>
       <div className="metric-card__value">{value}</div>
+    </div>
+  );
+}
+
+function IncidentAffordanceRow({ affordances }) {
+  const chips = [
+    affordances?.hasMedia ? { label: 'Media', tone: 'media' } : null,
+    affordances?.hasMapDownloads ? { label: 'Map', tone: 'map' } : null,
+    affordances?.hasResponseHistory ? { label: 'Response', tone: 'response' } : null,
+  ].filter(Boolean);
+
+  if (!chips.length) {
+    return <span className="table-affordance-row__empty">—</span>;
+  }
+
+  return (
+    <div className="table-affordance-row">
+      {chips.map((chip) => (
+        <span key={chip.label} className={`table-affordance-chip is-${chip.tone}`.trim()}>
+          {chip.label}
+        </span>
+      ))}
     </div>
   );
 }
@@ -758,6 +1538,45 @@ function StubPanel({ title, className = '' }) {
   return (
     <section className={`stub-panel ${className}`.trim()}>
       <h2>{title}</h2>
+    </section>
+  );
+}
+
+function ArchiveTotalsPanel({ captureSummary, hasActiveDb, className = '' }) {
+  const completenessStatus = captureSummary?.completenessStatus || 'partial';
+  const headline = !hasActiveDb
+    ? 'No local archive is selected.'
+    : captureSummary
+    ? `Archive scope: ${completenessStatus === 'endpoint-limited' ? 'endpoint-limited published set' : completenessStatus}.`
+    : 'Loading local archive totals.';
+
+  return (
+    <section className={`stub-panel archive-totals-panel ${className}`.trim()}>
+      <div className="card-title-row">
+        <h2>Archive Totals</h2>
+      </div>
+      <div className="text-muted">{headline}</div>
+      <div className="metrics-card-grid is-three archive-totals-grid">
+        <MetricCard label="Incidents persisted" value={displayValue(captureSummary?.persistedIncidentCount)} large />
+        <MetricCard label="Detail archived" value={displayValue(captureSummary?.detailArchivedCount)} large />
+        <MetricCard label="Response history" value={displayValue(captureSummary?.responseHistoryCount)} large />
+        <MetricCard label="Attachments" value={displayValue(captureSummary?.attachmentsMetadataCount)} large />
+        <MetricCard label="External links" value={displayValue(captureSummary?.externalLinksMetadataCount)} large />
+        <MetricCard label="Perimeters" value={displayValue(captureSummary?.perimeterPayloadCount)} large />
+        <MetricCard label="Incidents with media" value={displayValue(captureSummary?.localMediaIncidentCount)} large />
+        <MetricCard label="Media records" value={displayValue(captureSummary?.mediaRecordCount)} large />
+        <MetricCard label="Media stored" value={formatBytes(captureSummary?.totalMediaBytes)} large />
+      </div>
+      <div className="archive-totals-panel__meta">
+        <div>
+          Endpoint rows: {displayValue(captureSummary?.endpointRowsFetched)} of{' '}
+          {displayValue(captureSummary?.endpointTotalRowCount)}
+        </div>
+        <div>Pages fetched: {displayValue(captureSummary?.endpointPageCount)}</div>
+        <div>Status: {captureSummary?.completenessStatus || '--'}</div>
+        <div>Scope: {formatQueryScope(captureSummary?.queryScope)}</div>
+        <div>Warning: {captureSummary?.completenessWarning || '--'}</div>
+      </div>
     </section>
   );
 }
@@ -834,26 +1653,69 @@ function DetailCard({ title, children }) {
   );
 }
 
-function GalleryImage({ asset }) {
+function GalleryImage({ asset, onOpen }) {
   const [failed, setFailed] = React.useState(false);
+  const [localObjectUrl, setLocalObjectUrl] = React.useState('');
 
-  if (!asset.imageUrl) {
-    return <div className="gallery-card__empty">No live image URL</div>;
+  React.useEffect(() => {
+    if (!asset?.localMedia?.base64) {
+      setLocalObjectUrl('');
+      return undefined;
+    }
+    const blob = base64ToBlob(asset.localMedia.base64, asset.localMedia.mimeType);
+    const nextUrl = URL.createObjectURL(blob);
+    setLocalObjectUrl(nextUrl);
+    setFailed(false);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [asset?.localMedia?.base64, asset?.localMedia?.mimeType]);
+
+  const liveUrl = asset?.imageUrl || asset?.thumbnailUrl || '';
+  const sourceUrl = !failed && localObjectUrl ? localObjectUrl : liveUrl;
+
+  if (!sourceUrl) {
+    return <div className="gallery-card__empty">Image unavailable</div>;
   }
 
   if (failed) {
-    return <div className="gallery-card__empty">Live image unavailable</div>;
+    return <div className="gallery-card__empty">{localObjectUrl ? 'Local image unavailable' : 'Live image unavailable'}</div>;
   }
 
   return (
-    <img
-      src={asset.imageUrl}
-      alt={asset.title}
-      className="gallery-card__image"
-      loading="lazy"
-      referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
-    />
+    <button
+      type="button"
+      className="gallery-card__button"
+      onClick={() => onOpen?.({ src: sourceUrl, title: asset.title || 'Incident image' })}
+    >
+      <img
+        src={sourceUrl}
+        alt={asset.title}
+        className="gallery-card__image"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => {
+          if (localObjectUrl && liveUrl && sourceUrl === localObjectUrl) {
+            setFailed(true);
+            return;
+          }
+          setFailed(true);
+        }}
+      />
+    </button>
+  );
+}
+
+function PinnedIncidentsPanel({ hasActiveDb, className = '' }) {
+  return (
+    <section className={`stub-panel ${className}`.trim()}>
+      <div className="card-title-row">
+        <h2>Pinned Incidents</h2>
+      </div>
+      <div className="text-muted">
+        {hasActiveDb
+          ? 'Pinned incidents are not yet backed by a saved pin model, so no curated watchlist is shown here yet.'
+          : 'Select a local archive first. Pinning is not modeled truthfully without an active SQLite DB.'}
+      </div>
+    </section>
   );
 }
 
@@ -868,6 +1730,420 @@ function SummaryRow({ label, color }) {
 
 function BlankRoute() {
   return <div className="blank-workspace" aria-hidden="true" />;
+}
+
+function PlaceholderPage({ title, message }) {
+  return (
+    <div className="stub-page">
+      <PageHeader
+        title={title}
+        subtitle="Truthful route placeholder"
+        chips={[
+          { label: 'Route', status: 'not_wired' },
+          { label: 'Runtime', status: 'browser_fallback' },
+        ]}
+      />
+      <section className="stub-panel">
+        <h2>{title} workspace is not available here yet</h2>
+        <p className="placeholder-copy">{message}</p>
+      </section>
+    </div>
+  );
+}
+
+function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents }) {
+  const desktopActive = Boolean(window.openFiresideDesktop?.isElectron);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [captureSummary, setCaptureSummary] = React.useState('');
+  const [recoverySummary, setRecoverySummary] = React.useState('');
+  const [captureRuntime, setCaptureRuntime] = React.useState({
+    activeRun: null,
+    lastRun: null,
+    dbFileSizeBytes: 0,
+    lastSuccessfulCaptureAt: null,
+  });
+  const [captureCompleteness, setCaptureCompleteness] = React.useState({
+    listedIncidentCount: 0,
+    detailArchivedCount: 0,
+    detailFailureCount: 0,
+    attachmentsMetadataCount: 0,
+    localMediaIncidentCount: 0,
+    externalLinksMetadataCount: 0,
+    perimeterPayloadCount: 0,
+    responseHistoryCount: 0,
+    mediaRecordCount: 0,
+    thumbnailStoredCount: 0,
+    fullImageStoredCount: 0,
+    totalMediaBytes: 0,
+    archivalFireYear: 0,
+    endpointTotalRowCount: 0,
+    endpointRowsFetched: 0,
+    endpointPageCount: 0,
+    persistedIncidentCount: 0,
+    completenessStatus: 'partial',
+    completenessWarning: '',
+    queryScope: {},
+    lastRun: null,
+    failureCategoryCounts: {},
+  });
+  const [autoCheckMinutesDraft, setAutoCheckMinutesDraft] = React.useState(String(dbStatus.autoCheckMinutes || 0));
+
+  React.useEffect(() => {
+    setAutoCheckMinutesDraft(String(dbStatus.autoCheckMinutes || 0));
+  }, [dbStatus.autoCheckMinutes]);
+
+  const refreshCaptureRuntime = React.useCallback(async () => {
+    const next = await fetchCaptureRuntime();
+    setCaptureRuntime(next);
+  }, []);
+
+  const refreshCaptureSummary = React.useCallback(async () => {
+    const next = await fetchCaptureSummary();
+    setCaptureCompleteness(next);
+  }, []);
+
+  React.useEffect(() => {
+    refreshCaptureRuntime();
+  }, [refreshCaptureRuntime, dbStatus.hasActiveDb, dbStatus.captureStateCode, dbStatus.lastCapturedAt]);
+
+  React.useEffect(() => {
+    refreshCaptureSummary();
+  }, [refreshCaptureSummary, dbStatus.hasActiveDb, dbStatus.lastCapturedAt]);
+
+  React.useEffect(() => {
+    if (!hasDesktopDbBridge() || !window.openFiresideDesktop.db.onCaptureProgress) return undefined;
+    const unsubscribe = window.openFiresideDesktop.db.onCaptureProgress((payload) => {
+      setCaptureRuntime(payload);
+    });
+    return unsubscribe;
+  }, []);
+
+  const [elapsedTick, setElapsedTick] = React.useState(Date.now());
+  React.useEffect(() => {
+    if (!captureRuntime.activeRun) return undefined;
+    const timer = window.setInterval(() => setElapsedTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [captureRuntime.activeRun]);
+
+  const activeRun = captureRuntime.activeRun;
+  const lastRun = captureRuntime.lastRun;
+  const completedProgress = Number(activeRun?.completedIncidentCount || 0) + Number(activeRun?.failedIncidentCount || 0);
+  const progressPercent = activeRun?.targetedIncidentCount
+    ? Math.min(100, Math.round((completedProgress / Number(activeRun.targetedIncidentCount || 0)) * 100))
+    : 0;
+  const shownElapsedMs = activeRun?.startedAt
+    ? Math.max(0, elapsedTick - Date.parse(activeRun.startedAt))
+    : 0;
+
+  const runDbAction = async (action) => {
+    if (!hasDesktopDbBridge()) return;
+    setBusy(true);
+    setError('');
+    try {
+      const result = await action();
+      if (result?.error) {
+        setError(result.error);
+      }
+      await onDbStatusChange();
+      await refreshCaptureRuntime();
+      await refreshCaptureSummary();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'DB action failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runManualCapture = async () => {
+    if (!desktopActive || !hasDesktopDbBridge() || !dbStatus.hasActiveDb) return;
+    setBusy(true);
+    setError('');
+    setCaptureSummary('');
+    setRecoverySummary('');
+    try {
+      const result = await onCaptureIncidents({ trigger: 'manual' });
+      if (!result?.ok) {
+        throw new Error(result?.error || 'Incident capture failed');
+      }
+      setCaptureSummary(
+        `Captured ${result.capturedListCount} incidents for fire year ${result.saved.runSummary?.archivalFireYear ?? ARCHIVAL_FIRE_YEAR} | endpoint rows ${result.saved.runSummary?.endpointRowsFetched ?? result.capturedListCount} of ${result.saved.runSummary?.endpointTotalRowCount ?? result.capturedListCount} across ${result.saved.runSummary?.endpointPageCount ?? 0} pages | completeness ${result.saved.runSummary?.completenessStatus ?? 'partial'} | targeted detail retries ${result.saved.runSummary?.targetedIncidentCount ?? result.targetedIncidentCount ?? 0} | detail archived ${result.saved.runSummary?.detailCaptureSuccessCount ?? result.capturedDetailCount} | detail failures ${result.saved.runSummary?.detailCaptureFailureCount ?? result.detailFailureCount}.`
+      );
+      await refreshCaptureRuntime();
+      await refreshCaptureSummary();
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : 'Incident capture failed';
+      setError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runRecovery = async () => {
+    if (!desktopActive || !hasDesktopDbBridge() || !dbStatus.hasActiveDb) return;
+    setBusy(true);
+    setError('');
+    setRecoverySummary('');
+    try {
+      const result = await window.openFiresideDesktop.db.recoverResponseHistory();
+      if (!result?.ok) {
+        throw new Error(result?.error || 'Recovery failed');
+      }
+      await onDbStatusChange();
+      await refreshCaptureRuntime();
+      await refreshCaptureSummary();
+      setRecoverySummary(
+        `Recovered ${result.insertedUpdates} response updates from ${result.scannedRecords} archived detail records (G70422 parsed blocks: ${result.g70422?.parsedBlocks ?? 0}, inserted: ${result.g70422?.inserted ?? 0}, reason: ${result.g70422?.reason || 'n/a'}).`
+      );
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to recover response history');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveAutoCheckInterval = async () => {
+    if (!desktopActive || !hasDesktopDbBridge() || !dbStatus.hasActiveDb) return;
+    setBusy(true);
+    setError('');
+    try {
+      const next = Number(autoCheckMinutesDraft || 0);
+      const result = await window.openFiresideDesktop.db.setAutoCheckMinutes(next);
+      if (result?.error) {
+        setError(result.error);
+      }
+      await onDbStatusChange();
+      await refreshCaptureRuntime();
+      await refreshCaptureSummary();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to save auto-check interval');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="stub-page">
+      <PageHeader
+        title="Settings"
+        subtitle="Runtime, archive controls, and storage at a glance."
+        chips={[
+          { label: 'Runtime', status: desktopActive ? 'db_selected' : 'browser_fallback' },
+          { label: 'Capture', status: dbStatus.captureStateCode },
+          { label: 'Archive', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
+        ]}
+      />
+      <section className="settings-note-card">
+        <div className="mini-list">
+          <div>{desktopActive ? 'Electron desktop runtime with archive controls enabled.' : 'Public QA web build. Desktop archive controls are intentionally unavailable here.'}</div>
+          <div>{dbStatus.hasActiveDb ? `Archive path ready: ${dbStatus.name}` : 'No SQLite archive is selected.'}</div>
+          <div>{dbStatus.autoCheckEnabled ? `Auto-check is enabled every ${dbStatus.autoCheckMinutes} minutes.` : 'Auto-check is currently disabled.'}</div>
+        </div>
+      </section>
+      <section className={`capture-status-panel is-${dbStatus.captureStateCode}`.trim()}>
+        <div className="capture-status-panel__header">
+          <div className="capture-status-panel__title">
+            {activeRun ? 'Capture running' : lastRun ? 'Last capture run' : 'Capture status'}
+          </div>
+          <div className="capture-status-panel__state">{sourceHealthLabel(dbStatus.captureStateCode)}</div>
+        </div>
+        {activeRun ? (
+          <>
+            <div className="capture-progress-bar" aria-label="Capture progress">
+              <div className="capture-progress-bar__fill" style={{ width: `${progressPercent}%` }} />
+            </div>
+            <CaptureStatusGrid
+              items={[
+                { label: 'Run mode', value: activeRun.trigger || 'manual' },
+                { label: 'Started', value: activeRun.startedAt ? formatDateTime(Date.parse(activeRun.startedAt)) : '--' },
+                { label: 'Elapsed', value: formatDurationMs(shownElapsedMs) },
+                { label: 'Archival fire year', value: displayValue(activeRun.archivalFireYear || ARCHIVAL_FIRE_YEAR) },
+                { label: 'Endpoint rows', value: `${displayValue(activeRun.endpointRowsFetched)} of ${displayValue(activeRun.endpointTotalRowCount)}` },
+                { label: 'Pages fetched', value: displayValue(activeRun.endpointPageCount) },
+                { label: 'Targeted incidents', value: displayValue(activeRun.targetedIncidentCount) },
+                { label: 'Incidents completed', value: displayValue(activeRun.completedIncidentCount) },
+                { label: 'Incidents failed', value: displayValue(activeRun.failedIncidentCount) },
+                { label: 'Current stage', value: activeRun.currentStageLabel || '--' },
+                { label: 'Current artifact', value: activeRun.currentArtifactLabel || '--' },
+                { label: 'Current incident', value: activeRun.currentIncidentName || activeRun.currentIncidentNumber || '--' },
+                { label: 'Current activity', value: activeRun.currentActivity || '--' },
+              ]}
+            />
+          </>
+        ) : lastRun ? (
+          <CaptureStatusGrid
+            items={[
+              { label: 'Run mode', value: lastRun.trigger || 'manual' },
+              { label: 'Started', value: lastRun.startedAt ? formatDateTime(Date.parse(lastRun.startedAt)) : '--' },
+              { label: 'Finished', value: lastRun.finishedAt ? formatDateTime(Date.parse(lastRun.finishedAt)) : '--' },
+              { label: 'Duration', value: formatDurationMs(lastRun.durationMs) },
+              { label: 'Listed incidents', value: displayValue(lastRun.listedIncidentCount) },
+              { label: 'Detail archived', value: displayValue(lastRun.detailCaptureSuccessCount) },
+              { label: 'Detail failures', value: displayValue(lastRun.detailCaptureFailureCount) },
+              { label: 'Attachments', value: displayValue(lastRun.attachmentsCaptureCount) },
+              { label: 'External links', value: displayValue(lastRun.externalLinksCaptureCount) },
+              { label: 'Perimeter', value: displayValue(lastRun.perimeterCaptureCount) },
+              { label: 'Response history', value: displayValue(lastRun.responseHistoryExtractedCount) },
+              { label: 'Media attempted', value: displayValue(lastRun.mediaDownloadAttemptedCount) },
+              { label: 'Media stored', value: displayValue(lastRun.mediaStoredCount) },
+              { label: 'Media failed', value: displayValue(lastRun.mediaFailureCount) },
+              {
+                label: 'Failure categories',
+                value:
+                  Object.entries(lastRun.failureCategoryCounts || {})
+                    .filter(([, count]) => Number(count) > 0)
+                    .map(([key, count]) => `${key} ${count}`)
+                    .join(' | ') || '--',
+              },
+              { label: 'Failure reason', value: lastRun.failureReason || '--' },
+            ]}
+          />
+        ) : (
+          <div className="text-muted">No capture run has been recorded yet.</div>
+        )}
+      </section>
+      <div className="settings-grid">
+        <SettingsSectionCard title="Runtime and database" eyebrow="Environment">
+          <SettingsDataGrid
+            items={[
+              { label: 'Runtime', value: desktopActive ? 'Electron desktop shell' : 'Public QA web build' },
+              { label: 'Archive state', value: dbStatus.hasActiveDb ? 'SQLite archive selected' : 'No archive selected' },
+              { label: 'Active DB', value: dbStatus.name || '--' },
+              { label: 'Path', value: dbStatus.path || '--' },
+              { label: 'DB file size', value: formatBytes(captureRuntime.dbFileSizeBytes) },
+              { label: 'Created', value: dbStatus.createdAt ? formatDateTime(Date.parse(dbStatus.createdAt)) : '--' },
+              { label: 'Last opened', value: dbStatus.lastOpenedAt ? formatDateTime(Date.parse(dbStatus.lastOpenedAt)) : '--' },
+              { label: 'Last successful capture', value: captureRuntime.lastSuccessfulCaptureAt ? formatDateTime(Date.parse(captureRuntime.lastSuccessfulCaptureAt)) : '--' },
+            ]}
+          />
+        </SettingsSectionCard>
+
+        <SettingsSectionCard title="Archive capture" eyebrow="Scope and counts">
+          <SettingsDataGrid
+            items={[
+              { label: 'Archival fire year', value: displayValue(captureCompleteness.archivalFireYear || ARCHIVAL_FIRE_YEAR) },
+              { label: 'Endpoint rows', value: `${displayValue(captureCompleteness.endpointRowsFetched)} of ${displayValue(captureCompleteness.endpointTotalRowCount)}` },
+              { label: 'Pages fetched', value: displayValue(captureCompleteness.endpointPageCount) },
+              { label: 'Incidents persisted', value: displayValue(captureCompleteness.persistedIncidentCount) },
+              { label: 'Listed incidents', value: displayValue(captureCompleteness.listedIncidentCount) },
+              { label: 'Detail archived', value: displayValue(captureCompleteness.detailArchivedCount) },
+              { label: 'Detail failures', value: displayValue(captureCompleteness.detailFailureCount) },
+              { label: 'Response history', value: displayValue(captureCompleteness.responseHistoryCount) },
+            ]}
+          />
+          <div className="settings-helper-block">
+            <div><strong>Scope:</strong> {formatQueryScope(captureCompleteness.queryScope)}</div>
+            <div><strong>Status:</strong> {captureCompleteness.completenessStatus || '--'}</div>
+            <div><strong>Warning:</strong> {captureCompleteness.completenessWarning || '--'}</div>
+          </div>
+        </SettingsSectionCard>
+
+        <SettingsSectionCard title="Storage and media" eyebrow="Archive footprint">
+          <SettingsDataGrid
+            items={[
+              { label: 'Captured incidents', value: displayValue(dbStatus.capturedIncidentCount) },
+              { label: 'Incidents with media', value: displayValue(captureCompleteness.localMediaIncidentCount) },
+              { label: 'Media records', value: displayValue(captureCompleteness.mediaRecordCount) },
+              { label: 'Thumbnails stored', value: displayValue(captureCompleteness.thumbnailStoredCount) },
+              { label: 'Full images stored', value: displayValue(captureCompleteness.fullImageStoredCount) },
+              { label: 'Media bytes', value: formatBytes(captureCompleteness.totalMediaBytes) },
+              { label: 'Attachments metadata', value: displayValue(captureCompleteness.attachmentsMetadataCount) },
+              { label: 'External links metadata', value: displayValue(captureCompleteness.externalLinksMetadataCount) },
+              { label: 'Perimeter payloads', value: displayValue(captureCompleteness.perimeterPayloadCount) },
+              {
+                label: 'Failure categories',
+                value:
+                  Object.entries(captureCompleteness.failureCategoryCounts || {})
+                    .filter(([, count]) => Number(count) > 0)
+                    .map(([key, count]) => `${key} ${count}`)
+                    .join(' | ') || '--',
+              },
+              { label: 'Last capture error', value: dbStatus.lastCaptureError || '--' },
+            ]}
+          />
+        </SettingsSectionCard>
+
+        <SettingsSectionCard title="Controls and maintenance" eyebrow="Operator actions" className="settings-section-card--wide">
+          <div className="settings-action-stack">
+            <div className="settings-action-group">
+              <ToolbarField label="Auto-check minutes">
+                <input
+                  className="toolbar-input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={autoCheckMinutesDraft}
+                  onChange={(event) => setAutoCheckMinutesDraft(event.target.value)}
+                  disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+                />
+              </ToolbarField>
+              <button
+                type="button"
+                className="toolbar-button"
+                disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+                onClick={saveAutoCheckInterval}
+              >
+                Save auto-check
+              </button>
+            </div>
+
+            <div className="settings-action-grid">
+              <button
+                type="button"
+                className="toolbar-button"
+                disabled={!desktopActive || busy}
+                onClick={() => runDbAction(() => window.openFiresideDesktop.db.create())}
+              >
+                Create DB
+              </button>
+              <button
+                type="button"
+                className="toolbar-button"
+                disabled={!desktopActive || busy}
+                onClick={() => runDbAction(() => window.openFiresideDesktop.db.select())}
+              >
+                Select DB
+              </button>
+              <button
+                type="button"
+                className="toolbar-button"
+                disabled={!desktopActive || busy || !dbStatus.hasActiveDb || Boolean(activeRun)}
+                onClick={runManualCapture}
+              >
+                Capture incidents
+              </button>
+              <button
+                type="button"
+                className="toolbar-button"
+                disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+                onClick={runRecovery}
+              >
+                Recover response history
+              </button>
+              <button
+                type="button"
+                className="toolbar-button"
+                disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+                onClick={() => runDbAction(() => window.openFiresideDesktop.db.deleteActive())}
+              >
+                Delete DB
+              </button>
+            </div>
+
+            <div className="settings-helper-block">
+              <div><strong>Capture incidents:</strong> refresh the current 2025 published incident set, detail records, media, map artifacts, and run summary.</div>
+              <div><strong>Recover response history:</strong> reprocess archived raw detail payloads without rerunning a full incident capture.</div>
+              {!desktopActive ? <div><strong>Browser runtime:</strong> desktop DB lifecycle and capture controls stay unavailable in the public QA build.</div> : null}
+            </div>
+          </div>
+        </SettingsSectionCard>
+      </div>
+
+      {captureSummary ? <div className="list-results-label">{captureSummary}</div> : null}
+      {recoverySummary ? <div className="list-results-label">{recoverySummary}</div> : null}
+      {error ? <div className="error-banner">{error}</div> : null}
+    </div>
+  );
 }
 
 
@@ -1158,41 +2434,65 @@ function displayValue(value) {
   return Number(value).toLocaleString('en-CA');
 }
 
-function buildDashboardSourceSignals(state) {
-  if (state.phase === 'loading') {
-    return [
-      { label: 'Stats', status: 'loading' },
-      { label: 'Map', status: 'loading' },
-      { label: 'Evac', status: 'loading' },
-    ];
+function formatSizeHa(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—';
   }
+  const hectares = Number(value);
+  return hectares >= 100
+    ? `${Math.round(hectares).toLocaleString('en-CA')} ha`
+    : `${hectares.toFixed(1)} ha`;
+}
 
-  if (state.phase === 'failure') {
-    return [
-      { label: 'Stats', status: 'error' },
-      { label: 'Map', status: 'error' },
-      { label: 'Evac', status: 'error' },
-    ];
+function formatQueryScope(scope) {
+  if (!scope || typeof scope !== 'object') return '--';
+  const parts = [
+    scope.fireYear ? `fireYear ${scope.fireYear}` : null,
+    Array.isArray(scope.stageCodes) && scope.stageCodes.length ? `stages ${scope.stageCodes.join(', ')}` : null,
+    scope.searchText === '' ? 'search empty' : scope.searchText ? `search ${scope.searchText}` : null,
+    scope.fireCentreName ? `fire centre ${scope.fireCentreName}` : null,
+    Number(scope.pageCountFetched || 0) > 0 ? `pages ${scope.pageCountFetched}` : null,
+    scope.clientSideFireYearFilterApplied ? 'client filtered to 2025' : null,
+    scope.scopeKind ? `scope ${scope.scopeKind}` : null,
+  ].filter(Boolean);
+  return parts.join(' | ') || '--';
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let current = bytes;
+  let index = 0;
+  while (current >= 1024 && index < units.length - 1) {
+    current /= 1024;
+    index += 1;
   }
+  const digits = current >= 100 || index === 0 ? 0 : current >= 10 ? 1 : 2;
+  return `${current.toFixed(digits)} ${units[index]}`;
+}
 
-  const statsReady = Boolean(state.data?.stats);
-  const mapReady = ['FIRE_OF_NOTE', 'OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL'].every(
-    (code) => Array.isArray(state.data?.mapLayers?.[code])
-  );
-  const evacReady =
-    Number.isFinite(Number(state.data?.evacuations?.orders)) &&
-    Number.isFinite(Number(state.data?.evacuations?.alerts));
-
-  return [
-    { label: 'Stats', status: statsReady ? 'ready' : 'error' },
-    { label: 'Map', status: mapReady ? 'ready' : 'error' },
-    { label: 'Evac', status: evacReady ? 'ready' : 'error' },
-  ];
+function formatDurationMs(value) {
+  const durationMs = Number(value || 0);
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return '0s';
+  const totalSeconds = Math.floor(durationMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
 function sourceHealthLabel(status) {
-  if (status === 'ready') return 'Ready';
-  if (status === 'loading') return 'Loading';
+  if (status === 'db_selected') return 'DB selected';
+  if (status === 'browser_fallback') return 'Browser fallback';
+  if (status === 'not_wired') return 'Not wired';
+  if (status === 'no_db') return 'No DB';
+  if (status === 'never_captured') return 'Never captured';
+  if (status === 'capture_running') return 'Capture running';
+  if (status === 'backfill_due') return 'Backfill due';
+  if (status === 'healthy') return 'Healthy';
   return 'Error';
 }
 
