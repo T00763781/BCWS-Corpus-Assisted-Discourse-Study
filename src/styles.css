@@ -124,6 +124,12 @@ body { color: #0d1419; }
 .dashboard-pinned { min-height: 292px; }
 .dashboard-discourse h2,
 .dashboard-pinned h2 { margin-bottom: 0; }
+.pinned-incident-list { display: flex; flex-direction: column; gap: 10px; }
+.pinned-incident-card { appearance: none; width: 100%; text-align: left; border: 1px solid #d7dde3; border-radius: 14px; background: #fff; padding: 12px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; color: var(--ink); }
+.pinned-incident-card:hover { background: #fafbfc; }
+.pinned-incident-card__top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pinned-incident-card__title { font-size: 15px; font-weight: 800; color: #183145; }
+.pinned-incident-card__meta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12px; color: #52606b; }
 .archive-totals-panel { gap: 10px; }
 .archive-totals-grid { margin-top: 2px; }
 .archive-totals-panel__meta { display: grid; gap: 4px; font-size: 12px; color: #4c5862; }
@@ -175,6 +181,9 @@ body { color: #0d1419; }
 .incident-table th:nth-child(6), .incident-table td:nth-child(6) { min-width: 180px; }
 .incident-link { appearance: none; border: 0; background: transparent; color: #15293b; font-weight: 700; padding: 0; text-align: left; cursor: pointer; }
 .incident-link__meta { color: #59646e; margin-left: 2px; font-weight: 600; }
+.incident-name-cell { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pinned-pill { display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 800; letter-spacing: .02em; color: #8a4a00; background: #fff5d7; border: 1px solid #e7bd58; white-space: nowrap; }
+.pinned-pill.is-compact { padding: 3px 8px; font-size: 10px; }
 .table-affordance-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .table-affordance-row__empty { color: #7b838c; }
 .table-affordance-chip { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 700; border: 1px solid #bfc7d0; background: #fff; color: #33424f; }
@@ -190,7 +199,8 @@ body { color: #0d1419; }
 .incident-hero { display: grid; grid-template-columns: 1fr 1.1fr; gap: 12px; align-items: stretch; }
 .incident-summary-card, .detail-card, .response-big-card, .maps-panel, .discourse-stub { border: 1px solid var(--border); background: #f2f2f3; border-radius: 12px; }
 .incident-summary-card { padding: 14px 16px; }
-.incident-summary-card__title { font-size: 24px; font-weight: 700; color: var(--ink); margin-bottom: 10px; }
+.incident-summary-card__title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.incident-summary-card__title { font-size: 24px; font-weight: 700; color: var(--ink); }
 .detail-source-note { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
 .incident-summary-card__list { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 700; color: #22303a; }
 .summary-row { display: flex; align-items: center; gap: 8px; }
@@ -226,6 +236,7 @@ body { color: #0d1419; }
 .lightbox-close { align-self: flex-end; border: 1px solid #4a5965; border-radius: 999px; background: transparent; color: #fff; padding: 8px 14px; cursor: pointer; }
 .lightbox-image { max-width: 100%; max-height: 78vh; object-fit: contain; border-radius: 12px; }
 .lightbox-caption { color: #eef1f3; font-weight: 700; }
+.pin-action.is-active { border-color: #e7bd58; background: #fff5d7; color: #704300; }
 .link-row { color: #0b5c8d; text-decoration: none; }
 .link-row:hover { text-decoration: underline; }
 .stub-page { min-height: 100%; }
@@ -267,6 +278,7 @@ body { color: #0d1419; }
   .dashboard-page { max-width: none; }
   .dashboard-map-canvas { min-height: 272px; }
   .page-header__title, .dashboard-title { font-size: 42px; }
+  .pinned-incident-card__meta { flex-direction: column; }
 }
 .blank-workspace { width: 100%; min-height: 100%; }
 .card-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }

@@ -19,9 +19,12 @@ const PHASE4H_AUTO_VERIFY = process.env.OF_PHASE4H_AUTO_VERIFY === '1';
 const PHASE4I_AUTO_VERIFY = process.env.OF_PHASE4I_AUTO_VERIFY === '1';
 const PHASE5_AUTO_VERIFY = process.env.OF_PHASE5_AUTO_VERIFY === '1';
 const PHASE6_AUTO_VERIFY = process.env.OF_PHASE6_AUTO_VERIFY === '1';
+const PHASE6B_AUTO_VERIFY = process.env.OF_PHASE6B_AUTO_VERIFY === '1';
+const PHASE6B_DASHBOARD_ONLY = process.env.OF_PHASE6B_DASHBOARD_ONLY === '1';
+const PHASE6B_UNPIN_ONLY = process.env.OF_PHASE6B_UNPIN_ONLY === '1';
 const EXTRA_INCIDENT_CAPTURE_ROUTE = process.env.OF_CAPTURE_INCIDENT_ROUTE || '';
 const SHOULD_CONTINUE_AFTER_AUTO_CAPTURE =
-  PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY || PHASE4H_AUTO_VERIFY || PHASE4I_AUTO_VERIFY || PHASE5_AUTO_VERIFY || PHASE6_AUTO_VERIFY;
+  PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY || PHASE4H_AUTO_VERIFY || PHASE4I_AUTO_VERIFY || PHASE5_AUTO_VERIFY || PHASE6_AUTO_VERIFY || PHASE6B_AUTO_VERIFY || PHASE6B_DASHBOARD_ONLY || PHASE6B_UNPIN_ONLY;
 const dbLifecycle = createDbLifecycleManager({ app, dialog, BrowserWindow });
 let autoCheckTimer = null;
 const APP_ICON_PATH = path.join(__dirname, '..', 'public', 'assets', 'icon.svg');
@@ -152,6 +155,45 @@ async function waitForIncidentListRows(win) {
   );
 }
 
+async function clickButtonByText(win, text, timeoutMs = 15000) {
+  await win.webContents.executeJavaScript(
+    `
+      (async () => {
+        const started = Date.now();
+        while (Date.now() - started < ${Number(timeoutMs)}) {
+          const button = [...document.querySelectorAll('button')].find(
+            (item) => item.textContent && item.textContent.trim() === ${JSON.stringify(text)}
+          );
+          if (button && !button.disabled) {
+            button.click();
+            return true;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        return false;
+      })();
+    `,
+    true
+  );
+}
+
+async function setListSearch(win, value) {
+  await win.webContents.executeJavaScript(
+    `
+      (() => {
+        const input = document.querySelector('.list-control-panel input');
+        if (!input) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        setter?.call(input, ${JSON.stringify(value)});
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      })();
+    `,
+    true
+  );
+}
+
 function restartAutoCheckTimer() {
   if (autoCheckTimer) {
     clearInterval(autoCheckTimer);
@@ -243,6 +285,11 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:incidents-list-local', async () => dbLifecycle.getIncidentListLocal());
   ipcMain.handle('db:incident-detail-local', async (_event, fireYear, incidentNumber) =>
     dbLifecycle.getIncidentDetailLocal(fireYear, incidentNumber)
+  );
+  ipcMain.handle('db:pins-list', async () => dbLifecycle.getPinnedIncidents());
+  ipcMain.handle('db:pin-set', async (_event, payload) => dbLifecycle.setIncidentPinned(payload));
+  ipcMain.handle('db:pin-remove', async (_event, fireYear, incidentNumber) =>
+    dbLifecycle.removeIncidentPinned(fireYear, incidentNumber)
   );
 
   const win = createWindow();
@@ -367,6 +414,84 @@ app.whenReady().then(async () => {
     await captureIncidentTab(win, '#/incidents/2025/G90425', 'Maps', 'phase6-g90425-maps.png', 2500);
     await loadRenderer(win, '#/incidents/2025/K60922');
     await captureCurrentView(win, 'phase6-k60922-detail.png', 2600);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE6B_AUTO_VERIFY) {
+    await captureView(win, '#/dashboard', 'phase6b-dashboard-no-pins.png');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase6b-g70422-detail-unpinned.png', 2200);
+    await clickButtonByText(win, 'Pin incident');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase6b-g70422-detail-pinned.png', 2200);
+    await loadRenderer(win, '#/incidents');
+    await waitForIncidentListRows(win);
+    await setListSearch(win, 'G70422');
+    await captureCurrentView(win, 'phase6b-incidents-list-pinned.png', 1800);
+    await loadRenderer(win, '#/dashboard');
+    await win.webContents.executeJavaScript(
+      `
+        (() => {
+          const panel = document.querySelector('.dashboard-pinned');
+          panel?.scrollIntoView({ block: 'center', behavior: 'instant' });
+          return Boolean(panel);
+        })();
+      `,
+      true
+    );
+    await captureCurrentView(win, 'phase6b-dashboard-with-pins.png', 1600);
+    await captureIncidentTab(win, '#/incidents/2025/G90425', 'Maps', 'phase6b-g90425-maps.png', 2500);
+    await loadRenderer(win, '#/incidents/2025/K60922');
+    await captureCurrentView(win, 'phase6b-k60922-detail.png', 2200);
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await clickButtonByText(win, 'Unpin incident');
+    await loadRenderer(win, '#/dashboard');
+    await captureCurrentView(win, 'phase6b-dashboard-after-unpin.png', 1800);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE6B_DASHBOARD_ONLY) {
+    await loadRenderer(win, '#/dashboard');
+    await win.webContents.executeJavaScript(
+      `
+        (async () => {
+          const started = Date.now();
+          while (Date.now() - started < 15000) {
+            const panel = document.querySelector('.dashboard-pinned');
+            const hasPinnedCard = document.querySelector('.pinned-incident-card');
+            if (panel) {
+              panel.scrollIntoView({ block: 'center', behavior: 'instant' });
+            }
+            if (hasPinnedCard) {
+              return true;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+          return false;
+        })();
+      `,
+      true
+    );
+    await captureCurrentView(win, 'phase6b-dashboard-with-pins.png', 2200);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE6B_UNPIN_ONLY) {
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await clickButtonByText(win, 'Unpin incident');
+    await loadRenderer(win, '#/dashboard');
     if (SMOKE_MODE) {
       app.quit();
       return;

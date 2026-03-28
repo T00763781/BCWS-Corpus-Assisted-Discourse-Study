@@ -105,12 +105,15 @@ function isMapLink(link) {
 function buildIncidentListAffordances(fireYear, incidentNumber, parsedDetail, captureStatus) {
   const attachments = Array.isArray(parsedDetail?.attachments) ? parsedDetail.attachments : [];
   const externalLinks = Array.isArray(parsedDetail?.externalLinks) ? parsedDetail.externalLinks : [];
-  const responseUpdates = Array.isArray(parsedDetail?.response?.responseUpdates) ? parsedDetail.response.responseUpdates : [];
+  const renderableAttachments = attachments.filter((asset) => isImageAttachment(asset));
   const hasMapDownloads = attachments.some(isMapAttachment) || externalLinks.some(isMapLink);
   return {
-    hasMedia: Boolean(captureStatus?.hasLocalMedia) || attachments.some((asset) => isImageAttachment(asset)),
+    hasMedia:
+      renderableAttachments.length > 0 &&
+      (Boolean(captureStatus?.hasLocalMedia) ||
+        renderableAttachments.some((asset) => Boolean(asset?.imageUrl) || Boolean(asset?.thumbnailUrl))),
     hasMapDownloads,
-    hasResponseHistory: Boolean(captureStatus?.hasResponseHistory) || responseUpdates.length > 0,
+    hasResponseHistory: Boolean(captureStatus?.hasResponseHistory),
   };
 }
 
@@ -628,6 +631,19 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         is_thumbnail INTEGER NOT NULL DEFAULT 0,
         blob_bytes BLOB NOT NULL,
         UNIQUE (fire_year, incident_number, attachment_guid, is_thumbnail)
+      )
+    `);
+    database.run(`
+      CREATE TABLE IF NOT EXISTS incident_pins (
+        fire_year TEXT NOT NULL,
+        incident_number TEXT NOT NULL,
+        incident_name TEXT,
+        stage TEXT,
+        fire_centre TEXT,
+        size_ha REAL,
+        updated_date TEXT,
+        pinned_at TEXT NOT NULL,
+        PRIMARY KEY (fire_year, incident_number)
       )
     `);
     database.run(`
@@ -2003,6 +2019,88 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     };
   };
 
+  const getPinnedIncidents = () => {
+    if (!db) return { ok: false, error: 'No active DB selected.', rows: [] };
+    const rows = db.exec(
+      `
+      SELECT
+        p.fire_year,
+        p.incident_number,
+        COALESCE(i.incident_name, p.incident_name),
+        COALESCE(i.stage, p.stage),
+        COALESCE(i.fire_centre, p.fire_centre),
+        COALESCE(i.size_ha, p.size_ha),
+        COALESCE(i.updated_date, p.updated_date),
+        p.pinned_at
+      FROM incident_pins AS p
+      LEFT JOIN incidents AS i
+        ON i.fire_year = p.fire_year
+       AND i.incident_number = p.incident_number
+      ORDER BY p.pinned_at DESC, p.fire_year DESC, p.incident_number ASC
+      `
+    );
+    const collection = rows.length
+      ? rows[0].values.map((valueRow) => ({
+          fireYear: String(valueRow[0] || ''),
+          incidentNumber: String(valueRow[1] || ''),
+          incidentName: String(valueRow[2] || valueRow[1] || ''),
+          stage: String(valueRow[3] || ''),
+          fireCentre: String(valueRow[4] || ''),
+          sizeHa: valueRow[5] === null || valueRow[5] === undefined ? null : Number(valueRow[5]),
+          updatedDate: valueRow[6] ? String(valueRow[6]) : '',
+          pinnedAt: valueRow[7] ? String(valueRow[7]) : '',
+        }))
+      : [];
+    return { ok: true, rows: collection };
+  };
+
+  const setIncidentPinned = (payload) => {
+    if (!db) return { ok: false, error: 'No active DB selected.', rows: [] };
+    const fireYear = String(payload?.fireYear || '');
+    const incidentNumber = String(payload?.incidentNumber || '');
+    if (!fireYear || !incidentNumber) {
+      return { ok: false, error: 'fireYear and incidentNumber are required.', rows: [] };
+    }
+    db.run(
+      `
+      INSERT INTO incident_pins (
+        fire_year, incident_number, incident_name, stage, fire_centre, size_ha, updated_date, pinned_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(fire_year, incident_number) DO UPDATE SET
+        incident_name = excluded.incident_name,
+        stage = excluded.stage,
+        fire_centre = excluded.fire_centre,
+        size_ha = excluded.size_ha,
+        updated_date = excluded.updated_date,
+        pinned_at = excluded.pinned_at
+      `,
+      [
+        fireYear,
+        incidentNumber,
+        payload?.incidentName ? String(payload.incidentName) : null,
+        payload?.stage ? String(payload.stage) : null,
+        payload?.fireCentre ? String(payload.fireCentre) : null,
+        payload?.sizeHa === null || payload?.sizeHa === undefined || Number.isNaN(Number(payload.sizeHa))
+          ? null
+          : Number(payload.sizeHa),
+        payload?.updatedDate ? String(payload.updatedDate) : null,
+        payload?.pinnedAt ? String(payload.pinnedAt) : nowIso(),
+      ]
+    );
+    flushDb();
+    return getPinnedIncidents();
+  };
+
+  const removeIncidentPinned = (fireYear, incidentNumber) => {
+    if (!db) return { ok: false, error: 'No active DB selected.', rows: [] };
+    db.run('DELETE FROM incident_pins WHERE fire_year = ? AND incident_number = ?', [
+      String(fireYear),
+      String(incidentNumber),
+    ]);
+    flushDb();
+    return getPinnedIncidents();
+  };
+
   const getIncidentDetailLocal = (fireYear, incidentNumber) => {
     if (!db) return { ok: false, error: 'No active DB selected.', found: false };
     let query = db.exec(
@@ -2384,6 +2482,9 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     recoverResponseHistoryFromArchivedRaw,
     getIncidentListLocal,
     getIncidentDetailLocal,
+    getPinnedIncidents,
+    setIncidentPinned,
+    removeIncidentPinned,
     getIncidentCaptureTargets,
     getCaptureMetrics,
     getCaptureCompletenessSummary,

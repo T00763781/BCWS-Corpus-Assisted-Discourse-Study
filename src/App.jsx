@@ -38,6 +38,7 @@ const ROUTES = [
 const STATIC_ASSET_BASE = import.meta.env.BASE_URL;
 const APP_ICON_SRC = `${STATIC_ASSET_BASE}assets/icon.svg`;
 const APP_WORDMARK_SRC = `${STATIC_ASSET_BASE}assets/logo.svg`;
+const PIN_STORAGE_KEY = 'open-fireside-pinned-incidents';
 
 const STAGE_ICON_SRC = {
   FIRE_OF_NOTE: `${STATIC_ASSET_BASE}fire-of-note.svg`,
@@ -110,6 +111,94 @@ async function fetchLocalIncidentDetail(fireYear, incidentNumber) {
     return { ok: false, found: false };
   }
   return window.openFiresideDesktop.db.getIncidentDetailLocal(fireYear, incidentNumber);
+}
+
+function pinKey(fireYear, incidentNumber) {
+  return `${String(fireYear)}:${String(incidentNumber)}`;
+}
+
+function normalizePinnedIncident(record) {
+  if (!record?.fireYear || !record?.incidentNumber) return null;
+  return {
+    fireYear: String(record.fireYear),
+    incidentNumber: String(record.incidentNumber),
+    incidentName: String(record.incidentName || record.incidentNumber),
+    stage: String(record.stage || ''),
+    fireCentre: String(record.fireCentre || ''),
+    sizeHa:
+      record.sizeHa === null || record.sizeHa === undefined || Number.isNaN(Number(record.sizeHa))
+        ? null
+        : Number(record.sizeHa),
+    updatedDate: record.updatedDate ? String(record.updatedDate) : '',
+    pinnedAt: record.pinnedAt ? String(record.pinnedAt) : new Date().toISOString(),
+  };
+}
+
+function readBrowserPins() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PIN_STORAGE_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.map(normalizePinnedIncident).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeBrowserPins(items) {
+  window.localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(items));
+  return items;
+}
+
+function buildPinPayload(incident) {
+  if (!incident?.fireYear || !incident?.incidentNumber) return null;
+  return normalizePinnedIncident({
+    fireYear: incident.fireYear,
+    incidentNumber: incident.incidentNumber,
+    incidentName: incident.incidentName,
+    stage: incident.stage,
+    fireCentre: incident.fireCentre,
+    sizeHa: incident.sizeHa,
+    updatedDate: incident.updatedDate,
+    pinnedAt: new Date().toISOString(),
+  });
+}
+
+async function fetchPinnedIncidents({ preferDesktopDb = false } = {}) {
+  if (preferDesktopDb && hasDesktopDbBridge() && window.openFiresideDesktop.db.getPinnedIncidents) {
+    const result = await window.openFiresideDesktop.db.getPinnedIncidents();
+    if (result?.ok) {
+      return { ok: true, rows: (result.rows || []).map(normalizePinnedIncident).filter(Boolean), storage: 'desktop-db' };
+    }
+  }
+  return { ok: true, rows: readBrowserPins(), storage: 'browser-local-storage' };
+}
+
+async function setPinnedIncidentRecord(record, { preferDesktopDb = false } = {}) {
+  if (!record) return { ok: false, error: 'Incident pin payload is missing.', rows: [] };
+  if (preferDesktopDb && hasDesktopDbBridge() && window.openFiresideDesktop.db.setIncidentPinned) {
+    const result = await window.openFiresideDesktop.db.setIncidentPinned(record);
+    return {
+      ok: Boolean(result?.ok),
+      rows: (result?.rows || []).map(normalizePinnedIncident).filter(Boolean),
+      storage: 'desktop-db',
+      error: result?.error || '',
+    };
+  }
+  const next = [record, ...readBrowserPins().filter((item) => pinKey(item.fireYear, item.incidentNumber) !== pinKey(record.fireYear, record.incidentNumber))];
+  return { ok: true, rows: writeBrowserPins(next), storage: 'browser-local-storage' };
+}
+
+async function removePinnedIncidentRecord(fireYear, incidentNumber, { preferDesktopDb = false } = {}) {
+  if (preferDesktopDb && hasDesktopDbBridge() && window.openFiresideDesktop.db.removeIncidentPinned) {
+    const result = await window.openFiresideDesktop.db.removeIncidentPinned(fireYear, incidentNumber);
+    return {
+      ok: Boolean(result?.ok),
+      rows: (result?.rows || []).map(normalizePinnedIncident).filter(Boolean),
+      storage: 'desktop-db',
+      error: result?.error || '',
+    };
+  }
+  const next = readBrowserPins().filter((item) => pinKey(item.fireYear, item.incidentNumber) !== pinKey(fireYear, incidentNumber));
+  return { ok: true, rows: writeBrowserPins(next), storage: 'browser-local-storage' };
 }
 
 async function fetchCaptureSummary() {
@@ -368,6 +457,8 @@ export default function App() {
   const route = useHashRoute();
   const [configureTab, setConfigureTab] = React.useState('sources');
   const [pageLayouts, setPageLayouts] = React.useState(initialPageLayouts);
+  const [pinnedIncidents, setPinnedIncidents] = React.useState([]);
+  const [pinStorageKind, setPinStorageKind] = React.useState('browser-local-storage');
   const [dbStatus, setDbStatus] = React.useState({
     hasActiveDb: false,
     dbStateLabel: 'No DB',
@@ -409,9 +500,59 @@ export default function App() {
     return next;
   }, []);
 
+  const refreshPinnedIncidents = React.useCallback(
+    async (nextDbStatus = dbStatus) => {
+      const result = await fetchPinnedIncidents({ preferDesktopDb: Boolean(nextDbStatus?.hasActiveDb) });
+      if (result?.ok) {
+        setPinnedIncidents(result.rows || []);
+        setPinStorageKind(result.storage || 'browser-local-storage');
+      }
+      return result;
+    },
+    [dbStatus]
+  );
+
   React.useEffect(() => {
     refreshDbStatus();
   }, [refreshDbStatus]);
+
+  React.useEffect(() => {
+    refreshPinnedIncidents(dbStatus);
+  }, [dbStatus, refreshPinnedIncidents]);
+
+  React.useEffect(() => {
+    const onStorage = (event) => {
+      if (event.key && event.key !== PIN_STORAGE_KEY) return;
+      refreshPinnedIncidents(dbStatus);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [dbStatus, refreshPinnedIncidents]);
+
+  const togglePinnedIncident = React.useCallback(
+    async (incident, shouldPin) => {
+      const payload = buildPinPayload(incident);
+      if (!payload) {
+        return { ok: false, error: 'Incident pin payload is missing.' };
+      }
+      const result = shouldPin
+        ? await setPinnedIncidentRecord(payload, { preferDesktopDb: Boolean(dbStatus.hasActiveDb) })
+        : await removePinnedIncidentRecord(payload.fireYear, payload.incidentNumber, {
+            preferDesktopDb: Boolean(dbStatus.hasActiveDb),
+          });
+      if (result?.ok) {
+        setPinnedIncidents(result.rows || []);
+        setPinStorageKind(result.storage || (dbStatus.hasActiveDb ? 'desktop-db' : 'browser-local-storage'));
+      }
+      return result;
+    },
+    [dbStatus.hasActiveDb]
+  );
+
+  const pinnedIncidentKeySet = React.useMemo(
+    () => new Set(pinnedIncidents.map((item) => pinKey(item.fireYear, item.incidentNumber))),
+    [pinnedIncidents]
+  );
 
   const captureIncidents = React.useCallback(
     async (options = {}) => {
@@ -463,10 +604,24 @@ export default function App() {
         </aside>
 
         <section className="workspace">
-          {route.id === 'dashboard' ? <DashboardPage dbStatus={dbStatus} /> : null}
-          {route.id === 'incidents' ? <IncidentsListPage dbStatus={dbStatus} /> : null}
+          {route.id === 'dashboard' ? (
+            <DashboardPage
+              dbStatus={dbStatus}
+              pinnedIncidents={pinnedIncidents}
+              pinStorageKind={pinStorageKind}
+            />
+          ) : null}
+          {route.id === 'incidents' ? (
+            <IncidentsListPage dbStatus={dbStatus} pinnedIncidentKeySet={pinnedIncidentKeySet} />
+          ) : null}
           {route.id === 'incident-detail' ? (
-            <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} dbStatus={dbStatus} />
+            <IncidentDetailPage
+              fireYear={route.fireYear}
+              incidentNumber={route.incidentNumber}
+              dbStatus={dbStatus}
+              pinnedIncidentKeySet={pinnedIncidentKeySet}
+              onTogglePinnedIncident={togglePinnedIncident}
+            />
           ) : null}
           {route.id === 'weather' ? <PlaceholderPage title="Weather" message="Weather workflow is not wired in this runtime yet." /> : null}
           {route.id === 'maps' ? (
@@ -559,7 +714,7 @@ function CaptureStatusGrid({ items }) {
   );
 }
 
-function DashboardPage({ dbStatus }) {
+function DashboardPage({ dbStatus, pinnedIncidents, pinStorageKind }) {
   const [state, setState] = React.useState({
     phase: 'loading',
     error: '',
@@ -669,6 +824,8 @@ function DashboardPage({ dbStatus }) {
         <PinnedIncidentsPanel
           className="dashboard-pinned dashboard-grid__pinned"
           hasActiveDb={dbStatus.hasActiveDb}
+          pinnedIncidents={pinnedIncidents}
+          pinStorageKind={pinStorageKind}
         />
       </div>
     </div>
@@ -766,7 +923,7 @@ function FireCentreTable({ statsList }) {
   );
 }
 
-function IncidentsListPage({ dbStatus }) {
+function IncidentsListPage({ dbStatus, pinnedIncidentKeySet }) {
   const [search, setSearch] = React.useState('');
   const [fireCentre, setFireCentre] = React.useState('');
   const [quickFilter, setQuickFilter] = React.useState('all');
@@ -969,10 +1126,15 @@ function IncidentsListPage({ dbStatus }) {
             {rows.map((row) => (
               <tr key={`${row.fireYear}-${row.incidentNumber}`} onClick={() => navigateTo(`/incidents/${row.fireYear}/${encodeURIComponent(row.incidentNumber)}`)}>
                 <td>
-                  <button type="button" className="incident-link" onClick={(event) => { event.stopPropagation(); navigateTo(`/incidents/${row.fireYear}/${encodeURIComponent(row.incidentNumber)}`); }}>
-                    {row.incidentName}
-                    <span className="incident-link__meta">({row.incidentNumber})</span>
-                  </button>
+                  <div className="incident-name-cell">
+                    {pinnedIncidentKeySet.has(pinKey(row.fireYear, row.incidentNumber)) ? (
+                      <PinnedPill compact />
+                    ) : null}
+                    <button type="button" className="incident-link" onClick={(event) => { event.stopPropagation(); navigateTo(`/incidents/${row.fireYear}/${encodeURIComponent(row.incidentNumber)}`); }}>
+                      {row.incidentName}
+                      <span className="incident-link__meta">({row.incidentNumber})</span>
+                    </button>
+                  </div>
                 </td>
                 <td>
                   <span className={`stage-pill stage-pill--${row.stage}`}>{stageLabel(row.stage)}</span>
@@ -1129,7 +1291,7 @@ function mergeLiveIncidentWithLocalMedia(localData, liveData) {
   };
 }
 
-function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
+function IncidentDetailPage({ fireYear, incidentNumber, dbStatus, pinnedIncidentKeySet, onTogglePinnedIncident }) {
   const [tab, setTab] = React.useState('response');
   const [lightbox, setLightbox] = React.useState(null);
   const [state, setState] = React.useState({
@@ -1190,6 +1352,7 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
 
   const incident = state.data?.incident;
   const response = state.data?.response;
+  const isPinned = pinnedIncidentKeySet.has(pinKey(fireYear, incidentNumber));
   const galleryState = getGalleryMediaState(state.data?.attachments, state.source, state.captureStatus);
   const mapResources = getMapResources(state.data);
   const detailSourceLabel =
@@ -1216,6 +1379,14 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
         chips={headerChips}
         actions={
           <>
+            <button
+              type="button"
+              className={`refresh-chip refresh-chip--secondary pin-action ${isPinned ? 'is-active' : ''}`.trim()}
+              onClick={() => incident && onTogglePinnedIncident?.(incident, !isPinned)}
+              disabled={!incident}
+            >
+              {isPinned ? 'Unpin incident' : 'Pin incident'}
+            </button>
             <button type="button" className="refresh-chip refresh-chip--secondary" onClick={() => navigateTo('/incidents')}>
               Back to list
             </button>
@@ -1230,7 +1401,10 @@ function IncidentDetailPage({ fireYear, incidentNumber, dbStatus }) {
 
       <div className="incident-hero">
         <div className="incident-summary-card">
-          <div className="incident-summary-card__title">{detailSourceLabel}</div>
+          <div className="incident-summary-card__title-row">
+            <div className="incident-summary-card__title">{detailSourceLabel}</div>
+            {isPinned ? <PinnedPill /> : null}
+          </div>
           {state.captureStatus ? (
             <div className="detail-source-note">
               Local artifacts: detail {state.captureStatus.hasDetailSource ? 'yes' : 'no'} | attachments{' '}
@@ -1706,17 +1880,52 @@ function GalleryImage({ asset, onOpen }) {
   );
 }
 
-function PinnedIncidentsPanel({ hasActiveDb, className = '' }) {
+function PinnedPill({ compact = false }) {
+  return <span className={`pinned-pill ${compact ? 'is-compact' : ''}`.trim()}>Pinned</span>;
+}
+
+function PinnedIncidentsPanel({ hasActiveDb, pinnedIncidents, pinStorageKind, className = '' }) {
+  const items = Array.isArray(pinnedIncidents) ? pinnedIncidents : [];
   return (
     <section className={`stub-panel ${className}`.trim()}>
       <div className="card-title-row">
         <h2>Pinned Incidents</h2>
+        {items.length ? <div className="text-muted">{items.length} saved</div> : null}
       </div>
-      <div className="text-muted">
-        {hasActiveDb
-          ? 'Pinned incidents are not yet backed by a saved pin model, so no curated watchlist is shown here yet.'
-          : 'Select a local archive first. Pinning is not modeled truthfully without an active SQLite DB.'}
-      </div>
+      {items.length ? (
+        <div className="pinned-incident-list">
+          {items.map((item) => (
+            <button
+              key={pinKey(item.fireYear, item.incidentNumber)}
+              type="button"
+              className="pinned-incident-card"
+              onClick={() => navigateTo(`/incidents/${item.fireYear}/${encodeURIComponent(item.incidentNumber)}`)}
+            >
+              <div className="pinned-incident-card__top">
+                <PinnedPill compact />
+                <span className={`stage-pill stage-pill--${item.stage}`}>{stageLabel(item.stage)}</span>
+              </div>
+              <div className="pinned-incident-card__title">{item.incidentName || item.incidentNumber}</div>
+              <div className="pinned-incident-card__meta">
+                <span>{item.incidentNumber}</span>
+                <span>{formatSizeHa(item.sizeHa)}</span>
+              </div>
+              <div className="pinned-incident-card__meta">
+                <span>{item.fireCentre || 'Fire centre unavailable'}</span>
+                <span>{item.updatedDate ? `Updated ${formatDate(item.updatedDate)}` : 'Update unavailable'}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="text-muted">
+          {hasActiveDb
+            ? 'No incidents are pinned yet. Pin an incident from its detail page to keep it on the dashboard.'
+            : `No incidents are pinned yet. In this runtime, pins are saved in ${
+                pinStorageKind === 'desktop-db' ? 'the active desktop archive' : 'browser local storage'
+              }.`}
+        </div>
+      )}
     </section>
   );
 }

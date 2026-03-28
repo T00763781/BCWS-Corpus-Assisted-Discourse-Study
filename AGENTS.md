@@ -21,6 +21,9 @@ Use it to preserve working truth, current constraints, and prioritized next step
   - local media blobs in SQLite
 - Local vs live vs mixed rendering must remain explicit and truthful in the UI.
 - Public web QA builds must stay explicit that desktop SQLite selection, capture, and recovery controls are unavailable there.
+- Incident pinning is now wired:
+  - desktop runtime with an active DB persists pins in SQLite
+  - browser QA / no-DB runtime falls back to local browser storage
 
 ## Do not regress
 
@@ -86,9 +89,9 @@ These findings come from the current incident-phase build, the UX survey, and co
    - It should resize more gracefully.
    - The current implementation still feels student-project rough.
 
-9. **Pinned incidents should be wired**
-   - They are currently absent / placeholder on the dashboard.
-   - They should also connect to incident-page workflows.
+9. **Pinned incidents are now wired**
+   - Dashboard, list, and incident detail now share a real saved pin state.
+   - Keep pin persistence truthful: SQLite when an active desktop DB exists, browser local storage fallback otherwise.
 
 10. **Archive totals on dashboard are useful, but visual integration still needs refinement**
    - Keep them, but align them better with the rest of the dashboard design system.

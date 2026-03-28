@@ -28,6 +28,9 @@ contextBridge.exposeInMainWorld('openFiresideDesktop', {
     getIncidentListLocal: () => ipcRenderer.invoke('db:incidents-list-local'),
     getIncidentDetailLocal: (fireYear, incidentNumber) =>
       ipcRenderer.invoke('db:incident-detail-local', fireYear, incidentNumber),
+    getPinnedIncidents: () => ipcRenderer.invoke('db:pins-list'),
+    setIncidentPinned: (payload) => ipcRenderer.invoke('db:pin-set', payload),
+    removeIncidentPinned: (fireYear, incidentNumber) => ipcRenderer.invoke('db:pin-remove', fireYear, incidentNumber),
     onAutoCheckTick: (handler) => {
       const wrapped = (_event, payload) => handler(payload);
       ipcRenderer.on('db:auto-check-tick', wrapped);
