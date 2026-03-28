@@ -18,9 +18,10 @@ const PHASE4G_AUTO_VERIFY = process.env.OF_PHASE4G_AUTO_VERIFY === '1';
 const PHASE4H_AUTO_VERIFY = process.env.OF_PHASE4H_AUTO_VERIFY === '1';
 const PHASE4I_AUTO_VERIFY = process.env.OF_PHASE4I_AUTO_VERIFY === '1';
 const PHASE5_AUTO_VERIFY = process.env.OF_PHASE5_AUTO_VERIFY === '1';
+const PHASE6_AUTO_VERIFY = process.env.OF_PHASE6_AUTO_VERIFY === '1';
 const EXTRA_INCIDENT_CAPTURE_ROUTE = process.env.OF_CAPTURE_INCIDENT_ROUTE || '';
 const SHOULD_CONTINUE_AFTER_AUTO_CAPTURE =
-  PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY || PHASE4H_AUTO_VERIFY || PHASE4I_AUTO_VERIFY || PHASE5_AUTO_VERIFY;
+  PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY || PHASE4H_AUTO_VERIFY || PHASE4I_AUTO_VERIFY || PHASE5_AUTO_VERIFY || PHASE6_AUTO_VERIFY;
 const dbLifecycle = createDbLifecycleManager({ app, dialog, BrowserWindow });
 let autoCheckTimer = null;
 const APP_ICON_PATH = path.join(__dirname, '..', 'public', 'assets', 'icon.svg');
@@ -347,6 +348,25 @@ app.whenReady().then(async () => {
     await captureIncidentTab(win, '#/incidents/2025/G90425', 'Maps', 'phase5-g90425-maps.png', 2500);
     await loadRenderer(win, '#/incidents/2025/K60922');
     await captureCurrentView(win, 'phase5-k60922-detail.png', 2600);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE6_AUTO_VERIFY) {
+    await captureView(win, '#/dashboard', 'phase6-dashboard.png');
+    await loadRenderer(win, '#/incidents');
+    await waitForIncidentListRows(win);
+    await captureCurrentView(win, 'phase6-incidents-list.png', 1200);
+    await captureView(win, '#/configure', 'phase6-settings.png');
+    await captureView(win, '#/maps', 'phase6-maps-placeholder.png');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase6-g70422-detail.png', 2600);
+    await captureIncidentTab(win, '#/incidents/2025/G90425', 'Maps', 'phase6-g90425-maps.png', 2500);
+    await loadRenderer(win, '#/incidents/2025/K60922');
+    await captureCurrentView(win, 'phase6-k60922-detail.png', 2600);
     if (SMOKE_MODE) {
       app.quit();
       return;

@@ -468,9 +468,14 @@ export default function App() {
           {route.id === 'incident-detail' ? (
             <IncidentDetailPage fireYear={route.fireYear} incidentNumber={route.incidentNumber} dbStatus={dbStatus} />
           ) : null}
-          {route.id === 'weather' ? <PlaceholderPage title="Weather" message="Not wired in this browser runtime." /> : null}
-          {route.id === 'maps' ? <PlaceholderPage title="Maps" message="Not wired in this browser runtime." /> : null}
-          {route.id === 'discourse' ? <PlaceholderPage title="Discourse" message="Not wired in this browser runtime." /> : null}
+          {route.id === 'weather' ? <PlaceholderPage title="Weather" message="Weather workflow is not wired in this runtime yet." /> : null}
+          {route.id === 'maps' ? (
+            <PlaceholderPage
+              title="Maps"
+              message="Standalone map workspace is not wired yet. Use incident pages for the currently available perimeter and map-download views."
+            />
+          ) : null}
+          {route.id === 'discourse' ? <PlaceholderPage title="Discourse" message="Discourse workflow is not wired in this runtime yet." /> : null}
           {route.id === 'configure' ? (
             <SettingsHonestyPage
               dbStatus={dbStatus}
@@ -501,6 +506,55 @@ function PageHeader({ title, subtitle = '', chips = [], actions = null }) {
         ) : null}
       </div>
       <div className="page-header__actions">{actions}</div>
+    </div>
+  );
+}
+
+function ToolbarField({ label, children }) {
+  return (
+    <label className="toolbar-field">
+      <span className="toolbar-field__label">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function SettingsSectionCard({ title, eyebrow = '', children, className = '' }) {
+  return (
+    <section className={`settings-section-card ${className}`.trim()}>
+      <div className="settings-section-card__header">
+        {eyebrow ? <div className="settings-section-card__eyebrow">{eyebrow}</div> : null}
+        <h2>{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SettingsDataGrid({ items }) {
+  const rows = (items || []).filter((item) => item && item.label);
+  return (
+    <div className="settings-data-grid">
+      {rows.map((item) => (
+        <div key={item.label} className="settings-data-grid__item">
+          <div className="settings-data-grid__label">{item.label}</div>
+          <div className="settings-data-grid__value">{item.value ?? '--'}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CaptureStatusGrid({ items }) {
+  const rows = (items || []).filter((item) => item && item.label);
+  return (
+    <div className="capture-status-grid">
+      {rows.map((item) => (
+        <div key={item.label} className="capture-status-grid__item">
+          <div className="capture-status-grid__label">{item.label}</div>
+          <div className="capture-status-grid__value">{item.value ?? '--'}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -547,12 +601,12 @@ function DashboardPage({ dbStatus }) {
   const sourceSignals = React.useMemo(
     () => [
       {
-        label: 'Incident',
+        label: 'Incidents',
         status: dbStatus.hasActiveDb ? dbStatus.captureStateCode : 'no_db',
       },
       { label: 'Weather', status: 'not_wired' },
       { label: 'Discourse', status: 'not_wired' },
-      { label: 'Storage', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
+      { label: 'Archive', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
     ],
     [dbStatus.captureStateCode, dbStatus.hasActiveDb]
   );
@@ -561,7 +615,7 @@ function DashboardPage({ dbStatus }) {
     <div className="dashboard-page">
       <PageHeader
         title="Dashboard"
-        subtitle="Live BCWS overview with local archive status."
+        subtitle="Live BCWS snapshot with local archive context."
         chips={sourceSignals}
         actions={
           <button type="button" className="refresh-chip" onClick={load}>
@@ -577,7 +631,7 @@ function DashboardPage({ dbStatus }) {
           <div className="card-title-row">
             <div className="card-title">Wildfire Overview</div>
             <div className="dashboard-updated">
-              {stats?.updateDate ? `Updated ${formatDateTime(stats.updateDate)}` : ''}
+              {stats?.updateDate ? `Live update ${formatDateTime(stats.updateDate)}` : 'Live BCWS feed'}
             </div>
           </div>
           <div className="stage-legend is-inline">
@@ -816,13 +870,13 @@ function IncidentsListPage({ dbStatus }) {
   const resultsLabel = activeFilters.length ? `Filtered by ${activeFilters.join(' | ')}` : 'All active incidents';
   const sourceLabel =
     state.source === 'local'
-      ? 'Local DB incidents'
+      ? 'Local archive incidents'
       : dbStatus.hasActiveDb
-      ? 'Live BCWS fallback (no local incident rows)'
+      ? 'Live BCWS fallback for list rows'
       : 'Live BCWS incidents';
   const headerChips = [
-    { label: 'Incidents', status: state.source === 'local' ? 'db_selected' : dbStatus.hasActiveDb ? 'browser_fallback' : 'healthy' },
-    { label: 'Storage', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
+    { label: 'Source', status: state.source === 'local' ? 'db_selected' : dbStatus.hasActiveDb ? 'browser_fallback' : 'healthy' },
+    { label: 'Archive', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
   ];
 
   return (
@@ -837,47 +891,59 @@ function IncidentsListPage({ dbStatus }) {
           </button>
         }
       />
-      <div className="list-toolbar">
-        <input
-          className="toolbar-input"
-          placeholder="Search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        <select className="toolbar-input" value={quickFilter} onChange={(event) => setQuickFilter(event.target.value)}>
-          <option value="all">Filter: All incidents</option>
-          <option value="fireOfNote">Filter: Fire of note only</option>
-        </select>
-        <select className="toolbar-input" value={fireCentre} onChange={(event) => setFireCentre(event.target.value)}>
-          <option value="">All fire centres</option>
-          {FIRE_CENTRES.map((name) => (
-            <option key={name} value={name}>{name}</option>
-          ))}
-        </select>
-        <select className="toolbar-input toolbar-select" value={`${sortState.key}:${sortState.direction}`} onChange={handleSortDropdownChange}>
-          {sortOptions.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </div>
+      <section className="list-control-panel">
+        <div className="list-toolbar">
+          <ToolbarField label="Search">
+            <input
+              className="toolbar-input"
+              placeholder="Fire name, number, or location"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </ToolbarField>
+          <ToolbarField label="Quick filter">
+            <select className="toolbar-input" value={quickFilter} onChange={(event) => setQuickFilter(event.target.value)}>
+              <option value="all">All incidents</option>
+              <option value="fireOfNote">Fire of note only</option>
+            </select>
+          </ToolbarField>
+          <ToolbarField label="Fire centre">
+            <select className="toolbar-input" value={fireCentre} onChange={(event) => setFireCentre(event.target.value)}>
+              <option value="">All fire centres</option>
+              {FIRE_CENTRES.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </ToolbarField>
+          <ToolbarField label="Sort">
+            <select className="toolbar-input toolbar-select" value={`${sortState.key}:${sortState.direction}`} onChange={handleSortDropdownChange}>
+              {sortOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </ToolbarField>
+        </div>
 
-      <div className="list-results-row">
-        <div className="list-results-label">{`${resultsLabel} | ${sourceLabel}`}</div>
-      </div>
+        <div className="list-meta-strip">
+          <div className="list-results-label">{resultsLabel}</div>
+          <div className="list-results-label">{`${rows.length} incidents shown`}</div>
+          <div className="list-results-label">{sourceLabel}</div>
+        </div>
 
-      <div className="stage-toggle-row">
-        {['OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL', 'OUT'].map((code) => (
-          <button
-            key={code}
-            type="button"
-            className={`stage-toggle ${stageIsExclusive(code) ? 'is-active' : ''}`}
-            data-stage={code}
-            onClick={() => toggleStage(code)}
-          >
-            {stageLabel(code)}
-          </button>
-        ))}
-      </div>
+        <div className="stage-toggle-row list-stage-row">
+          {['OUT_CNTRL', 'HOLDING', 'UNDR_CNTRL', 'OUT'].map((code) => (
+            <button
+              key={code}
+              type="button"
+              className={`stage-toggle ${stageIsExclusive(code) ? 'is-active' : ''}`}
+              data-stage={code}
+              onClick={() => toggleStage(code)}
+            >
+              {stageLabel(code)}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {state.phase === 'failure' ? <div className="error-banner">{state.error}</div> : null}
 
@@ -1481,9 +1547,9 @@ function StubPanel({ title, className = '' }) {
 function ArchiveTotalsPanel({ captureSummary, hasActiveDb, className = '' }) {
   const completenessStatus = captureSummary?.completenessStatus || 'partial';
   const headline = !hasActiveDb
-    ? 'Select a SQLite DB to surface local archival totals.'
+    ? 'No local archive is selected.'
     : captureSummary
-    ? `Local archive source: ${completenessStatus}.`
+    ? `Archive scope: ${completenessStatus === 'endpoint-limited' ? 'endpoint-limited published set' : completenessStatus}.`
     : 'Loading local archive totals.';
 
   return (
@@ -1648,8 +1714,8 @@ function PinnedIncidentsPanel({ hasActiveDb, className = '' }) {
       </div>
       <div className="text-muted">
         {hasActiveDb
-          ? 'Pinned incidents are not yet backed by a saved pin model. No operator-curated pins are being shown.'
-          : 'Select an active SQLite DB before pinned incidents can be modeled truthfully.'}
+          ? 'Pinned incidents are not yet backed by a saved pin model, so no curated watchlist is shown here yet.'
+          : 'Select a local archive first. Pinning is not modeled truthfully without an active SQLite DB.'}
       </div>
     </section>
   );
@@ -1673,15 +1739,15 @@ function PlaceholderPage({ title, message }) {
     <div className="stub-page">
       <PageHeader
         title={title}
-        subtitle={message}
+        subtitle="Truthful route placeholder"
         chips={[
-          { label: title, status: 'not_wired' },
-          { label: 'Storage', status: 'no_db' },
+          { label: 'Route', status: 'not_wired' },
+          { label: 'Runtime', status: 'browser_fallback' },
         ]}
       />
       <section className="stub-panel">
-        <h2>Not wired in this runtime</h2>
-        <p>{message}</p>
+        <h2>{title} workspace is not available here yet</h2>
+        <p className="placeholder-copy">{message}</p>
       </section>
     </div>
   );
@@ -1862,19 +1928,18 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
     <div className="stub-page">
       <PageHeader
         title="Settings"
-        subtitle="Desktop archive controls, truthful run state, and storage visibility."
+        subtitle="Runtime, archive controls, and storage at a glance."
         chips={[
           { label: 'Runtime', status: desktopActive ? 'db_selected' : 'browser_fallback' },
           { label: 'Capture', status: dbStatus.captureStateCode },
-          { label: 'Storage', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
+          { label: 'Archive', status: dbStatus.hasActiveDb ? 'db_selected' : 'no_db' },
         ]}
       />
       <section className="settings-note-card">
         <div className="mini-list">
-          <div>Runtime: {desktopActive ? 'Electron desktop shell' : 'Public QA web build with no desktop DB controls'}</div>
-          <div>Storage: {dbStatus.hasActiveDb ? 'SQLite DB selected' : 'No DB selected'}</div>
-          <div>Capture state: {dbStatus.captureStateLabel}</div>
-          <div>Auto-check: {dbStatus.autoCheckEnabled ? `Enabled (${dbStatus.autoCheckMinutes} min)` : 'Disabled'}</div>
+          <div>{desktopActive ? 'Electron desktop runtime with archive controls enabled.' : 'Public QA web build. Desktop archive controls are intentionally unavailable here.'}</div>
+          <div>{dbStatus.hasActiveDb ? `Archive path ready: ${dbStatus.name}` : 'No SQLite archive is selected.'}</div>
+          <div>{dbStatus.autoCheckEnabled ? `Auto-check is enabled every ${dbStatus.autoCheckMinutes} minutes.` : 'Auto-check is currently disabled.'}</div>
         </div>
       </section>
       <section className={`capture-status-panel is-${dbStatus.captureStateCode}`.trim()}>
@@ -1889,166 +1954,193 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
             <div className="capture-progress-bar" aria-label="Capture progress">
               <div className="capture-progress-bar__fill" style={{ width: `${progressPercent}%` }} />
             </div>
-            <div className="mini-list">
-              <div>Run mode: {activeRun.trigger || 'manual'}</div>
-              <div>Started: {activeRun.startedAt ? formatDateTime(Date.parse(activeRun.startedAt)) : '--'}</div>
-              <div>Elapsed: {formatDurationMs(shownElapsedMs)}</div>
-              <div>Archival fire year: {displayValue(activeRun.archivalFireYear || ARCHIVAL_FIRE_YEAR)}</div>
-              <div>Endpoint rows fetched: {displayValue(activeRun.endpointRowsFetched)}</div>
-              <div>Endpoint total rows: {displayValue(activeRun.endpointTotalRowCount)}</div>
-              <div>Endpoint pages fetched: {displayValue(activeRun.endpointPageCount)}</div>
-              <div>Targeted incidents: {displayValue(activeRun.targetedIncidentCount)}</div>
-              <div>Incidents completed: {displayValue(activeRun.completedIncidentCount)}</div>
-              <div>Incidents failed: {displayValue(activeRun.failedIncidentCount)}</div>
-              <div>Current stage: {activeRun.currentStageLabel || '--'}</div>
-              <div>Current artifact: {activeRun.currentArtifactLabel || '--'}</div>
-              <div>Current incident: {activeRun.currentIncidentName || activeRun.currentIncidentNumber || '--'}</div>
-              <div>Current activity: {activeRun.currentActivity || '--'}</div>
-            </div>
+            <CaptureStatusGrid
+              items={[
+                { label: 'Run mode', value: activeRun.trigger || 'manual' },
+                { label: 'Started', value: activeRun.startedAt ? formatDateTime(Date.parse(activeRun.startedAt)) : '--' },
+                { label: 'Elapsed', value: formatDurationMs(shownElapsedMs) },
+                { label: 'Archival fire year', value: displayValue(activeRun.archivalFireYear || ARCHIVAL_FIRE_YEAR) },
+                { label: 'Endpoint rows', value: `${displayValue(activeRun.endpointRowsFetched)} of ${displayValue(activeRun.endpointTotalRowCount)}` },
+                { label: 'Pages fetched', value: displayValue(activeRun.endpointPageCount) },
+                { label: 'Targeted incidents', value: displayValue(activeRun.targetedIncidentCount) },
+                { label: 'Incidents completed', value: displayValue(activeRun.completedIncidentCount) },
+                { label: 'Incidents failed', value: displayValue(activeRun.failedIncidentCount) },
+                { label: 'Current stage', value: activeRun.currentStageLabel || '--' },
+                { label: 'Current artifact', value: activeRun.currentArtifactLabel || '--' },
+                { label: 'Current incident', value: activeRun.currentIncidentName || activeRun.currentIncidentNumber || '--' },
+                { label: 'Current activity', value: activeRun.currentActivity || '--' },
+              ]}
+            />
           </>
         ) : lastRun ? (
-          <div className="mini-list">
-            <div>Run mode: {lastRun.trigger || 'manual'}</div>
-            <div>Started: {lastRun.startedAt ? formatDateTime(Date.parse(lastRun.startedAt)) : '--'}</div>
-            <div>Finished: {lastRun.finishedAt ? formatDateTime(Date.parse(lastRun.finishedAt)) : '--'}</div>
-            <div>Duration: {formatDurationMs(lastRun.durationMs)}</div>
-            <div>Archival fire year: {displayValue(lastRun.archivalFireYear)}</div>
-            <div>Endpoint total rows: {displayValue(lastRun.endpointTotalRowCount)}</div>
-            <div>Endpoint rows fetched: {displayValue(lastRun.endpointRowsFetched)}</div>
-            <div>Endpoint pages fetched: {displayValue(lastRun.endpointPageCount)}</div>
-            <div>Local incidents persisted: {displayValue(lastRun.persistedIncidentCount)}</div>
-            <div>Completeness status: {lastRun.completenessStatus || '--'}</div>
-            <div>Query scope: {formatQueryScope(lastRun.queryScope)}</div>
-            <div>Completeness warning: {lastRun.completenessWarning || '--'}</div>
-            <div>Listed incidents: {displayValue(lastRun.listedIncidentCount)}</div>
-            <div>Targeted incidents: {displayValue(lastRun.targetedIncidentCount)}</div>
-            <div>Detail archived: {displayValue(lastRun.detailCaptureSuccessCount)}</div>
-            <div>Detail failures: {displayValue(lastRun.detailCaptureFailureCount)}</div>
-            <div>Attachments: {displayValue(lastRun.attachmentsCaptureCount)}</div>
-            <div>Media attempted: {displayValue(lastRun.mediaDownloadAttemptedCount)}</div>
-            <div>Media stored: {displayValue(lastRun.mediaStoredCount)}</div>
-            <div>Media failed: {displayValue(lastRun.mediaFailureCount)}</div>
-            <div>External links: {displayValue(lastRun.externalLinksCaptureCount)}</div>
-            <div>Perimeter: {displayValue(lastRun.perimeterCaptureCount)}</div>
-            <div>Response history: {displayValue(lastRun.responseHistoryExtractedCount)}</div>
-            <div>
-              Failure categories:{' '}
-              {Object.entries(lastRun.failureCategoryCounts || {})
-                .filter(([, count]) => Number(count) > 0)
-                .map(([key, count]) => `${key} ${count}`)
-                .join(' | ') || '--'}
-            </div>
-            <div>Failure reason: {lastRun.failureReason || '--'}</div>
-          </div>
+          <CaptureStatusGrid
+            items={[
+              { label: 'Run mode', value: lastRun.trigger || 'manual' },
+              { label: 'Started', value: lastRun.startedAt ? formatDateTime(Date.parse(lastRun.startedAt)) : '--' },
+              { label: 'Finished', value: lastRun.finishedAt ? formatDateTime(Date.parse(lastRun.finishedAt)) : '--' },
+              { label: 'Duration', value: formatDurationMs(lastRun.durationMs) },
+              { label: 'Listed incidents', value: displayValue(lastRun.listedIncidentCount) },
+              { label: 'Detail archived', value: displayValue(lastRun.detailCaptureSuccessCount) },
+              { label: 'Detail failures', value: displayValue(lastRun.detailCaptureFailureCount) },
+              { label: 'Attachments', value: displayValue(lastRun.attachmentsCaptureCount) },
+              { label: 'External links', value: displayValue(lastRun.externalLinksCaptureCount) },
+              { label: 'Perimeter', value: displayValue(lastRun.perimeterCaptureCount) },
+              { label: 'Response history', value: displayValue(lastRun.responseHistoryExtractedCount) },
+              { label: 'Media attempted', value: displayValue(lastRun.mediaDownloadAttemptedCount) },
+              { label: 'Media stored', value: displayValue(lastRun.mediaStoredCount) },
+              { label: 'Media failed', value: displayValue(lastRun.mediaFailureCount) },
+              {
+                label: 'Failure categories',
+                value:
+                  Object.entries(lastRun.failureCategoryCounts || {})
+                    .filter(([, count]) => Number(count) > 0)
+                    .map(([key, count]) => `${key} ${count}`)
+                    .join(' | ') || '--',
+              },
+              { label: 'Failure reason', value: lastRun.failureReason || '--' },
+            ]}
+          />
         ) : (
           <div className="text-muted">No capture run has been recorded yet.</div>
         )}
       </section>
-      <p>
-        Archival completeness: fire year {captureCompleteness.archivalFireYear || ARCHIVAL_FIRE_YEAR} | endpoint rows{' '}
-        {captureCompleteness.endpointRowsFetched} of {captureCompleteness.endpointTotalRowCount} | persisted locally{' '}
-        {captureCompleteness.persistedIncidentCount} | pages fetched {captureCompleteness.endpointPageCount} | status{' '}
-        {captureCompleteness.completenessStatus} | scope {formatQueryScope(captureCompleteness.queryScope)}.
-      </p>
-      <p>
-        Capture completeness: listed {captureCompleteness.listedIncidentCount} | detail archived{' '}
-        {captureCompleteness.detailArchivedCount} | detail failures {captureCompleteness.detailFailureCount} |
-        attachments {captureCompleteness.attachmentsMetadataCount} | incidents with local media {captureCompleteness.localMediaIncidentCount} |
-        media records {captureCompleteness.mediaRecordCount} | thumbnails {captureCompleteness.thumbnailStoredCount} | full images{' '}
-        {captureCompleteness.fullImageStoredCount} | external links {captureCompleteness.externalLinksMetadataCount} | perimeter{' '}
-        {captureCompleteness.perimeterPayloadCount} | response history {captureCompleteness.responseHistoryCount} | media bytes{' '}
-        {captureCompleteness.totalMediaBytes}.
-      </p>
-      <p>
-        Failure categories:{' '}
-        {Object.entries(captureCompleteness.failureCategoryCounts || {})
-          .filter(([, count]) => Number(count) > 0)
-          .map(([key, count]) => `${key} ${count}`)
-          .join(' | ') || '--'}
-      </p>
-      <p>Archival warning: {captureCompleteness.completenessWarning || '--'}</p>
-      {dbStatus.hasActiveDb ? (
-        <div className="mini-list">
-          <div>Active DB: {dbStatus.name}</div>
-          <div>Path: {dbStatus.path}</div>
-          <div>DB file size: {formatBytes(captureRuntime.dbFileSizeBytes)}</div>
-          <div>Created: {dbStatus.createdAt ? formatDateTime(Date.parse(dbStatus.createdAt)) : '--'}</div>
-          <div>Last opened: {dbStatus.lastOpenedAt ? formatDateTime(Date.parse(dbStatus.lastOpenedAt)) : '--'}</div>
-          <div>Last capture: {dbStatus.lastCapturedAt ? formatDateTime(Date.parse(dbStatus.lastCapturedAt)) : '--'}</div>
-          <div>
-            Last successful capture:{' '}
-            {captureRuntime.lastSuccessfulCaptureAt ? formatDateTime(Date.parse(captureRuntime.lastSuccessfulCaptureAt)) : '--'}
+      <div className="settings-grid">
+        <SettingsSectionCard title="Runtime and database" eyebrow="Environment">
+          <SettingsDataGrid
+            items={[
+              { label: 'Runtime', value: desktopActive ? 'Electron desktop shell' : 'Public QA web build' },
+              { label: 'Archive state', value: dbStatus.hasActiveDb ? 'SQLite archive selected' : 'No archive selected' },
+              { label: 'Active DB', value: dbStatus.name || '--' },
+              { label: 'Path', value: dbStatus.path || '--' },
+              { label: 'DB file size', value: formatBytes(captureRuntime.dbFileSizeBytes) },
+              { label: 'Created', value: dbStatus.createdAt ? formatDateTime(Date.parse(dbStatus.createdAt)) : '--' },
+              { label: 'Last opened', value: dbStatus.lastOpenedAt ? formatDateTime(Date.parse(dbStatus.lastOpenedAt)) : '--' },
+              { label: 'Last successful capture', value: captureRuntime.lastSuccessfulCaptureAt ? formatDateTime(Date.parse(captureRuntime.lastSuccessfulCaptureAt)) : '--' },
+            ]}
+          />
+        </SettingsSectionCard>
+
+        <SettingsSectionCard title="Archive capture" eyebrow="Scope and counts">
+          <SettingsDataGrid
+            items={[
+              { label: 'Archival fire year', value: displayValue(captureCompleteness.archivalFireYear || ARCHIVAL_FIRE_YEAR) },
+              { label: 'Endpoint rows', value: `${displayValue(captureCompleteness.endpointRowsFetched)} of ${displayValue(captureCompleteness.endpointTotalRowCount)}` },
+              { label: 'Pages fetched', value: displayValue(captureCompleteness.endpointPageCount) },
+              { label: 'Incidents persisted', value: displayValue(captureCompleteness.persistedIncidentCount) },
+              { label: 'Listed incidents', value: displayValue(captureCompleteness.listedIncidentCount) },
+              { label: 'Detail archived', value: displayValue(captureCompleteness.detailArchivedCount) },
+              { label: 'Detail failures', value: displayValue(captureCompleteness.detailFailureCount) },
+              { label: 'Response history', value: displayValue(captureCompleteness.responseHistoryCount) },
+            ]}
+          />
+          <div className="settings-helper-block">
+            <div><strong>Scope:</strong> {formatQueryScope(captureCompleteness.queryScope)}</div>
+            <div><strong>Status:</strong> {captureCompleteness.completenessStatus || '--'}</div>
+            <div><strong>Warning:</strong> {captureCompleteness.completenessWarning || '--'}</div>
           </div>
-          <div>Captured incidents: {displayValue(dbStatus.capturedIncidentCount)}</div>
-          <div>Last capture error: {dbStatus.lastCaptureError || '--'}</div>
-        </div>
-      ) : null}
-      <div className="stage-toggle-row">
-        <input
-          className="toolbar-input"
-          type="number"
-          min="0"
-          step="1"
-          value={autoCheckMinutesDraft}
-          onChange={(event) => setAutoCheckMinutesDraft(event.target.value)}
-          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
-        />
-        <button
-          type="button"
-          className="toolbar-button"
-          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
-          onClick={saveAutoCheckInterval}
-        >
-          Save auto-check minutes
-        </button>
+        </SettingsSectionCard>
+
+        <SettingsSectionCard title="Storage and media" eyebrow="Archive footprint">
+          <SettingsDataGrid
+            items={[
+              { label: 'Captured incidents', value: displayValue(dbStatus.capturedIncidentCount) },
+              { label: 'Incidents with media', value: displayValue(captureCompleteness.localMediaIncidentCount) },
+              { label: 'Media records', value: displayValue(captureCompleteness.mediaRecordCount) },
+              { label: 'Thumbnails stored', value: displayValue(captureCompleteness.thumbnailStoredCount) },
+              { label: 'Full images stored', value: displayValue(captureCompleteness.fullImageStoredCount) },
+              { label: 'Media bytes', value: formatBytes(captureCompleteness.totalMediaBytes) },
+              { label: 'Attachments metadata', value: displayValue(captureCompleteness.attachmentsMetadataCount) },
+              { label: 'External links metadata', value: displayValue(captureCompleteness.externalLinksMetadataCount) },
+              { label: 'Perimeter payloads', value: displayValue(captureCompleteness.perimeterPayloadCount) },
+              {
+                label: 'Failure categories',
+                value:
+                  Object.entries(captureCompleteness.failureCategoryCounts || {})
+                    .filter(([, count]) => Number(count) > 0)
+                    .map(([key, count]) => `${key} ${count}`)
+                    .join(' | ') || '--',
+              },
+              { label: 'Last capture error', value: dbStatus.lastCaptureError || '--' },
+            ]}
+          />
+        </SettingsSectionCard>
+
+        <SettingsSectionCard title="Controls and maintenance" eyebrow="Operator actions" className="settings-section-card--wide">
+          <div className="settings-action-stack">
+            <div className="settings-action-group">
+              <ToolbarField label="Auto-check minutes">
+                <input
+                  className="toolbar-input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={autoCheckMinutesDraft}
+                  onChange={(event) => setAutoCheckMinutesDraft(event.target.value)}
+                  disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+                />
+              </ToolbarField>
+              <button
+                type="button"
+                className="toolbar-button"
+                disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+                onClick={saveAutoCheckInterval}
+              >
+                Save auto-check
+              </button>
+            </div>
+
+            <div className="settings-action-grid">
+              <button
+                type="button"
+                className="toolbar-button"
+                disabled={!desktopActive || busy}
+                onClick={() => runDbAction(() => window.openFiresideDesktop.db.create())}
+              >
+                Create DB
+              </button>
+              <button
+                type="button"
+                className="toolbar-button"
+                disabled={!desktopActive || busy}
+                onClick={() => runDbAction(() => window.openFiresideDesktop.db.select())}
+              >
+                Select DB
+              </button>
+              <button
+                type="button"
+                className="toolbar-button"
+                disabled={!desktopActive || busy || !dbStatus.hasActiveDb || Boolean(activeRun)}
+                onClick={runManualCapture}
+              >
+                Capture incidents
+              </button>
+              <button
+                type="button"
+                className="toolbar-button"
+                disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+                onClick={runRecovery}
+              >
+                Recover response history
+              </button>
+              <button
+                type="button"
+                className="toolbar-button"
+                disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+                onClick={() => runDbAction(() => window.openFiresideDesktop.db.deleteActive())}
+              >
+                Delete DB
+              </button>
+            </div>
+
+            <div className="settings-helper-block">
+              <div><strong>Capture incidents:</strong> refresh the current 2025 published incident set, detail records, media, map artifacts, and run summary.</div>
+              <div><strong>Recover response history:</strong> reprocess archived raw detail payloads without rerunning a full incident capture.</div>
+              {!desktopActive ? <div><strong>Browser runtime:</strong> desktop DB lifecycle and capture controls stay unavailable in the public QA build.</div> : null}
+            </div>
+          </div>
+        </SettingsSectionCard>
       </div>
-      <div className="stage-toggle-row">
-        <button
-          type="button"
-          className="toolbar-button"
-          disabled={!desktopActive || busy}
-          onClick={() => runDbAction(() => window.openFiresideDesktop.db.create())}
-        >
-          Create DB
-        </button>
-        <button
-          type="button"
-          className="toolbar-button"
-          disabled={!desktopActive || busy}
-          onClick={() => runDbAction(() => window.openFiresideDesktop.db.select())}
-        >
-          Select DB
-        </button>
-        <button
-          type="button"
-          className="toolbar-button"
-          disabled={!desktopActive || busy || !dbStatus.hasActiveDb || Boolean(activeRun)}
-          onClick={runManualCapture}
-        >
-          Capture incidents
-        </button>
-        <button
-          type="button"
-          className="toolbar-button"
-          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
-          onClick={runRecovery}
-        >
-          Recover response history
-        </button>
-        <button
-          type="button"
-          className="toolbar-button"
-          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
-          onClick={() => runDbAction(() => window.openFiresideDesktop.db.deleteActive())}
-        >
-          Delete DB
-        </button>
-      </div>
-      <div className="text-muted settings-helper-copy">
-        Capture incidents refreshes the current 2025 published incident set, detail records, media, maps, and run summary.
-        Recover response history reprocesses already archived raw detail payloads without rerunning a full capture.
-      </div>
-      {!desktopActive ? <p>Desktop DB lifecycle and capture controls are unavailable in the public QA web build.</p> : null}
+
       {captureSummary ? <div className="list-results-label">{captureSummary}</div> : null}
       {recoverySummary ? <div className="list-results-label">{recoverySummary}</div> : null}
       {error ? <div className="error-banner">{error}</div> : null}
