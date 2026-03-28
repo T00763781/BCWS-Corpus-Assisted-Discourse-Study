@@ -37,7 +37,6 @@ const ROUTES = [
 
 const STATIC_ASSET_BASE = import.meta.env.BASE_URL;
 const APP_ICON_SRC = `${STATIC_ASSET_BASE}assets/icon.svg`;
-const APP_WORDMARK_SRC = `${STATIC_ASSET_BASE}assets/logo.svg`;
 const PIN_STORAGE_KEY = 'open-fireside-pinned-incidents';
 
 const STAGE_ICON_SRC = {
@@ -583,7 +582,6 @@ export default function App() {
         <aside className="left-rail">
           <div className="brand-block">
             <img src={APP_ICON_SRC} alt="" className="brand-icon" aria-hidden="true" />
-            <img src={APP_WORDMARK_SRC} alt="Open Fireside" className="brand-logo" />
           </div>
           <nav className="route-nav" aria-label="Primary navigation">
             {ROUTES.map((item) => {

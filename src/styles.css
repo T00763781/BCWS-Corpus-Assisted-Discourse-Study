@@ -19,9 +19,8 @@ body { color: #0d1419; }
 .app-shell { width: 100vw; height: 100vh; background: radial-gradient(circle at top, rgba(24, 36, 60, .3), transparent 35%), var(--bg); }
 .shell-frame { width: 100vw; height: 100vh; display: grid; grid-template-columns: 198px minmax(0, 1fr); }
 .left-rail { background: linear-gradient(180deg, #127d8f 0%, #0d7080 100%); padding: 20px 14px 18px; display: flex; flex-direction: column; border-right: 1px solid rgba(255,255,255,.12); }
-.brand-block { margin-bottom: 28px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding-left: 4px; }
+.brand-block { margin-bottom: 24px; display: flex; align-items: center; justify-content: center; width: 100%; }
 .brand-icon { width: 52px; height: 52px; display: block; }
-.brand-logo { width: 138px; height: auto; display: block; mix-blend-mode: multiply; }
 .route-nav { display: flex; flex-direction: column; gap: 8px; flex: 1; }
 .nav-item { appearance: none; background: transparent; border: 0; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; cursor: pointer; color: #eef1f3; text-align: left; min-width: 0; transition: background .16s ease, transform .16s ease; }
 .nav-item:hover { background: rgba(7, 24, 35, .14); }
