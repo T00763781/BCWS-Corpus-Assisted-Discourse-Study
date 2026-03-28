@@ -482,15 +482,30 @@ export default function App() {
 }
 
 function DashboardPage({ dbStatus }) {
-  const [state, setState] = React.useState({ phase: 'loading', error: '', data: null });
+  const [state, setState] = React.useState({
+    phase: 'loading',
+    error: '',
+    data: null,
+    captureSummary: null,
+  });
 
   const load = React.useCallback(async () => {
-    setState({ phase: 'loading', error: '', data: null });
+    setState((current) => ({
+      phase: 'loading',
+      error: '',
+      data: current.data,
+      captureSummary: current.captureSummary,
+    }));
     try {
-      const data = await fetchDashboardData();
-      setState({ phase: 'success', error: '', data });
+      const [data, captureSummary] = await Promise.all([fetchDashboardData(), fetchCaptureSummary()]);
+      setState({ phase: 'success', error: '', data, captureSummary });
     } catch (error) {
-      setState({ phase: 'failure', error: error.message || 'Failed to load dashboard', data: null });
+      setState((current) => ({
+        phase: 'failure',
+        error: error.message || 'Failed to load dashboard',
+        data: current.data,
+        captureSummary: current.captureSummary,
+      }));
     }
   }, []);
 
@@ -499,6 +514,7 @@ function DashboardPage({ dbStatus }) {
   }, [load]);
 
   const stats = state.data?.stats;
+  const captureSummary = state.captureSummary;
   const activeCount = stats
     ? (stats.activeOutOfControlFires || 0) +
       (stats.activeBeingHeldFires || 0) +
@@ -580,7 +596,11 @@ function DashboardPage({ dbStatus }) {
         </div>
 
         <StubPanel title="Discourse Signals" className="dashboard-discourse dashboard-grid__discourse" />
-        <StubPanel title="Pinned Incidents" className="dashboard-pinned dashboard-grid__pinned" />
+        <ArchiveTotalsPanel
+          className="dashboard-pinned dashboard-grid__pinned"
+          captureSummary={captureSummary}
+          hasActiveDb={dbStatus.hasActiveDb}
+        />
       </div>
     </div>
   );
@@ -1290,6 +1310,48 @@ function StubPanel({ title, className = '' }) {
   return (
     <section className={`stub-panel ${className}`.trim()}>
       <h2>{title}</h2>
+    </section>
+  );
+}
+
+function ArchiveTotalsPanel({ captureSummary, hasActiveDb, className = '' }) {
+  const completenessStatus = captureSummary?.completenessStatus || 'partial';
+  const headline = !hasActiveDb
+    ? 'Select a SQLite DB to surface local archival totals.'
+    : captureSummary
+    ? `Local archive source: ${completenessStatus}.`
+    : 'Loading local archive totals.';
+
+  return (
+    <section className={`stub-panel archive-totals-panel ${className}`.trim()}>
+      <div className="card-title-row">
+        <h2>Archive Totals</h2>
+        <div className="dashboard-updated">
+          {captureSummary?.archivalFireYear ? `Fire year ${captureSummary.archivalFireYear}` : ''}
+        </div>
+      </div>
+      <div className="text-muted">{headline}</div>
+      <div className="metrics-card-grid is-three archive-totals-grid">
+        <MetricCard label="Incidents persisted" value={displayValue(captureSummary?.persistedIncidentCount)} large />
+        <MetricCard label="Detail archived" value={displayValue(captureSummary?.detailArchivedCount)} large />
+        <MetricCard label="Response history" value={displayValue(captureSummary?.responseHistoryCount)} large />
+        <MetricCard label="Attachments" value={displayValue(captureSummary?.attachmentsMetadataCount)} large />
+        <MetricCard label="External links" value={displayValue(captureSummary?.externalLinksMetadataCount)} large />
+        <MetricCard label="Perimeters" value={displayValue(captureSummary?.perimeterPayloadCount)} large />
+        <MetricCard label="Incidents with media" value={displayValue(captureSummary?.localMediaIncidentCount)} large />
+        <MetricCard label="Media records" value={displayValue(captureSummary?.mediaRecordCount)} large />
+        <MetricCard label="Media stored" value={formatBytes(captureSummary?.totalMediaBytes)} large />
+      </div>
+      <div className="archive-totals-panel__meta">
+        <div>
+          Endpoint rows: {displayValue(captureSummary?.endpointRowsFetched)} of{' '}
+          {displayValue(captureSummary?.endpointTotalRowCount)}
+        </div>
+        <div>Pages fetched: {displayValue(captureSummary?.endpointPageCount)}</div>
+        <div>Status: {captureSummary?.completenessStatus || '--'}</div>
+        <div>Scope: {formatQueryScope(captureSummary?.queryScope)}</div>
+        <div>Warning: {captureSummary?.completenessWarning || '--'}</div>
+      </div>
     </section>
   );
 }

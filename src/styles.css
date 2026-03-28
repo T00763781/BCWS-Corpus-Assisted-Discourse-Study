@@ -114,6 +114,9 @@ body { color: #0d1419; }
 .dashboard-pinned { min-height: 292px; }
 .dashboard-discourse h2,
 .dashboard-pinned h2 { margin-bottom: 0; }
+.archive-totals-panel { gap: 10px; }
+.archive-totals-grid { margin-top: 2px; }
+.archive-totals-panel__meta { display: grid; gap: 4px; font-size: 12px; color: #4c5862; }
 .dashboard-right-lower { display: flex; flex-direction: column; gap: 10px; }
 .incidents-page, .incident-detail-page { display: flex; flex-direction: column; gap: 12px; }
 .list-toolbar { display: grid; grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(180px, 1fr)); gap: 10px; }
