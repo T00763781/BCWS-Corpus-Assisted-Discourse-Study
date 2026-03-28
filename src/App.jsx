@@ -82,8 +82,10 @@ async function fetchDesktopDbStatus() {
       createdAt: null,
       lastOpenedAt: null,
       lastCapturedAt: null,
+      lastSuccessfulCaptureAt: null,
       lastCaptureError: null,
       capturedIncidentCount: 0,
+      dbFileSizeBytes: 0,
       autoCheckMinutes: 0,
       autoCheckEnabled: false,
     };
@@ -127,6 +129,18 @@ async function fetchCaptureSummary() {
   return window.openFiresideDesktop.db.getCaptureSummary();
 }
 
+async function fetchCaptureRuntime() {
+  if (!hasDesktopDbBridge() || !window.openFiresideDesktop.db.getCaptureRuntime) {
+    return {
+      activeRun: null,
+      lastRun: null,
+      dbFileSizeBytes: 0,
+      lastSuccessfulCaptureAt: null,
+    };
+  }
+  return window.openFiresideDesktop.db.getCaptureRuntime();
+}
+
 async function fetchCaptureTargets() {
   if (!hasDesktopDbBridge() || !window.openFiresideDesktop.db.getCaptureTargets) {
     return { ok: false, incompleteKeys: [], incompleteKeySet: {}, recordedCount: 0 };
@@ -141,23 +155,49 @@ async function runIncidentCapture({ trigger = 'manual' } = {}) {
 
   const dbApi = window.openFiresideDesktop.db;
   const capturedAt = new Date().toISOString();
+  let listRows = [];
+  let targetRows = [];
+  const detailRecords = [];
+  const detailFailures = [];
   try {
-    await dbApi.markCaptureRunning();
+    await dbApi.markCaptureRunning({ trigger, startedAt: capturedAt });
     const listPayload = await fetchIncidentList({ pageRowCount: 1000 });
-    const listRows = listPayload.rows || [];
+    listRows = listPayload.rows || [];
     const captureTargets = await fetchCaptureTargets();
     const incompleteSet = new Set(Object.keys(captureTargets?.incompleteKeySet || {}));
-    const targetRows = captureTargets?.recordedCount
+    targetRows = captureTargets?.recordedCount
       ? listRows.filter((row) => incompleteSet.has(`${String(row.fireYear)}:${String(row.incidentNumber)}`))
       : incompleteSet.size
       ? listRows.filter((row) => incompleteSet.has(`${String(row.fireYear)}:${String(row.incidentNumber)}`))
       : listRows;
-
-    const detailRecords = [];
-    const detailFailures = [];
+    await dbApi.markCaptureProgress({
+      listedIncidentCount: listRows.length,
+      targetedIncidentCount: targetRows.length,
+      currentStageKey: 'detail',
+      currentStageLabel: 'Detail capture',
+      currentArtifactLabel: 'detail + attachments + external links + perimeter',
+      currentActivity: `Capturing details for ${targetRows.length} incidents`,
+      forcePersist: true,
+    });
     const chunkSize = 8;
     for (let index = 0; index < targetRows.length; index += chunkSize) {
       const chunk = targetRows.slice(index, index + chunkSize);
+      const chunkLead = chunk[0];
+      await dbApi.markCaptureProgress({
+        listedIncidentCount: listRows.length,
+        targetedIncidentCount: targetRows.length,
+        completedIncidentCount: detailRecords.length,
+        failedIncidentCount: detailFailures.length,
+        currentStageKey: 'detail',
+        currentStageLabel: 'Detail capture',
+        currentArtifactLabel: 'detail + attachments + external links + perimeter',
+        currentIncidentName: chunkLead?.incidentName || '',
+        currentIncidentNumber: chunkLead?.incidentNumber || '',
+        currentActivity: `Capturing incident details ${Math.min(index + 1, targetRows.length)}-${Math.min(
+          index + chunk.length,
+          targetRows.length
+        )} of ${targetRows.length}`,
+      });
       const settled = await Promise.all(
         chunk.map(async (row) => {
           try {
@@ -183,8 +223,31 @@ async function runIncidentCapture({ trigger = 'manual' } = {}) {
           error: result.error,
         });
       });
+      await dbApi.markCaptureProgress({
+        listedIncidentCount: listRows.length,
+        targetedIncidentCount: targetRows.length,
+        completedIncidentCount: detailRecords.length,
+        failedIncidentCount: detailFailures.length,
+        currentStageKey: 'detail',
+        currentStageLabel: 'Detail capture',
+        currentArtifactLabel: 'detail + attachments + external links + perimeter',
+        currentIncidentName: '',
+        currentIncidentNumber: '',
+        currentActivity: `Captured detail for ${detailRecords.length} incidents; ${detailFailures.length} failed`,
+      });
     }
 
+    await dbApi.markCaptureProgress({
+      listedIncidentCount: listRows.length,
+      targetedIncidentCount: targetRows.length,
+      completedIncidentCount: detailRecords.length,
+      failedIncidentCount: detailFailures.length,
+      currentStageKey: 'persisting',
+      currentStageLabel: 'Persisting run',
+      currentArtifactLabel: 'SQLite archive',
+      currentActivity: `Writing ${detailRecords.length} archived incidents and media to SQLite`,
+      forcePersist: true,
+    });
     const saved = await dbApi.saveCapture({
       trigger,
       capturedAt,
@@ -208,7 +271,14 @@ async function runIncidentCapture({ trigger = 'manual' } = {}) {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Incident capture failed';
-    await dbApi.markCaptureError(message);
+    await dbApi.markCaptureError(message, {
+      trigger,
+      startedAt: capturedAt,
+      listedIncidentCount: listRows.length,
+      targetedIncidentCount: targetRows.length,
+      completedIncidentCount: detailRecords.length,
+      failedIncidentCount: detailFailures.length,
+    });
     return { ok: false, error: message };
   }
 }
@@ -227,8 +297,10 @@ export default function App() {
     createdAt: null,
     lastOpenedAt: null,
     lastCapturedAt: null,
+    lastSuccessfulCaptureAt: null,
     lastCaptureError: null,
     capturedIncidentCount: 0,
+    dbFileSizeBytes: 0,
     autoCheckMinutes: 0,
     autoCheckEnabled: false,
   });
@@ -1288,6 +1360,12 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
   const [error, setError] = React.useState('');
   const [captureSummary, setCaptureSummary] = React.useState('');
   const [recoverySummary, setRecoverySummary] = React.useState('');
+  const [captureRuntime, setCaptureRuntime] = React.useState({
+    activeRun: null,
+    lastRun: null,
+    dbFileSizeBytes: 0,
+    lastSuccessfulCaptureAt: null,
+  });
   const [captureCompleteness, setCaptureCompleteness] = React.useState({
     listedIncidentCount: 0,
     detailArchivedCount: 0,
@@ -1310,14 +1388,48 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
     setAutoCheckMinutesDraft(String(dbStatus.autoCheckMinutes || 0));
   }, [dbStatus.autoCheckMinutes]);
 
+  const refreshCaptureRuntime = React.useCallback(async () => {
+    const next = await fetchCaptureRuntime();
+    setCaptureRuntime(next);
+  }, []);
+
   const refreshCaptureSummary = React.useCallback(async () => {
     const next = await fetchCaptureSummary();
     setCaptureCompleteness(next);
   }, []);
 
   React.useEffect(() => {
+    refreshCaptureRuntime();
+  }, [refreshCaptureRuntime, dbStatus.hasActiveDb, dbStatus.captureStateCode, dbStatus.lastCapturedAt]);
+
+  React.useEffect(() => {
     refreshCaptureSummary();
   }, [refreshCaptureSummary, dbStatus.hasActiveDb, dbStatus.lastCapturedAt]);
+
+  React.useEffect(() => {
+    if (!hasDesktopDbBridge() || !window.openFiresideDesktop.db.onCaptureProgress) return undefined;
+    const unsubscribe = window.openFiresideDesktop.db.onCaptureProgress((payload) => {
+      setCaptureRuntime(payload);
+    });
+    return unsubscribe;
+  }, []);
+
+  const [elapsedTick, setElapsedTick] = React.useState(Date.now());
+  React.useEffect(() => {
+    if (!captureRuntime.activeRun) return undefined;
+    const timer = window.setInterval(() => setElapsedTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [captureRuntime.activeRun]);
+
+  const activeRun = captureRuntime.activeRun;
+  const lastRun = captureRuntime.lastRun;
+  const completedProgress = Number(activeRun?.completedIncidentCount || 0) + Number(activeRun?.failedIncidentCount || 0);
+  const progressPercent = activeRun?.targetedIncidentCount
+    ? Math.min(100, Math.round((completedProgress / Number(activeRun.targetedIncidentCount || 0)) * 100))
+    : 0;
+  const shownElapsedMs = activeRun?.startedAt
+    ? Math.max(0, elapsedTick - Date.parse(activeRun.startedAt))
+    : 0;
 
   const runDbAction = async (action) => {
     if (!hasDesktopDbBridge()) return;
@@ -1329,6 +1441,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
         setError(result.error);
       }
       await onDbStatusChange();
+      await refreshCaptureRuntime();
       await refreshCaptureSummary();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'DB action failed');
@@ -1351,6 +1464,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
       setCaptureSummary(
         `Captured ${result.capturedListCount} incidents | targeted detail retries ${result.saved.runSummary?.targetedIncidentCount ?? result.targetedIncidentCount ?? 0} | detail archived ${result.saved.runSummary?.detailCaptureSuccessCount ?? result.capturedDetailCount} | detail failures ${result.saved.runSummary?.detailCaptureFailureCount ?? result.detailFailureCount} | attachments ${result.saved.runSummary?.attachmentsCaptureCount ?? 0} | media attempts ${result.saved.runSummary?.mediaDownloadAttemptedCount ?? 0} | media stored ${result.saved.runSummary?.mediaStoredCount ?? 0} | media failures ${result.saved.runSummary?.mediaFailureCount ?? 0} | external links ${result.saved.runSummary?.externalLinksCaptureCount ?? 0} | perimeter ${result.saved.runSummary?.perimeterCaptureCount ?? 0} | response history ${result.saved.runSummary?.responseHistoryExtractedCount ?? 0}.`
       );
+      await refreshCaptureRuntime();
       await refreshCaptureSummary();
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : 'Incident capture failed';
@@ -1371,6 +1485,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
         throw new Error(result?.error || 'Recovery failed');
       }
       await onDbStatusChange();
+      await refreshCaptureRuntime();
       await refreshCaptureSummary();
       setRecoverySummary(
         `Recovered ${result.insertedUpdates} response updates from ${result.scannedRecords} archived detail records (G70422 parsed blocks: ${result.g70422?.parsedBlocks ?? 0}, inserted: ${result.g70422?.inserted ?? 0}, reason: ${result.g70422?.reason || 'n/a'}).`
@@ -1393,6 +1508,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
         setError(result.error);
       }
       await onDbStatusChange();
+      await refreshCaptureRuntime();
       await refreshCaptureSummary();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to save auto-check interval');
@@ -1409,6 +1525,61 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
       <p>Storage state: {dbStatus.hasActiveDb ? 'DB selected' : 'No DB selected'}.</p>
       <p>Incident capture state: {dbStatus.captureStateLabel}.</p>
       <p>Auto-check: {dbStatus.autoCheckEnabled ? `Enabled (${dbStatus.autoCheckMinutes} min)` : 'Disabled'}.</p>
+      <section className={`capture-status-panel is-${dbStatus.captureStateCode}`.trim()}>
+        <div className="capture-status-panel__header">
+          <div className="capture-status-panel__title">
+            {activeRun ? 'Capture running' : lastRun ? 'Last capture run' : 'Capture status'}
+          </div>
+          <div className="capture-status-panel__state">{sourceHealthLabel(dbStatus.captureStateCode)}</div>
+        </div>
+        {activeRun ? (
+          <>
+            <div className="capture-progress-bar" aria-label="Capture progress">
+              <div className="capture-progress-bar__fill" style={{ width: `${progressPercent}%` }} />
+            </div>
+            <div className="mini-list">
+              <div>Run mode: {activeRun.trigger || 'manual'}</div>
+              <div>Started: {activeRun.startedAt ? formatDateTime(Date.parse(activeRun.startedAt)) : '--'}</div>
+              <div>Elapsed: {formatDurationMs(shownElapsedMs)}</div>
+              <div>Targeted incidents: {displayValue(activeRun.targetedIncidentCount)}</div>
+              <div>Incidents completed: {displayValue(activeRun.completedIncidentCount)}</div>
+              <div>Incidents failed: {displayValue(activeRun.failedIncidentCount)}</div>
+              <div>Current stage: {activeRun.currentStageLabel || '--'}</div>
+              <div>Current artifact: {activeRun.currentArtifactLabel || '--'}</div>
+              <div>Current incident: {activeRun.currentIncidentName || activeRun.currentIncidentNumber || '--'}</div>
+              <div>Current activity: {activeRun.currentActivity || '--'}</div>
+            </div>
+          </>
+        ) : lastRun ? (
+          <div className="mini-list">
+            <div>Run mode: {lastRun.trigger || 'manual'}</div>
+            <div>Started: {lastRun.startedAt ? formatDateTime(Date.parse(lastRun.startedAt)) : '--'}</div>
+            <div>Finished: {lastRun.finishedAt ? formatDateTime(Date.parse(lastRun.finishedAt)) : '--'}</div>
+            <div>Duration: {formatDurationMs(lastRun.durationMs)}</div>
+            <div>Listed incidents: {displayValue(lastRun.listedIncidentCount)}</div>
+            <div>Targeted incidents: {displayValue(lastRun.targetedIncidentCount)}</div>
+            <div>Detail archived: {displayValue(lastRun.detailCaptureSuccessCount)}</div>
+            <div>Detail failures: {displayValue(lastRun.detailCaptureFailureCount)}</div>
+            <div>Attachments: {displayValue(lastRun.attachmentsCaptureCount)}</div>
+            <div>Media attempted: {displayValue(lastRun.mediaDownloadAttemptedCount)}</div>
+            <div>Media stored: {displayValue(lastRun.mediaStoredCount)}</div>
+            <div>Media failed: {displayValue(lastRun.mediaFailureCount)}</div>
+            <div>External links: {displayValue(lastRun.externalLinksCaptureCount)}</div>
+            <div>Perimeter: {displayValue(lastRun.perimeterCaptureCount)}</div>
+            <div>Response history: {displayValue(lastRun.responseHistoryExtractedCount)}</div>
+            <div>
+              Failure categories:{' '}
+              {Object.entries(lastRun.failureCategoryCounts || {})
+                .filter(([, count]) => Number(count) > 0)
+                .map(([key, count]) => `${key} ${count}`)
+                .join(' | ') || '--'}
+            </div>
+            <div>Failure reason: {lastRun.failureReason || '--'}</div>
+          </div>
+        ) : (
+          <div className="text-muted">No capture run has been recorded yet.</div>
+        )}
+      </section>
       <p>
         Capture completeness: listed {captureCompleteness.listedIncidentCount} | detail archived{' '}
         {captureCompleteness.detailArchivedCount} | detail failures {captureCompleteness.detailFailureCount} |
@@ -1429,17 +1600,16 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
         <div className="mini-list">
           <div>Active DB: {dbStatus.name}</div>
           <div>Path: {dbStatus.path}</div>
+          <div>DB file size: {formatBytes(captureRuntime.dbFileSizeBytes)}</div>
           <div>Created: {dbStatus.createdAt ? formatDateTime(Date.parse(dbStatus.createdAt)) : '--'}</div>
           <div>Last opened: {dbStatus.lastOpenedAt ? formatDateTime(Date.parse(dbStatus.lastOpenedAt)) : '--'}</div>
           <div>Last capture: {dbStatus.lastCapturedAt ? formatDateTime(Date.parse(dbStatus.lastCapturedAt)) : '--'}</div>
+          <div>
+            Last successful capture:{' '}
+            {captureRuntime.lastSuccessfulCaptureAt ? formatDateTime(Date.parse(captureRuntime.lastSuccessfulCaptureAt)) : '--'}
+          </div>
           <div>Captured incidents: {displayValue(dbStatus.capturedIncidentCount)}</div>
           <div>Last capture error: {dbStatus.lastCaptureError || '--'}</div>
-          <div>
-            Last run summary:{' '}
-            {captureCompleteness.lastRun
-              ? `${captureCompleteness.lastRun.trigger || 'manual'} | listed ${captureCompleteness.lastRun.listedIncidentCount} | targeted ${captureCompleteness.lastRun.targetedIncidentCount} | detail ok ${captureCompleteness.lastRun.detailCaptureSuccessCount} | detail fail ${captureCompleteness.lastRun.detailCaptureFailureCount} | attachments ${captureCompleteness.lastRun.attachmentsCaptureCount} | media attempts ${captureCompleteness.lastRun.mediaDownloadAttemptedCount} | media stored ${captureCompleteness.lastRun.mediaStoredCount} | media failures ${captureCompleteness.lastRun.mediaFailureCount} | external links ${captureCompleteness.lastRun.externalLinksCaptureCount} | perimeter ${captureCompleteness.lastRun.perimeterCaptureCount} | response history ${captureCompleteness.lastRun.responseHistoryExtractedCount}`
-              : '--'}
-          </div>
         </div>
       ) : null}
       <div className="stage-toggle-row">
@@ -1481,7 +1651,7 @@ function SettingsHonestyPage({ dbStatus, onDbStatusChange, onCaptureIncidents })
         <button
           type="button"
           className="toolbar-button"
-          disabled={!desktopActive || busy || !dbStatus.hasActiveDb}
+          disabled={!desktopActive || busy || !dbStatus.hasActiveDb || Boolean(activeRun)}
           onClick={runManualCapture}
         >
           Capture incidents
@@ -1797,6 +1967,32 @@ function displayValue(value) {
     return '--';
   }
   return Number(value).toLocaleString('en-CA');
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let current = bytes;
+  let index = 0;
+  while (current >= 1024 && index < units.length - 1) {
+    current /= 1024;
+    index += 1;
+  }
+  const digits = current >= 100 || index === 0 ? 0 : current >= 10 ? 1 : 2;
+  return `${current.toFixed(digits)} ${units[index]}`;
+}
+
+function formatDurationMs(value) {
+  const durationMs = Number(value || 0);
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return '0s';
+  const totalSeconds = Math.floor(durationMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
 function sourceHealthLabel(status) {

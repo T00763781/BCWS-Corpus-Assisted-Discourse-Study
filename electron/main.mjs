@@ -15,10 +15,20 @@ const PHASE4_AUTO_CAPTURE = process.env.OF_PHASE4_AUTO_CAPTURE === '1';
 const PHASE4C_AUTO_RECOVER = process.env.OF_PHASE4C_AUTO_RECOVER === '1';
 const PHASE4D_AUTO_VERIFY = process.env.OF_PHASE4D_AUTO_VERIFY === '1';
 const PHASE4G_AUTO_VERIFY = process.env.OF_PHASE4G_AUTO_VERIFY === '1';
+const PHASE4H_AUTO_VERIFY = process.env.OF_PHASE4H_AUTO_VERIFY === '1';
 const EXTRA_INCIDENT_CAPTURE_ROUTE = process.env.OF_CAPTURE_INCIDENT_ROUTE || '';
-const SHOULD_CONTINUE_AFTER_AUTO_CAPTURE = PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY;
+const SHOULD_CONTINUE_AFTER_AUTO_CAPTURE =
+  PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY || PHASE4H_AUTO_VERIFY;
 const dbLifecycle = createDbLifecycleManager({ app, dialog, BrowserWindow });
 let autoCheckTimer = null;
+
+function broadcastCaptureProgress(payload) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('db:capture-progress', payload);
+    }
+  }
+}
 
 function createWindow() {
   return new BrowserWindow({
@@ -126,6 +136,7 @@ app.whenReady().then(async () => {
   }
 
   await dbLifecycle.autoLoadLastUsed();
+  dbLifecycle.onCaptureProgress((payload) => broadcastCaptureProgress(payload));
 
   if (process.env.OF_DB_CREATE_PATH) {
     await dbLifecycle.createDbAtPath(process.env.OF_DB_CREATE_PATH);
@@ -174,10 +185,12 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('db:get-capture-metrics', async () => dbLifecycle.getCaptureMetrics());
   ipcMain.handle('db:get-capture-summary', async () => dbLifecycle.getCaptureCompletenessSummary());
+  ipcMain.handle('db:get-capture-runtime', async () => dbLifecycle.getCaptureRuntimeState());
   ipcMain.handle('db:get-capture-targets', async () => dbLifecycle.getIncidentCaptureTargets());
   ipcMain.handle('db:recover-response-history', async () => dbLifecycle.recoverResponseHistoryFromArchivedRaw());
-  ipcMain.handle('db:capture-mark-running', async () => dbLifecycle.markCaptureRunning());
-  ipcMain.handle('db:capture-mark-error', async (_event, message) => dbLifecycle.markCaptureError(message));
+  ipcMain.handle('db:capture-mark-running', async (_event, payload) => dbLifecycle.markCaptureRunning(payload));
+  ipcMain.handle('db:capture-mark-progress', async (_event, payload) => dbLifecycle.markCaptureProgress(payload));
+  ipcMain.handle('db:capture-mark-error', async (_event, message, extra) => dbLifecycle.markCaptureError(message, extra));
   ipcMain.handle('db:capture-save', async (_event, payload) => dbLifecycle.saveIncidentCapture(payload));
   ipcMain.handle('db:incidents-list-local', async () => dbLifecycle.getIncidentListLocal());
   ipcMain.handle('db:incident-detail-local', async (_event, fireYear, incidentNumber) =>
@@ -208,6 +221,9 @@ app.whenReady().then(async () => {
       `,
       true
     );
+    if (PHASE4H_AUTO_VERIFY) {
+      await captureCurrentView(win, 'phase4h-settings-during-capture.png', 2500);
+    }
     await win.webContents.executeJavaScript(
       `
         (async () => {
@@ -226,9 +242,21 @@ app.whenReady().then(async () => {
       true
     );
     await captureView(win, '#/configure', 'phase4b-settings-after-capture.png');
+    if (PHASE4H_AUTO_VERIFY) {
+      await captureView(win, '#/configure', 'phase4h-settings-after-capture.png');
+    }
     await captureView(win, '#/incidents', 'phase4b-incidents-after-capture.png');
     await loadRenderer(win, '#/incidents/2025/G70422');
     await captureCurrentView(win, 'phase4b-g70422-after-capture.png', 4000);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE4H_AUTO_VERIFY) {
+    await captureIncidentTab(win, '#/incidents/2025/G70422', 'Gallery', 'phase4h-g70422-gallery.png', 2500);
     if (SMOKE_MODE) {
       app.quit();
       return;

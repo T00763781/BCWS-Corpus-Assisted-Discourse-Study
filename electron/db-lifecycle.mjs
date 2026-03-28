@@ -263,11 +263,24 @@ function buildSnapshotPayload(row, detail) {
   };
 }
 
+function toDurationMs(startedAt, finishedAt = nowIso()) {
+  const start = Date.parse(String(startedAt || ''));
+  const end = Date.parse(String(finishedAt || ''));
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+  return Math.max(0, end - start);
+}
+
 export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
   const runtimeConfigPath = path.join(app.getPath('userData'), RUNTIME_CONFIG_FILE);
   let sqlPromise;
   let db = null;
   let activeDbPath = null;
+  const captureProgressListeners = new Set();
+  let captureRuntime = {
+    activeRun: null,
+    lastRun: null,
+  };
+  let lastCaptureRuntimePersistAt = 0;
 
   const loadSql = async () => {
     if (!sqlPromise) {
@@ -289,6 +302,133 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     fs.mkdirSync(path.dirname(runtimeConfigPath), { recursive: true });
     fs.writeFileSync(runtimeConfigPath, JSON.stringify(next, null, 2));
   };
+
+  const getDbFileSizeBytes = () => {
+    try {
+      return activeDbPath && fs.existsSync(activeDbPath) ? fs.statSync(activeDbPath).size : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const normalizeRunSnapshot = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    const startedAt = value.startedAt ? String(value.startedAt) : null;
+    const finishedAt = value.finishedAt ? String(value.finishedAt) : null;
+    const base = {
+      state: String(value.state || 'idle'),
+      trigger: String(value.trigger || ''),
+      startedAt,
+      finishedAt,
+      durationMs:
+        Number.isFinite(Number(value.durationMs)) && Number(value.durationMs) >= 0
+          ? Number(value.durationMs)
+          : startedAt
+          ? toDurationMs(startedAt, finishedAt || nowIso())
+          : 0,
+      listedIncidentCount: Number(value.listedIncidentCount || 0),
+      targetedIncidentCount: Number(value.targetedIncidentCount || 0),
+      completedIncidentCount: Number(value.completedIncidentCount || 0),
+      failedIncidentCount: Number(value.failedIncidentCount || 0),
+      currentIncidentName: value.currentIncidentName ? String(value.currentIncidentName) : '',
+      currentIncidentNumber: value.currentIncidentNumber ? String(value.currentIncidentNumber) : '',
+      currentStageKey: value.currentStageKey ? String(value.currentStageKey) : '',
+      currentStageLabel: value.currentStageLabel ? String(value.currentStageLabel) : '',
+      currentArtifactLabel: value.currentArtifactLabel ? String(value.currentArtifactLabel) : '',
+      currentActivity: value.currentActivity ? String(value.currentActivity) : '',
+      failureReason: value.failureReason ? String(value.failureReason) : '',
+      detailCaptureSuccessCount: Number(value.detailCaptureSuccessCount || 0),
+      detailCaptureFailureCount: Number(value.detailCaptureFailureCount || 0),
+      attachmentsCaptureCount: Number(value.attachmentsCaptureCount || 0),
+      mediaDownloadAttemptedCount: Number(value.mediaDownloadAttemptedCount || 0),
+      mediaStoredCount: Number(value.mediaStoredCount || 0),
+      mediaFailureCount: Number(value.mediaFailureCount || 0),
+      externalLinksCaptureCount: Number(value.externalLinksCaptureCount || 0),
+      perimeterCaptureCount: Number(value.perimeterCaptureCount || 0),
+      responseHistoryExtractedCount: Number(value.responseHistoryExtractedCount || 0),
+      failureCategoryCounts:
+        value.failureCategoryCounts && typeof value.failureCategoryCounts === 'object'
+          ? value.failureCategoryCounts
+          : {},
+    };
+    return base;
+  };
+
+  const loadCaptureRuntime = () => {
+    const config = readRuntimeConfig();
+    captureRuntime = {
+      activeRun: normalizeRunSnapshot(config.activeCaptureRun),
+      lastRun: normalizeRunSnapshot(config.lastCaptureRun),
+    };
+  };
+
+  const persistCaptureRuntime = ({ force = false } = {}) => {
+    const now = Date.now();
+    if (!force && now - lastCaptureRuntimePersistAt < 2000) {
+      return;
+    }
+    const current = readRuntimeConfig();
+    writeRuntimeConfig({
+      ...current,
+      activeCaptureRun: captureRuntime.activeRun,
+      lastCaptureRun: captureRuntime.lastRun,
+    });
+    lastCaptureRuntimePersistAt = now;
+  };
+
+  const getCaptureRuntimeState = () => {
+    const lastSuccessfulCaptureAt = db ? getValue(db, 'app_state', 'last_successful_capture_at') : null;
+    return {
+      activeRun: normalizeRunSnapshot(captureRuntime.activeRun),
+      lastRun: normalizeRunSnapshot(captureRuntime.lastRun),
+      dbFileSizeBytes: getDbFileSizeBytes(),
+      lastSuccessfulCaptureAt: lastSuccessfulCaptureAt ? String(lastSuccessfulCaptureAt) : null,
+    };
+  };
+
+  const emitCaptureRuntime = ({ forcePersist = false } = {}) => {
+    persistCaptureRuntime({ force: forcePersist });
+    const payload = getCaptureRuntimeState();
+    for (const listener of captureProgressListeners) {
+      listener(payload);
+    }
+    return payload;
+  };
+
+  const setActiveCaptureRun = (next, options = {}) => {
+    captureRuntime.activeRun = normalizeRunSnapshot(next);
+    return emitCaptureRuntime(options);
+  };
+
+  const updateActiveCaptureRun = (patch, options = {}) => {
+    const current = normalizeRunSnapshot(captureRuntime.activeRun) || {
+      state: 'running',
+      trigger: '',
+      startedAt: nowIso(),
+    };
+    const next = normalizeRunSnapshot({
+      ...current,
+      ...patch,
+      durationMs: current.startedAt ? toDurationMs(current.startedAt, patch?.finishedAt || nowIso()) : 0,
+    });
+    captureRuntime.activeRun = next;
+    return emitCaptureRuntime(options);
+  };
+
+  const finalizeCaptureRun = (patch, options = {}) => {
+    const current = normalizeRunSnapshot(captureRuntime.activeRun) || {};
+    const finishedAt = patch?.finishedAt || nowIso();
+    captureRuntime.lastRun = normalizeRunSnapshot({
+      ...current,
+      ...patch,
+      finishedAt,
+      durationMs: current.startedAt ? toDurationMs(current.startedAt, finishedAt) : Number(patch?.durationMs || 0),
+    });
+    captureRuntime.activeRun = null;
+    return emitCaptureRuntime({ forcePersist: true, ...options });
+  };
+
+  loadCaptureRuntime();
 
   const setLastUsedPath = (dbPath) => {
     const current = readRuntimeConfig();
@@ -526,8 +666,10 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         createdAt: null,
         lastOpenedAt: null,
         lastCapturedAt: null,
+        lastSuccessfulCaptureAt: null,
         lastCaptureError: null,
         capturedIncidentCount: 0,
+        dbFileSizeBytes: 0,
       };
     }
 
@@ -535,6 +677,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     const lastOpenedAt = getValue(db, 'app_state', 'last_opened_at');
     const captureStateCode = getValue(db, 'app_state', 'capture_state') || 'never_captured';
     const lastCapturedAt = getValue(db, 'app_state', 'last_capture_at');
+    const lastSuccessfulCaptureAt = getValue(db, 'app_state', 'last_successful_capture_at');
     const lastCaptureError = getValue(db, 'app_state', 'last_capture_error');
     const autoCheckMinutes = Number(getValue(db, 'app_state', 'auto_check_minutes') || 0);
     const countResult = db.exec('SELECT COUNT(*) FROM incidents');
@@ -559,8 +702,10 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
       createdAt,
       lastOpenedAt,
       lastCapturedAt,
+      lastSuccessfulCaptureAt,
       lastCaptureError,
       capturedIncidentCount,
+      dbFileSizeBytes: getDbFileSizeBytes(),
     };
   };
 
@@ -586,6 +731,11 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     setValue(db, 'app_state', 'last_opened_at', nowIso());
     flushDb();
     setLastUsedPath(dbPath);
+    loadCaptureRuntime();
+    if (getValue(db, 'app_state', 'capture_state') !== 'capture_running' && captureRuntime.activeRun) {
+      captureRuntime.activeRun = null;
+      emitCaptureRuntime({ forcePersist: true });
+    }
     return getStatus();
   };
 
@@ -650,20 +800,59 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     return { ok: true, status: getStatus() };
   };
 
-  const markCaptureRunning = () => {
+  const markCaptureRunning = ({
+    trigger = 'manual',
+    startedAt = nowIso(),
+    listedIncidentCount = 0,
+    targetedIncidentCount = 0,
+  } = {}) => {
     if (!db) return { ok: false, error: 'No active DB selected.', status: getStatus() };
     setValue(db, 'app_state', 'capture_state', 'capture_running');
     setValue(db, 'app_state', 'last_capture_error', '');
     flushDb();
-    return { ok: true, status: getStatus() };
+    const runtime = setActiveCaptureRun(
+      {
+        state: 'running',
+        trigger,
+        startedAt,
+        listedIncidentCount,
+        targetedIncidentCount,
+        completedIncidentCount: 0,
+        failedIncidentCount: 0,
+        currentStageKey: 'list_ingest',
+        currentStageLabel: 'List ingest',
+        currentArtifactLabel: '',
+        currentActivity: 'Loading current incident list',
+      },
+      { forcePersist: true }
+    );
+    return { ok: true, status: getStatus(), runtime };
   };
 
-  const markCaptureError = (message) => {
+  const markCaptureProgress = (patch = {}) => {
+    if (!db) return { ok: false, error: 'No active DB selected.', status: getStatus() };
+    const runtime = updateActiveCaptureRun(patch, {
+      forcePersist: Boolean(patch.forcePersist || patch.currentStageKey || patch.finishedAt),
+    });
+    return { ok: true, status: getStatus(), runtime };
+  };
+
+  const markCaptureError = (message, extra = {}) => {
     if (!db) return { ok: false, error: 'No active DB selected.', status: getStatus() };
     setValue(db, 'app_state', 'capture_state', 'error');
     setValue(db, 'app_state', 'last_capture_error', message || 'Capture failed.');
     flushDb();
-    return { ok: true, status: getStatus() };
+    const runtime = finalizeCaptureRun(
+      {
+        ...extra,
+        state: 'error',
+        finishedAt: extra.finishedAt || nowIso(),
+        failureReason: message || 'Capture failed.',
+        currentActivity: message || 'Capture failed.',
+      },
+      { forcePersist: true }
+    );
+    return { ok: true, status: getStatus(), runtime };
   };
 
   const setAutoCheckMinutes = (minutes) => {
@@ -1041,6 +1230,19 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         const detailFailure = detailFailureByIncidentKey.get(key) || '';
         const wasTargeted = Boolean(detail) || Boolean(detailFailure);
         const incident = detail?.incident || row;
+        if (wasTargeted) {
+          updateActiveCaptureRun(
+            {
+              currentStageKey: 'persisting',
+              currentStageLabel: 'Persisting incident',
+              currentArtifactLabel: 'detail records',
+              currentIncidentName: incident?.incidentName || '',
+              currentIncidentNumber: incident?.incidentNumber || '',
+              currentActivity: `Saving ${incident?.incidentName || incident?.incidentNumber || 'incident'}`,
+            },
+            { forcePersist: true }
+          );
+        }
         const snapshotPayload = buildSnapshotPayload(row, detail);
         const snapshotHash = hashPayload(snapshotPayload);
 
@@ -1201,6 +1403,17 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           }
 
           if (hasAttachmentsMetadata) {
+            updateActiveCaptureRun(
+              {
+                currentStageKey: 'media_bytes',
+                currentStageLabel: 'Media bytes',
+                currentArtifactLabel: 'gallery media',
+                currentIncidentName: incident?.incidentName || '',
+                currentIncidentNumber: incident?.incidentNumber || '',
+                currentActivity: `Archiving media for ${incident?.incidentName || incident?.incidentNumber || 'incident'}`,
+              },
+              { forcePersist: true }
+            );
             const mediaCapture = await captureIncidentMedia({
               fireYear: incident.fireYear,
               incidentNumber: incident.incidentNumber,
@@ -1236,6 +1449,17 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
         });
 
         if (!parsedUpdates.length) {
+          updateActiveCaptureRun(
+            {
+              currentStageKey: 'response_extraction',
+              currentStageLabel: 'Response extraction',
+              currentArtifactLabel: 'response history',
+              currentIncidentName: incident?.incidentName || '',
+              currentIncidentNumber: incident?.incidentNumber || '',
+              currentActivity: `Extracting response history for ${incident?.incidentName || incident?.incidentNumber || 'incident'}`,
+            },
+            { forcePersist: false }
+          );
           const archivedDetailApiPayload = detail?.rawSources?.detailApi?.payload;
           const recoveredFromApi = extractUpdatesFromDetailApiPayload(asPayloadText(archivedDetailApiPayload));
           recoveredFromApi.updates.forEach((item) => {
@@ -1371,9 +1595,36 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
 
       setValue(db, 'app_state', 'capture_state', 'healthy');
       setValue(db, 'app_state', 'last_capture_at', captureTime);
+      setValue(db, 'app_state', 'last_successful_capture_at', captureTime);
       setValue(db, 'app_state', 'last_capture_error', '');
       db.run('COMMIT');
       flushDb();
+      const runtime = finalizeCaptureRun(
+        {
+          state: 'success',
+          trigger: captureRuntime.activeRun?.trigger || trigger || 'manual',
+          finishedAt: captureTime,
+          currentStageKey: '',
+          currentStageLabel: '',
+          currentArtifactLabel: '',
+          currentActivity: 'Capture completed successfully',
+          listedIncidentCount: listRows.length,
+          targetedIncidentCount: detailRecords.length + (detailFailures?.length || 0),
+          completedIncidentCount: detailCaptureSuccessCount,
+          failedIncidentCount: detailCaptureFailureCount,
+          detailCaptureSuccessCount,
+          detailCaptureFailureCount,
+          attachmentsCaptureCount,
+          mediaDownloadAttemptedCount,
+          mediaStoredCount,
+          mediaFailureCount,
+          externalLinksCaptureCount,
+          perimeterCaptureCount,
+          responseHistoryExtractedCount,
+          failureCategoryCounts,
+        },
+        { forcePersist: true }
+      );
       return {
         ok: true,
         status: getStatus(),
@@ -1396,6 +1647,7 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
           responseHistoryExtractedCount,
           failureCategoryCounts,
         },
+        runtime,
       };
     } catch (error) {
       db.run('ROLLBACK');
@@ -1845,15 +2097,23 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     }
   };
 
+  const onCaptureProgress = (listener) => {
+    captureProgressListeners.add(listener);
+    return () => captureProgressListeners.delete(listener);
+  };
+
   return {
     autoLoadLastUsed,
+    onCaptureProgress,
     getStatus,
+    getCaptureRuntimeState,
     createDbAtPath,
     selectDbAtPath,
     createNewDb,
     chooseExistingDb,
     deleteActiveDb,
     markCaptureRunning,
+    markCaptureProgress,
     markCaptureError,
     setAutoCheckMinutes,
     saveIncidentCapture,

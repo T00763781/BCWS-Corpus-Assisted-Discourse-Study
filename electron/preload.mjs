@@ -15,11 +15,13 @@ contextBridge.exposeInMainWorld('openFiresideDesktop', {
     deleteActive: () => ipcRenderer.invoke('db:delete-active'),
     createAtPath: (dbPath) => ipcRenderer.invoke('db:create-at-path', dbPath),
     selectPath: (dbPath) => ipcRenderer.invoke('db:select-path', dbPath),
-    markCaptureRunning: () => ipcRenderer.invoke('db:capture-mark-running'),
-    markCaptureError: (message) => ipcRenderer.invoke('db:capture-mark-error', message),
+    markCaptureRunning: (payload) => ipcRenderer.invoke('db:capture-mark-running', payload),
+    markCaptureProgress: (payload) => ipcRenderer.invoke('db:capture-mark-progress', payload),
+    markCaptureError: (message, extra) => ipcRenderer.invoke('db:capture-mark-error', message, extra),
     setAutoCheckMinutes: (minutes) => ipcRenderer.invoke('db:set-auto-check-minutes', minutes),
     getCaptureMetrics: () => ipcRenderer.invoke('db:get-capture-metrics'),
     getCaptureSummary: () => ipcRenderer.invoke('db:get-capture-summary'),
+    getCaptureRuntime: () => ipcRenderer.invoke('db:get-capture-runtime'),
     getCaptureTargets: () => ipcRenderer.invoke('db:get-capture-targets'),
     recoverResponseHistory: () => ipcRenderer.invoke('db:recover-response-history'),
     saveCapture: (payload) => ipcRenderer.invoke('db:capture-save', payload),
@@ -30,6 +32,11 @@ contextBridge.exposeInMainWorld('openFiresideDesktop', {
       const wrapped = (_event, payload) => handler(payload);
       ipcRenderer.on('db:auto-check-tick', wrapped);
       return () => ipcRenderer.removeListener('db:auto-check-tick', wrapped);
+    },
+    onCaptureProgress: (handler) => {
+      const wrapped = (_event, payload) => handler(payload);
+      ipcRenderer.on('db:capture-progress', wrapped);
+      return () => ipcRenderer.removeListener('db:capture-progress', wrapped);
     },
   },
 });

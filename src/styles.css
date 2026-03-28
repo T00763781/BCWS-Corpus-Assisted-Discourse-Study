@@ -123,6 +123,15 @@ body { color: #0d1419; }
 .list-results-row { display: flex; align-items: center; justify-content: space-between; min-height: 20px; }
 .list-results-label { font-size: 12px; font-weight: 700; color: #4c5862; }
 .stage-toggle-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.capture-status-panel { border: 2px solid #7f858d; background: #f7f7f8; border-radius: 14px; padding: 12px 14px; margin: 12px 0; display: flex; flex-direction: column; gap: 10px; }
+.capture-status-panel.is-capture_running { border-color: #2d7bd8; background: #eef6ff; }
+.capture-status-panel.is-healthy { border-color: #4aa86e; background: #eef8f1; }
+.capture-status-panel.is-error { border-color: #c76041; background: #faece7; }
+.capture-status-panel__header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.capture-status-panel__title { font-size: 16px; font-weight: 800; color: var(--ink); }
+.capture-status-panel__state { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.capture-progress-bar { width: 100%; height: 12px; border-radius: 999px; overflow: hidden; background: #d9e0e5; border: 1px solid #b8c3cd; }
+.capture-progress-bar__fill { height: 100%; background: linear-gradient(90deg, #1580da, #42a6ff); transition: width .2s ease; }
 .stage-toggle { border: 2px solid #55616b; border-radius: 10px; padding: 12px 18px; background: #2f392e; color: #fff; font-weight: 700; cursor: pointer; }
 .stage-toggle[data-stage="OUT_CNTRL"] { background: #ff4a20; }
 .stage-toggle[data-stage="HOLDING"] { background: #f6df4c; color: #212121; }
