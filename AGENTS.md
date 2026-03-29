@@ -7,8 +7,13 @@ Use it to preserve working truth, current constraints, and prioritized next step
 
 ## Current product truth
 
-- Open Fireside is a Windows/Electron desktop incident archive tool under active development.
-- A GitHub Pages web build can be used as a public QA / visual-audit surface, but it is not the primary archive runtime.
+- Open Fireside has entered a **native v2 rebuild track**.
+- The **primary build track is now .NET 8 + WPF + MVVM + native SQLite** under `/dotnet`.
+- Electron is now **legacy/reference only**:
+  - keep it available as a source of behavior and archive compatibility truth
+  - do not treat it as the destination architecture for new product work
+- New product work should land in the native `.NET` path unless a turn is explicitly about legacy Electron reference behavior.
+- A GitHub Pages web build can still be used as a public QA / visual-audit surface for the legacy shell, but it is not the primary archive runtime.
 - The incident pipeline now captures and stores the **published 2025 BCWS incident set** exposed by the validated public query.
 - The archive is still **endpoint-limited**. Do **not** claim full 2025 historical-season completeness unless a broader trustworthy upstream source is actually validated.
 - The app can now store:
@@ -25,9 +30,18 @@ Use it to preserve working truth, current constraints, and prioritized next step
 - Incident pinning is now wired:
   - desktop runtime with an active DB persists pins in SQLite
   - browser QA / no-DB runtime falls back to local browser storage
+- Native v2 foundation requirements now on record:
+  - collapsible left rail
+  - `open-sidebar.svg` and `close-sidebar.svg` for sidebar state
+  - Windows tray icon derived from `icon.svg`
+  - each page/surface can open in its own window
+  - incident pages support new-window opening from other surfaces
+  - maps surface supports tabbed BCWS / CWFIS / ArcGIS source views
 
 ## Do not regress
 
+- Do not blur the distinction between legacy Electron and native v2 work.
+- Do not put new primary-product work into Electron unless the task is explicitly a legacy-reference or migration aid turn.
 - Do not remove or weaken the current incident capture pipeline.
 - Do not silently change capture scope claims from endpoint-limited to full-season.
 - Do not replace truthful source labels with optimistic UI language.
@@ -255,3 +269,7 @@ Use these for external prototyping / planning, not as permission to overstate wh
 - When the UI and mockups disagree, reconcile consciously; do not drift.
 - Use real assets from `/assets` instead of placeholders or broken paths.
 - Preserve the archive pipeline first; polish second; expand scope third.
+- For v2 work, update the durable docs first or alongside code:
+  - `docs/adr/`
+  - `docs/migration/native-rebuild-plan.md`
+  - `docs/migration/parity-checklist.md`
