@@ -1,0 +1,17 @@
+<UserControl x:Class="OpenFireside.Desktop.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel>
+        <TextBlock Text="Native dashboard foundation" FontSize="28" FontWeight="Bold"/>
+        <TextBlock Text="This surface is intentionally scaffold-first. Archive totals are not being carried over as a default dashboard treatment." Margin="0,8,0,20" TextWrapping="Wrap"/>
+        <ItemsControl ItemsSource="{Binding Notes}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border Margin="0,0,0,10" Padding="14" Background="#102039" CornerRadius="12">
+                        <TextBlock Text="{Binding}" Foreground="#EAF2FF" TextWrapping="Wrap"/>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

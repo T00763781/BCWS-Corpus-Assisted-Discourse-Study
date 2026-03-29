@@ -1,0 +1,25 @@
+<UserControl x:Class="OpenFireside.Desktop.Views.MapsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel>
+        <TextBlock Text="Maps" FontSize="28" FontWeight="Bold"/>
+        <TextBlock Text="Multi-source map tabs are part of the native foundation and kept separate from incident capture truth." Margin="0,8,0,20" TextWrapping="Wrap"/>
+        <TabControl ItemsSource="{Binding MapSources}">
+            <TabControl.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding Name}" Margin="8,4"/>
+                </DataTemplate>
+            </TabControl.ItemTemplate>
+            <TabControl.ContentTemplate>
+                <DataTemplate>
+                    <Border Padding="16" Background="#102039" CornerRadius="12">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Foreground="#EAF2FF"/>
+                            <TextBlock Margin="0,12,0,0" Text="{Binding Url}" Foreground="#8FD7FF"/>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </TabControl.ContentTemplate>
+        </TabControl>
+    </StackPanel>
+</UserControl>

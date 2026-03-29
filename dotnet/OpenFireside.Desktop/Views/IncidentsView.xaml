@@ -1,0 +1,16 @@
+<UserControl x:Class="OpenFireside.Desktop.Views.IncidentsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel>
+        <TextBlock Text="Incidents" FontSize="28" FontWeight="Bold"/>
+        <TextBlock Text="Future native triage grid. The v2 shell already assumes incidents can open in their own window." Margin="0,8,0,20" TextWrapping="Wrap"/>
+        <DataGrid AutoGenerateColumns="False" HeadersVisibility="Column" ItemsSource="{Binding SampleIncidents}" IsReadOnly="True" CanUserAddRows="False">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Number" Binding="{Binding IncidentNumber}"/>
+                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                <DataGridTextColumn Header="Stage" Binding="{Binding StageOfControl}"/>
+                <DataGridTextColumn Header="Size (ha)" Binding="{Binding SizeHectares}"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </StackPanel>
+</UserControl>

@@ -1,6 +1,9 @@
 node_modules/
 dist/
 output/
+dotnet/**/bin/
+dotnet/**/obj/
+.vs/
 *.har
 repo-tree.txt
 open-fireside-dashboard-patch/
