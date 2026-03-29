@@ -1,0 +1,645 @@
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import { createDbLifecycleManager } from './db-lifecycle.mjs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
+const IS_DEV = Boolean(DEV_SERVER_URL);
+const CAPTURE_DIR = process.env.OF_SCREENSHOT_DIR;
+const SMOKE_MODE = process.env.OF_SMOKE === '1';
+const PHASE4_AUTO_CAPTURE = process.env.OF_PHASE4_AUTO_CAPTURE === '1';
+const PHASE4C_AUTO_RECOVER = process.env.OF_PHASE4C_AUTO_RECOVER === '1';
+const PHASE4D_AUTO_VERIFY = process.env.OF_PHASE4D_AUTO_VERIFY === '1';
+const PHASE4G_AUTO_VERIFY = process.env.OF_PHASE4G_AUTO_VERIFY === '1';
+const PHASE4H_AUTO_VERIFY = process.env.OF_PHASE4H_AUTO_VERIFY === '1';
+const PHASE4I_AUTO_VERIFY = process.env.OF_PHASE4I_AUTO_VERIFY === '1';
+const PHASE5_AUTO_VERIFY = process.env.OF_PHASE5_AUTO_VERIFY === '1';
+const PHASE6_AUTO_VERIFY = process.env.OF_PHASE6_AUTO_VERIFY === '1';
+const PHASE6B_AUTO_VERIFY = process.env.OF_PHASE6B_AUTO_VERIFY === '1';
+const PHASE6B_DASHBOARD_ONLY = process.env.OF_PHASE6B_DASHBOARD_ONLY === '1';
+const PHASE6B_UNPIN_ONLY = process.env.OF_PHASE6B_UNPIN_ONLY === '1';
+const PHASE6C_AUTO_VERIFY = process.env.OF_PHASE6C_AUTO_VERIFY === '1';
+const BOOT_HASH = process.env.OF_BOOT_HASH || '#/dashboard';
+const BOOT_TAB_LABEL = process.env.OF_BOOT_TAB_LABEL || '';
+const HOLD_HASH = process.env.OF_HOLD_HASH || '';
+const HOLD_TAB_LABEL = process.env.OF_HOLD_TAB_LABEL || '';
+const EXTRA_INCIDENT_CAPTURE_ROUTE = process.env.OF_CAPTURE_INCIDENT_ROUTE || '';
+const SHOULD_CONTINUE_AFTER_AUTO_CAPTURE =
+  PHASE4C_AUTO_RECOVER || PHASE4D_AUTO_VERIFY || PHASE4G_AUTO_VERIFY || PHASE4H_AUTO_VERIFY || PHASE4I_AUTO_VERIFY || PHASE5_AUTO_VERIFY || PHASE6_AUTO_VERIFY || PHASE6B_AUTO_VERIFY || PHASE6B_DASHBOARD_ONLY || PHASE6B_UNPIN_ONLY || PHASE6C_AUTO_VERIFY;
+const dbLifecycle = createDbLifecycleManager({ app, dialog, BrowserWindow });
+let autoCheckTimer = null;
+const APP_ICON_PATH = path.join(__dirname, '..', 'public', 'assets', 'icon.svg');
+
+function broadcastCaptureProgress(payload) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('db:capture-progress', payload);
+    }
+  }
+}
+
+function createWindow() {
+  return new BrowserWindow({
+    width: 1400,
+    height: 920,
+    minWidth: 1100,
+    minHeight: 760,
+    backgroundColor: '#050713',
+    autoHideMenuBar: true,
+    icon: fs.existsSync(APP_ICON_PATH) ? APP_ICON_PATH : undefined,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+}
+
+async function loadRenderer(win, hash = '#/dashboard') {
+  if (IS_DEV) {
+    const url = `${DEV_SERVER_URL}/?desktop=${Date.now()}${hash}`;
+    await win.loadURL(url);
+    return;
+  }
+
+  const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
+  await win.loadFile(indexPath);
+  await win.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(hash)};`, true);
+}
+
+async function setRendererHash(win, hash = '#/dashboard') {
+  await win.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(hash)};`, true);
+}
+
+async function captureView(win, hash, fileName) {
+  if (!CAPTURE_DIR) return;
+  await loadRenderer(win, hash);
+  await captureCurrentView(win, fileName, 900);
+}
+
+async function captureCurrentView(win, fileName, waitMs = 900) {
+  if (!CAPTURE_DIR) return;
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+  let png = Buffer.alloc(0);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const image = await win.webContents.capturePage();
+    png = image.toPNG();
+    if (png.length > 0) break;
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+  fs.mkdirSync(CAPTURE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(CAPTURE_DIR, fileName), png);
+}
+
+async function captureIncidentTab(win, hash, tabLabel, fileName, waitMs = 1500) {
+  if (!CAPTURE_DIR) return;
+  await loadRenderer(win, hash);
+  await win.webContents.executeJavaScript(
+    `
+      (async () => {
+        const started = Date.now();
+        while (Date.now() - started < 15000) {
+          const tabButtons = [...document.querySelectorAll('.incident-tabs button')];
+          const button = tabButtons.find(
+            (item) => item.textContent && item.textContent.trim() === ${JSON.stringify(tabLabel)}
+          );
+          if (button) {
+            button.click();
+            return true;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        return false;
+      })();
+    `,
+    true
+  );
+  await captureCurrentView(win, fileName, waitMs);
+}
+
+async function waitForSelector(win, selector, timeoutMs = 15000) {
+  await win.webContents.executeJavaScript(
+    `
+      (async () => {
+        const started = Date.now();
+        while (Date.now() - started < ${Number(timeoutMs)}) {
+          if (document.querySelector(${JSON.stringify(selector)})) {
+            return true;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        return false;
+      })();
+    `,
+    true
+  );
+}
+
+async function clickFirstGalleryAsset(win) {
+  await win.webContents.executeJavaScript(
+    `
+      (async () => {
+        const started = Date.now();
+        while (Date.now() - started < 15000) {
+          const button = document.querySelector('.gallery-card__button');
+          if (button) {
+            button.click();
+            return true;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        return false;
+      })();
+    `,
+    true
+  );
+}
+
+async function waitForIncidentListRows(win) {
+  await win.webContents.executeJavaScript(
+    `
+      (async () => {
+        const started = Date.now();
+        while (Date.now() - started < 30000) {
+          const hasRows = document.querySelectorAll('.incident-table tbody tr').length > 1
+            || document.querySelector('.incident-link');
+          const loadingCell = document.querySelector('.table-empty');
+          const loading = loadingCell && /Loading incidents/i.test(loadingCell.textContent || '');
+          if (hasRows && !loading) {
+            return true;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        return false;
+      })();
+    `,
+    true
+  );
+}
+
+async function clickButtonByText(win, text, timeoutMs = 15000) {
+  await win.webContents.executeJavaScript(
+    `
+      (async () => {
+        const started = Date.now();
+        while (Date.now() - started < ${Number(timeoutMs)}) {
+          const button = [...document.querySelectorAll('button')].find(
+            (item) => item.textContent && item.textContent.trim() === ${JSON.stringify(text)}
+          );
+          if (button && !button.disabled) {
+            button.click();
+            return true;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        return false;
+      })();
+    `,
+    true
+  );
+}
+
+async function setListSearch(win, value) {
+  await win.webContents.executeJavaScript(
+    `
+      (() => {
+        const input = document.querySelector('.list-control-panel input');
+        if (!input) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        setter?.call(input, ${JSON.stringify(value)});
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      })();
+    `,
+    true
+  );
+}
+
+function restartAutoCheckTimer() {
+  if (autoCheckTimer) {
+    clearInterval(autoCheckTimer);
+    autoCheckTimer = null;
+  }
+  const status = dbLifecycle.getStatus();
+  const intervalMinutes = Number(status.autoCheckMinutes || 0);
+  if (!status.hasActiveDb || intervalMinutes <= 0) return;
+  const tickMs = Math.max(60_000, intervalMinutes * 60_000);
+  autoCheckTimer = setInterval(() => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('db:auto-check-tick', {
+          intervalMinutes,
+          triggeredAt: nowIso(),
+        });
+      }
+    }
+  }, tickMs);
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+app.whenReady().then(async () => {
+  if (SMOKE_MODE) {
+    const smokeTimeoutMs = PHASE4_AUTO_CAPTURE ? 1800000 : 25000;
+    setTimeout(() => app.quit(), smokeTimeoutMs);
+  }
+
+  await dbLifecycle.autoLoadLastUsed();
+  dbLifecycle.onCaptureProgress((payload) => broadcastCaptureProgress(payload));
+
+  if (process.env.OF_DB_CREATE_PATH) {
+    await dbLifecycle.createDbAtPath(process.env.OF_DB_CREATE_PATH);
+  }
+  if (process.env.OF_DB_SELECT_PATH) {
+    await dbLifecycle.selectDbAtPath(process.env.OF_DB_SELECT_PATH);
+  }
+  if (process.env.OF_DB_DELETE_ACTIVE === '1') {
+    await dbLifecycle.deleteActiveDb();
+  }
+  if (process.env.OF_SET_AUTOCHECK_MINUTES) {
+    dbLifecycle.setAutoCheckMinutes(process.env.OF_SET_AUTOCHECK_MINUTES);
+  }
+  restartAutoCheckTimer();
+
+  ipcMain.handle('db:get-status', async () => dbLifecycle.getStatus());
+  ipcMain.handle('db:create', async () => {
+    const result = await dbLifecycle.createNewDb();
+    restartAutoCheckTimer();
+    return result;
+  });
+  ipcMain.handle('db:select', async () => {
+    const result = await dbLifecycle.chooseExistingDb();
+    restartAutoCheckTimer();
+    return result;
+  });
+  ipcMain.handle('db:delete-active', async () => {
+    const result = await dbLifecycle.deleteActiveDb();
+    restartAutoCheckTimer();
+    return result;
+  });
+  ipcMain.handle('db:create-at-path', async (_event, dbPath) => {
+    const result = await dbLifecycle.createDbAtPath(dbPath);
+    restartAutoCheckTimer();
+    return result;
+  });
+  ipcMain.handle('db:select-path', async (_event, dbPath) => {
+    const result = await dbLifecycle.selectDbAtPath(dbPath);
+    restartAutoCheckTimer();
+    return result;
+  });
+  ipcMain.handle('db:set-auto-check-minutes', async (_event, minutes) => {
+    const result = dbLifecycle.setAutoCheckMinutes(minutes);
+    restartAutoCheckTimer();
+    return result;
+  });
+  ipcMain.handle('db:get-capture-metrics', async () => dbLifecycle.getCaptureMetrics());
+  ipcMain.handle('db:get-capture-summary', async () => dbLifecycle.getCaptureCompletenessSummary());
+  ipcMain.handle('db:get-capture-runtime', async () => dbLifecycle.getCaptureRuntimeState());
+  ipcMain.handle('db:get-capture-targets', async () => dbLifecycle.getIncidentCaptureTargets());
+  ipcMain.handle('db:recover-response-history', async () => dbLifecycle.recoverResponseHistoryFromArchivedRaw());
+  ipcMain.handle('db:capture-mark-running', async (_event, payload) => dbLifecycle.markCaptureRunning(payload));
+  ipcMain.handle('db:capture-mark-progress', async (_event, payload) => dbLifecycle.markCaptureProgress(payload));
+  ipcMain.handle('db:capture-mark-error', async (_event, message, extra) => dbLifecycle.markCaptureError(message, extra));
+  ipcMain.handle('db:capture-save', async (_event, payload) => dbLifecycle.saveIncidentCapture(payload));
+  ipcMain.handle('db:incidents-list-local', async () => dbLifecycle.getIncidentListLocal());
+  ipcMain.handle('db:incident-detail-local', async (_event, fireYear, incidentNumber) =>
+    dbLifecycle.getIncidentDetailLocal(fireYear, incidentNumber)
+  );
+  ipcMain.handle('db:incident-attachment-asset', async (_event, fireYear, incidentNumber, attachmentGuid, variantRole) =>
+    dbLifecycle.getIncidentAttachmentAsset(fireYear, incidentNumber, attachmentGuid, variantRole)
+  );
+  ipcMain.handle('db:pins-list', async () => dbLifecycle.getPinnedIncidents());
+  ipcMain.handle('db:pin-set', async (_event, payload) => dbLifecycle.setIncidentPinned(payload));
+  ipcMain.handle('db:pin-remove', async (_event, fireYear, incidentNumber) =>
+    dbLifecycle.removeIncidentPinned(fireYear, incidentNumber)
+  );
+
+  const win = createWindow();
+  await loadRenderer(win, BOOT_HASH);
+  if (BOOT_TAB_LABEL) {
+    await waitForSelector(win, '.incident-tabs');
+    await clickButtonByText(win, BOOT_TAB_LABEL);
+  }
+  if (HOLD_HASH) {
+    await waitForSelector(win, '.app-shell');
+    await setRendererHash(win, HOLD_HASH);
+    if (HOLD_TAB_LABEL) {
+      await waitForSelector(win, '.incident-tabs');
+      await clickButtonByText(win, HOLD_TAB_LABEL);
+    }
+  }
+
+  if (PHASE4_AUTO_CAPTURE) {
+    await captureView(win, '#/configure', 'phase4b-settings-before-capture.png');
+    await win.webContents.executeJavaScript(
+      `
+        (async () => {
+          const started = Date.now();
+          while (Date.now() - started < 20000) {
+            const button = [...document.querySelectorAll('button')].find(
+              (item) => item.textContent && item.textContent.trim() === 'Capture incidents'
+            );
+            if (button && !button.disabled) {
+              button.click();
+              return true;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+          return false;
+        })();
+      `,
+      true
+    );
+    if (PHASE4H_AUTO_VERIFY) {
+      await captureCurrentView(win, 'phase4h-settings-during-capture.png', 2500);
+    }
+    await win.webContents.executeJavaScript(
+      `
+        (async () => {
+          const started = Date.now();
+          while (Date.now() - started < 1800000) {
+            const summary = [...document.querySelectorAll('.list-results-label')].some(
+              (node) => node.textContent && node.textContent.includes('Captured ')
+            );
+            const failed = Boolean(document.querySelector('.error-banner'));
+            if (summary || failed) return summary;
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+          return false;
+        })();
+      `,
+      true
+    );
+    await captureView(win, '#/configure', 'phase4b-settings-after-capture.png');
+    if (PHASE4H_AUTO_VERIFY) {
+      await captureView(win, '#/configure', 'phase4h-settings-after-capture.png');
+    }
+    if (PHASE4I_AUTO_VERIFY) {
+      await captureView(win, '#/configure', 'phase4i-settings-after-capture.png');
+    }
+    await captureView(win, '#/incidents', 'phase4b-incidents-after-capture.png');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase4b-g70422-after-capture.png', 4000);
+    if (SMOKE_MODE && !SHOULD_CONTINUE_AFTER_AUTO_CAPTURE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE4I_AUTO_VERIFY) {
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase4i-g70422-detail.png', 3500);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE5_AUTO_VERIFY) {
+    await captureView(win, '#/dashboard', 'phase5-dashboard.png');
+    await loadRenderer(win, '#/incidents');
+    await waitForIncidentListRows(win);
+    await captureCurrentView(win, 'phase5-incidents-list.png', 1200);
+    await captureView(win, '#/configure', 'phase5-settings.png');
+    await captureIncidentTab(win, '#/incidents/2025/G70422', 'Response', 'phase5-g70422-response.png', 2500);
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await win.webContents.executeJavaScript(
+      `
+        (async () => {
+          const started = Date.now();
+          while (Date.now() - started < 15000) {
+            const button = [...document.querySelectorAll('button')].find(
+              (item) => item.textContent && item.textContent.trim() === 'Gallery'
+            );
+            if (button) {
+              button.click();
+              return true;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          }
+          return false;
+        })();
+      `,
+      true
+    );
+    await clickFirstGalleryAsset(win);
+    await captureCurrentView(win, 'phase5-g70422-gallery-full-view.png', 2200);
+    await captureIncidentTab(win, '#/incidents/2025/G90425', 'Maps', 'phase5-g90425-maps.png', 2500);
+    await loadRenderer(win, '#/incidents/2025/K60922');
+    await captureCurrentView(win, 'phase5-k60922-detail.png', 2600);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE6_AUTO_VERIFY) {
+    await captureView(win, '#/dashboard', 'phase6-dashboard.png');
+    await loadRenderer(win, '#/incidents');
+    await waitForIncidentListRows(win);
+    await captureCurrentView(win, 'phase6-incidents-list.png', 1200);
+    await captureView(win, '#/configure', 'phase6-settings.png');
+    await captureView(win, '#/maps', 'phase6-maps-placeholder.png');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase6-g70422-detail.png', 2600);
+    await captureIncidentTab(win, '#/incidents/2025/G90425', 'Maps', 'phase6-g90425-maps.png', 2500);
+    await loadRenderer(win, '#/incidents/2025/K60922');
+    await captureCurrentView(win, 'phase6-k60922-detail.png', 2600);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE6B_AUTO_VERIFY) {
+    await captureView(win, '#/dashboard', 'phase6b-dashboard-no-pins.png');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase6b-g70422-detail-unpinned.png', 2200);
+    await clickButtonByText(win, 'Pin incident');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase6b-g70422-detail-pinned.png', 2200);
+    await loadRenderer(win, '#/incidents');
+    await waitForIncidentListRows(win);
+    await setListSearch(win, 'G70422');
+    await captureCurrentView(win, 'phase6b-incidents-list-pinned.png', 1800);
+    await loadRenderer(win, '#/dashboard');
+    await win.webContents.executeJavaScript(
+      `
+        (() => {
+          const panel = document.querySelector('.dashboard-pinned');
+          panel?.scrollIntoView({ block: 'center', behavior: 'instant' });
+          return Boolean(panel);
+        })();
+      `,
+      true
+    );
+    await captureCurrentView(win, 'phase6b-dashboard-with-pins.png', 1600);
+    await captureIncidentTab(win, '#/incidents/2025/G90425', 'Maps', 'phase6b-g90425-maps.png', 2500);
+    await loadRenderer(win, '#/incidents/2025/K60922');
+    await captureCurrentView(win, 'phase6b-k60922-detail.png', 2200);
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await clickButtonByText(win, 'Unpin incident');
+    await loadRenderer(win, '#/dashboard');
+    await captureCurrentView(win, 'phase6b-dashboard-after-unpin.png', 1800);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE6B_DASHBOARD_ONLY) {
+    await loadRenderer(win, '#/dashboard');
+    await win.webContents.executeJavaScript(
+      `
+        (async () => {
+          const started = Date.now();
+          while (Date.now() - started < 15000) {
+            const panel = document.querySelector('.dashboard-pinned');
+            const hasPinnedCard = document.querySelector('.pinned-incident-card');
+            if (panel) {
+              panel.scrollIntoView({ block: 'center', behavior: 'instant' });
+            }
+            if (hasPinnedCard) {
+              return true;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+          return false;
+        })();
+      `,
+      true
+    );
+    await captureCurrentView(win, 'phase6b-dashboard-with-pins.png', 2200);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE6B_UNPIN_ONLY) {
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await clickButtonByText(win, 'Unpin incident');
+    await loadRenderer(win, '#/dashboard');
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE6C_AUTO_VERIFY) {
+    await captureView(win, '#/configure', 'phase6c-settings-after-capture.png');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await waitForSelector(win, '.incident-tabs');
+    await clickButtonByText(win, 'Gallery');
+    await waitForSelector(win, '.gallery-grid, .gallery-card, .gallery-card__button');
+    await captureCurrentView(win, 'phase6c-g70422-gallery.png', 3500);
+    await loadRenderer(win, '#/incidents/2025/G90425');
+    await waitForSelector(win, '.incident-tabs');
+    await clickButtonByText(win, 'Maps');
+    await waitForSelector(win, '.maps-download-grid, .download-card');
+    await captureCurrentView(win, 'phase6c-g90425-maps.png', 3500);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE4H_AUTO_VERIFY) {
+    await captureIncidentTab(win, '#/incidents/2025/G70422', 'Gallery', 'phase4h-g70422-gallery.png', 2500);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE4D_AUTO_VERIFY) {
+    await captureView(win, '#/configure', 'phase4d-settings-after-capture.png');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase4d-g70422-detail.png', 4000);
+    await captureIncidentTab(win, '#/incidents/2025/G70422', 'Gallery', 'phase4d-g70422-gallery.png', 2500);
+    await captureIncidentTab(win, '#/incidents/2025/G70422', 'Response', 'phase4d-g70422-response.png', 2500);
+    if (EXTRA_INCIDENT_CAPTURE_ROUTE) {
+      await loadRenderer(win, EXTRA_INCIDENT_CAPTURE_ROUTE);
+      await captureCurrentView(win, 'phase4d-second-incident-detail.png', 4000);
+    }
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE4G_AUTO_VERIFY) {
+    await captureView(win, '#/configure', 'phase4g-settings-after-capture.png');
+    await captureIncidentTab(win, '#/incidents/2025/G70422', 'Gallery', 'phase4g-g70422-gallery.png', 2500);
+    if (EXTRA_INCIDENT_CAPTURE_ROUTE) {
+      await captureIncidentTab(win, EXTRA_INCIDENT_CAPTURE_ROUTE, 'Gallery', 'phase4g-second-incident-gallery.png', 2500);
+    }
+    if (SMOKE_MODE && !SHOULD_CONTINUE_AFTER_AUTO_CAPTURE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (PHASE4C_AUTO_RECOVER) {
+    await captureView(win, '#/configure', 'phase4c-settings-before-recovery.png');
+    await dbLifecycle.recoverResponseHistoryFromArchivedRaw();
+    await captureView(win, '#/configure', 'phase4c-settings-after-recovery.png');
+    await loadRenderer(win, '#/incidents/2025/G70422');
+    await captureCurrentView(win, 'phase4c-g70422-after-recovery.png', 3000);
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  if (CAPTURE_DIR) {
+    await captureView(win, '#/configure', 'phase2-desktop-settings.png');
+    await captureView(win, '#/dashboard', 'phase2-desktop-dashboard.png');
+    if (EXTRA_INCIDENT_CAPTURE_ROUTE) {
+      await captureView(win, EXTRA_INCIDENT_CAPTURE_ROUTE, 'phase4d-second-incident-detail.png');
+    }
+    if (SMOKE_MODE) {
+      app.quit();
+      return;
+    }
+    await loadRenderer(win, '#/dashboard');
+  }
+
+  app.on('activate', async () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      const next = createWindow();
+      await loadRenderer(next);
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (autoCheckTimer) {
+    clearInterval(autoCheckTimer);
+    autoCheckTimer = null;
+  }
+  dbLifecycle.closeActive();
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});

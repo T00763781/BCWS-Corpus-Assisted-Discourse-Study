@@ -1,7 +1,14 @@
 import { defineConfig } from 'vite';
 
-export default defineConfig({
+function normalizeBasePath(input) {
+  if (!input || input === '/') return '/';
+  const withLeadingSlash = input.startsWith('/') ? input : `/${input}`;
+  return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
+}
+
+export default defineConfig(({ command }) => ({
   appType: 'spa',
+  base: command === 'build' ? normalizeBasePath(process.env.VITE_PUBLIC_BASE_PATH) : '/',
   optimizeDeps: {
     entries: ['index.html'],
   },
@@ -33,7 +40,7 @@ export default defineConfig({
         changeOrigin: true,
         secure: true,
         rewrite: (path) => path.replace(/^\/wfnews-arcgis/, ''),
-      }
-    }
-  }
-});
+      },
+    },
+  },
+}));
