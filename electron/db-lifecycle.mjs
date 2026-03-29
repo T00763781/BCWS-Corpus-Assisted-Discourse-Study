@@ -148,26 +148,6 @@ function isMapLink(link) {
   );
 }
 
-function buildIncidentListAffordances(fireYear, incidentNumber, parsedDetail, captureStatus) {
-  const attachments = Array.isArray(parsedDetail?.attachments) ? parsedDetail.attachments : [];
-  const externalLinks = Array.isArray(parsedDetail?.externalLinks) ? parsedDetail.externalLinks : [];
-  const renderableAttachments = attachments.filter((asset) => isRenderableGalleryAttachment(asset));
-  const hasMapDownloads = attachments.some(isMapAttachment) || externalLinks.some(isMapLink);
-  const hasLocalRenderableAssets = renderableAttachments.length
-    ? hasCompleteLocalAssetsForAttachments(fireYear, incidentNumber, renderableAttachments)
-    : false;
-  return {
-    hasMedia:
-      renderableAttachments.length > 0 &&
-      (hasLocalRenderableAssets ||
-        renderableAttachments.some((asset) =>
-          Boolean(getAttachmentOriginalUrl(asset, fireYear, incidentNumber) || getAttachmentThumbnailUrl(asset, fireYear, incidentNumber))
-        )),
-    hasMapDownloads,
-    hasResponseHistory: Boolean(captureStatus?.hasResponseHistory),
-  };
-}
-
 function getAttachmentAssetTargets(asset, fireYear, incidentNumber) {
   const targets = [];
   const fullUrl = getAttachmentOriginalUrl(asset, fireYear, incidentNumber);
@@ -1129,6 +1109,26 @@ export function createDbLifecycleManager({ app, dialog, BrowserWindow }) {
     if (!downloadableAttachments.length) return true;
     const storedAttachmentGuids = getStoredAssetAttachmentGuids(fireYear, incidentNumber, { originalOnly: true });
     return downloadableAttachments.every((asset) => storedAttachmentGuids.has(String(asset.attachmentGuid || '')));
+  };
+
+  const buildIncidentListAffordances = (fireYear, incidentNumber, parsedDetail, captureStatus) => {
+    const attachments = Array.isArray(parsedDetail?.attachments) ? parsedDetail.attachments : [];
+    const externalLinks = Array.isArray(parsedDetail?.externalLinks) ? parsedDetail.externalLinks : [];
+    const renderableAttachments = attachments.filter((asset) => isRenderableGalleryAttachment(asset));
+    const hasMapDownloads = attachments.some(isMapAttachment) || externalLinks.some(isMapLink);
+    const hasLocalRenderableAssets = renderableAttachments.length
+      ? hasCompleteLocalAssetsForAttachments(fireYear, incidentNumber, renderableAttachments)
+      : false;
+    return {
+      hasMedia:
+        renderableAttachments.length > 0 &&
+        (hasLocalRenderableAssets ||
+          renderableAttachments.some((asset) =>
+            Boolean(getAttachmentOriginalUrl(asset, fireYear, incidentNumber) || getAttachmentThumbnailUrl(asset, fireYear, incidentNumber))
+          )),
+      hasMapDownloads,
+      hasResponseHistory: Boolean(captureStatus?.hasResponseHistory),
+    };
   };
 
   const storeIncidentMediaRecord = ({
